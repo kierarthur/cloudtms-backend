@@ -1,0 +1,33 @@
+{
+  "version": "TEST_AUTH_REFRESH_R8_FIRST_READINESS_HOLD_V1",
+  "ownedDirectory": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-install2-14102026/.codex-tmp/test-auth-refresh-20261017-799d46c730114e66e7c0bb9d60382d22",
+  "actualClosedResult": {
+    "version": "TEST_AUTH_REFRESH_PRIVATE_RESULT_V3",
+    "status": "HOLD",
+    "code": "AUTH_READY_HELD",
+    "browserClosed": true,
+    "loginRequests": 0,
+    "refreshRequests": 0,
+    "blockedReadRequests": 0,
+    "forbiddenWriteRequests": 0,
+    "refusedRequests": 0,
+    "suppressedStartupRequests": 0,
+    "diagnostic": {
+      "phase": "BEFORE_EXPLICIT_ADMISSION",
+      "admission": null,
+      "blockedWriteLabel": "NONE",
+      "blockedWriteMethod": "NONE"
+    }
+  },
+  "processExitCode": 1,
+  "nativeIntervalActive": false,
+  "businessFixturesCreated": false,
+  "actualReadyStatus": "NOT_RECORDED_BY_ORIGINAL_HARNESS_NOT_INFERRED",
+  "singleReadOnlyFollowup": {
+    "url": "https://test-cloudtms-backend.kier-88a.workers.dev/readyz",
+    "status": 200,
+    "at": "2026-10-17T12:24:16.580Z"
+  },
+  "retry": "ONE_BOUNDED_APPROVED_FRESH_AUTH_ATTEMPT_AFTER_ACTUAL_READINESS200",
+  "privateContentsReadHashedCopied": false
+}
