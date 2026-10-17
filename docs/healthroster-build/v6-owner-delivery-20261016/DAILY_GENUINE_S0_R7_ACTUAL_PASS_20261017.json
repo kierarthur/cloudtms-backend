@@ -1,0 +1,39 @@
+{
+  "version": "DAILY_GENUINE_S0_R7_ACTUAL_PASS_V1",
+  "stage": "S0",
+  "operatorSourceCommit": "8d2ef953c927ad5bc2a5787b8da6a3891565a8e3",
+  "ownedDirectory": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/.codex-tmp/daily-genuine-stages-20261017-4f466cff937c938d660d38a2d3bbe790",
+  "originalQualifyResult": {
+    "status": "PASS",
+    "code": "FIXTURE_STAGE_NATIVE_QUALIFIED",
+    "phase": "qualify",
+    "stage": "S0",
+    "browserClosed": true
+  },
+  "originalCoordinatorSummary": {
+    "status": "S0_NATIVE_QUALIFIED_OWN_TURN_RELEASED",
+    "ownedDirectory": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/.codex-tmp/daily-genuine-stages-20261017-4f466cff937c938d660d38a2d3bbe790",
+    "operatorSourceCommit": "8d2ef953c927ad5bc2a5787b8da6a3891565a8e3",
+    "stage": "S0",
+    "businessRequests": 0,
+    "elapsedMs": 74386,
+    "publicComposer": "NOT_PROVIDED",
+    "financialSuccess": "NOT_CLAIMED",
+    "sharedTurn": "ORIGINAL_EXPLICIT_UNLOCK_CLOSE_REQUIRED"
+  },
+  "processExitCode": 0,
+  "ownTurn": {
+    "takenAt": "2026-10-17T14:04:26.754Z",
+    "releasedAt": "2026-10-17T14:05:38.313Z",
+    "explicitUnlockAndConnectionClose": true
+  },
+  "beforeCommit": "db015cac83e3fdcc4ebcb1888b841b345899dbdd",
+  "setupCommit": "db5a5c398438b21218d6f9a75bebe4a10c5abf85",
+  "afterCommit": "2d5496c6bea7ce559ca1575e357b2147fd474090",
+  "businessRequests": 0,
+  "reservedScopeCount": 11,
+  "reservedScopesVacant": true,
+  "financialSuccess": "NOT_CLAIMED",
+  "fullCanonicalRestorationClaimed": false,
+  "progressFile": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/.codex-tmp/daily-genuine-progress-20261017-f39911c3dd054e7cb2b3e6354d283c78/PROGRESS.jsonl"
+}

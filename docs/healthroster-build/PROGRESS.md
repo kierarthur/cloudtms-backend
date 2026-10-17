@@ -1397,3 +1397,11 @@ SEND_7 turn: {"chat":"HealthRoster","task":"DAILY_GENUINE_S0_STAGED_ONLY","statu
 
 
 17 October R7 source peer ca105/root12phasepublication/refusal tests/fullR6inverse accepted. BEFORE localownedcommit is published withSETUP completehistory and exactfreshremote BEFORE anysubmit; nofreshness/source/cap/permission waiver. S1ordinaryD9guidance881360 explicitlyreusesapproved normalcallbacks withoutF17/newpolicy, whilekeepingactualmetadata/full11scope/strictresponses/sharedcounter-sequence attribution and honestunprovedBanksemantics. RootwillrunonechangedS0turn onfixedactualK48d2 usingretainedR9session; no newloginorbusinessretry. Source/currentness remainsgenuine; Install2 NOT_INSTALLED/finalcritics NOT_RUN.
+
+SEND_7 turn: {"chat":"HealthRoster","task":"DAILY_GENUINE_S0_STAGED_ONLY","status":"TAKEN","takenAt":"2026-10-17T14:04:26.754Z","key":[20261013,1]}
+
+SEND_7 turn: {"chat":"HealthRoster","task":"DAILY_GENUINE_S0_STAGED_ONLY","status":"RELEASED","takenAt":"2026-10-17T14:04:26.754Z","releasedAt":"2026-10-17T14:05:38.313Z","explicitUnlockConfirmed":true,"connectionClosed":true,"proved":true,"key":[20261013,1]}
+
+### 17 October 2026 — actual S0 R7 qualified
+
+Original K4 source 8d2ef953c927ad5bc2a5787b8da6a3891565a8e3 completed genuine S0 BEFORE/AFTER under its own shared turn, 14:04:26.754–14:05:38.313 UTC, explicit unlock/close and process exit 0. Original closed child qualification PASS; both real native envelopes accepted/rolled back/fresh, all eleven reserved scopes vacant, catalogue unchanged. BEFORE was committed locally and published with SETUP before submit; AFTER was published normally. This is S0 only: zero business requests, no financial success or full canonical restoration claimed. Actual receipts and publication plan retained; R6 freshness HOLD retained unchanged. Install 2 remains NOT_INSTALLED; final critics NOT_RUN.
