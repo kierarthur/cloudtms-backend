@@ -1,0 +1,22 @@
+{
+  "version": "EXACT_IMMUTABLE_DIFF_CONTEXT_WHITESPACE_EXCEPTION_V1",
+  "reviewedCommit": "03bdfc6f3bed538b74a4b590b6ed566b3404444d",
+  "file": "docs/healthroster-build/proposals/source-status-child-pure-r2-independent-peer-20261017/FINITE_PARENT_DIFF.txt",
+  "sha256": "2fea1770c2937accb4b1849ee277e08c7729a3b0eeda4ecbcce3cf25165ea729",
+  "lines": [
+    134,
+    275,
+    278,
+    281,
+    284,
+    287,
+    290
+  ],
+  "exactLineBytesHex": "20",
+  "purpose": "Unified-diff blank context marker; preserving complete genuine parent evidence",
+  "sourceOwnerCommit": "b8293a0d306e9a94b32455a24ab32238e23f9026",
+  "savedIndexHEADAuthorGitEqual": true,
+  "runtimeAffected": false,
+  "allOtherCommittedPathsDiffCheck": "PASS",
+  "note": "Initial commit command did not stop after these evidence-only warnings; finite exception reviewed and recorded before push/native execution. No frozen evidence edited."
+}
