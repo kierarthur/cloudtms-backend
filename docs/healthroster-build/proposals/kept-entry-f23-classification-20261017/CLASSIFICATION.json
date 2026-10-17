@@ -1,0 +1,3823 @@
+{
+  "version": "HEALTH_KEPT_ENTRY_FINITE_TYPE_PROPOSAL_V1",
+  "integrationCommit": "24c57e6c7af4a8fb07d5e3126ab9ac76e9448560",
+  "qualification": "SOURCE_TYPES_AND_CONSTRUCTION_ONLY",
+  "native": "NOT_RUN",
+  "dbConnections": 0,
+  "files": [
+    {
+      "file": "supabase/migrations/17102026_0113_weekly_source_kept_10_decision_schema.sql",
+      "sha256": "726853c33c9ace512c96a225db448504443c723020e43eebd889b8903c356c15",
+      "points": [
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/migrations/17102026_0113_weekly_source_kept_10_decision_schema.sql\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"begin\\n  if exists(select 1 from pg_proc p where p.oid=to_regprocedure('private._weekly_source_immutable_record_guard_v1()')\\n    and (replace(p.prosrc,E'\\\\r\\\\n',E'\\\\n') is distinct from $immutable_expected$\\nbegin\\n  raise exception 'WEEKLY_SOURCE_IMMUTABLE_RECORD'\\n    using errcode='55000',\\n          detail=pg_catalog.jsonb_build_object(\\n            'reason_code','WEEKLY_SOURCE_IMMUTABLE_RECORD',\\n            'table_name',tg_table_name,\\n            'operation',tg_op\\n          )::text;\\nend;\\n$immutable_expected$\\n      or not p.prosecdef or p.prokind<>'f' or pg_get_userbyid(p.proowner) not in(current_user,'postgres'))) then\\n    raise exception 'WEEKLY_SOURCE_IMMUTABLE_GUARD_PREDECESSOR_CHANGED' using errcode='55000';\"]",
+          "count": 1
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/migrations/17102026_0113_weekly_source_kept_10_decision_schema.sql\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"begin\\n  execute pg_catalog.format('create policy cloudtms_miget_service_owner_all on public.weekly_source_kept_as_paid_decisions for all to %I,service_role using (true) with check (true)',current_user);\"]",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "file": "supabase/migrations/17102026_0113_weekly_source_kept_20_audit_guards.sql",
+      "sha256": "1c71853bbf810eb8270b1f0ec63477ef97a534bfd11a1d7140d16de639fbdf00",
+      "points": [
+        {
+          "hazard": "ROWTYPE_SELECT:V_DECISION:PUBLIC . WEEKLY_SOURCE_KEPT_AS_PAID_DECISIONS",
+          "key": "[\"private.weekly_source_keep_ack_native_guard_v1()\",\"ROWTYPE_SELECT:V_DECISION:PUBLIC . WEEKLY_SOURCE_KEPT_AS_PAID_DECISIONS\",\"select * into strict v_decision from public.weekly_source_kept_as_paid_decisions\\n    where id=(v_after->>'decision_id')::uuid;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_EVENT:PUBLIC . WEEKLY_WORK_EVENTS",
+          "key": "[\"private.weekly_source_keep_ack_native_guard_v1()\",\"ROWTYPE_SELECT:V_EVENT:PUBLIC . WEEKLY_WORK_EVENTS\",\"select * into strict v_event from public.weekly_work_events where id=v_decision.work_event_id;\"]",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "file": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/01_identical_rekey_prior.sqlinc",
+      "sha256": "1f102a04838e30fb0d0dcb12593d2024a7b67e99d77e68404f19f35a675449f0",
+      "points": [
+        {
+          "hazard": "ROWTYPE_SELECT:V_ROW:PUBLIC . WEEKLY_SOURCE_UPLOAD_ROWS",
+          "key": "[\"private.weekly_source_identical_rekey_prior_v1(uuid)\",\"ROWTYPE_SELECT:V_ROW:PUBLIC . WEEKLY_SOURCE_UPLOAD_ROWS\",\"select * into v_row from public.weekly_source_upload_rows where id=p_upload_row_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_UPLOAD:PUBLIC . WEEKLY_SOURCE_UPLOADS",
+          "key": "[\"private.weekly_source_identical_rekey_prior_v1(uuid)\",\"ROWTYPE_SELECT:V_UPLOAD:PUBLIC . WEEKLY_SOURCE_UPLOADS\",\"select * into strict v_upload from public.weekly_source_uploads where id=v_row.upload_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_CYCLE:PUBLIC . WEEKLY_SOURCE_CYCLES",
+          "key": "[\"private.weekly_source_identical_rekey_prior_v1(uuid)\",\"ROWTYPE_SELECT:V_CYCLE:PUBLIC . WEEKLY_SOURCE_CYCLES\",\"select * into strict v_cycle from public.weekly_source_cycles where id=v_upload.source_cycle_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_PROFILE:PUBLIC . WEEKLY_SOURCE_FORMAT_PROFILES",
+          "key": "[\"private.weekly_source_identical_rekey_prior_v1(uuid)\",\"ROWTYPE_SELECT:V_PROFILE:PUBLIC . WEEKLY_SOURCE_FORMAT_PROFILES\",\"select * into strict v_profile from public.weekly_source_format_profiles where id=v_upload.source_format_profile_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_CHOICE:PRIVATE . WEEKLY_SOURCE_OFFICE_ROW_CHOICES",
+          "key": "[\"private.weekly_source_identical_rekey_prior_v1(uuid)\",\"ROWTYPE_SELECT:V_CHOICE:PRIVATE . WEEKLY_SOURCE_OFFICE_ROW_CHOICES\",\"select * into v_choice from private.weekly_source_office_row_choices\\n    where upload_row_id=v_row.id order by id desc limit 1;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "UUID_CARDINALITY_UNCLASSIFIED",
+          "key": "[\"private.weekly_source_identical_rekey_prior_v1(uuid)\",\"UUID_CARDINALITY_UNCLASSIFIED\",\"if v_client is null then\\n    select count(*),min(gc.client_id::text)::uuid into v_count,v_client\\n    from public.weekly_source_group_clients gc join public.clients c on c.id=gc.client_id\\n    where gc.source_group_id=v_cycle.source_group_id and v_cycle.finalisation_week_ending between gc.valid_from and coalesce(gc.valid_to,'infinity'::date);\"]",
+          "count": 1
+        },
+        {
+          "hazard": "UUID_CARDINALITY_UNCLASSIFIED",
+          "key": "[\"private.weekly_source_identical_rekey_prior_v1(uuid)\",\"UUID_CARDINALITY_UNCLASSIFIED\",\"select count(*),min(e.id::text)::uuid into v_count,v_prior\\n  from public.weekly_work_events e\\n  join lateral(select r.* from public.weekly_source_row_resolutions r where r.work_event_id=e.id and r.mapping_state='RESOLVED'\\n    order by r.created_at_utc desc,r.id desc limit 1) prior on true\\n  join public.weekly_source_upload_rows old_row on old_row.id=prior.upload_row_id\\n  join public.contracts contract on contract.id=prior.contract_id and contract.candidate_id=v_candidate and contract.client_id=v_client\\n    and v_row.work_date between contract.start_date and coalesce(contract.end_date,'infinity'::date)\\n  where e.first_source_group_id=v_cycle.source_group_id and e.source_format_profile_id=v_profile.id\\n    and e.identity_kind='PROFILE_EXTERNAL_KEY' and e.candidate_id=v_candidate and e.client_id=v_client\\n    and prior.candidate_id=v_candidate and prior.client_id=v_client\\n    and e.work_date=v_row.work_date and old_row.work_date=v_row.work_date\\n    and old_row.start_at_local is not distinct from v_row.start_at_local\\n    and old_row.end_at_local is not distinct from v_row.end_at_local\\n    and old_row.break_minutes is not distinct from v_row.break_minutes\\n    and (v_choice.contract_id is null or prior.contract_id=v_choice.contract_id)\\n    and not exists(select 1 from public.weekly_source_upload_rows in_file\\n      where in_file.upload_id=v_upload.id and in_file.external_source_key=e.profile_external_key);\"]",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "file": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/02_complete_upload_context.sqlinc",
+      "sha256": "2e33b433f774ee497102dc95a0c36ad751d7510caa4e1b6cba47bd8c6d286514",
+      "points": [
+        {
+          "hazard": "ROWTYPE_SELECT:V_UPLOAD:PUBLIC . WEEKLY_SOURCE_UPLOADS",
+          "key": "[\"public.weekly_source_upload_context_v1(jsonb)\",\"ROWTYPE_SELECT:V_UPLOAD:PUBLIC . WEEKLY_SOURCE_UPLOADS\",\"select * into v_upload from public.weekly_source_uploads where id=v_upload_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_CYCLE:PUBLIC . WEEKLY_SOURCE_CYCLES",
+          "key": "[\"public.weekly_source_upload_context_v1(jsonb)\",\"ROWTYPE_SELECT:V_CYCLE:PUBLIC . WEEKLY_SOURCE_CYCLES\",\"select * into v_cycle from public.weekly_source_cycles where id=v_cycle_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_GROUP:PUBLIC . WEEKLY_SOURCE_GROUPS",
+          "key": "[\"public.weekly_source_upload_context_v1(jsonb)\",\"ROWTYPE_SELECT:V_GROUP:PUBLIC . WEEKLY_SOURCE_GROUPS\",\"select * into v_group from public.weekly_source_groups where id=v_cycle.source_group_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_SCOPE:PUBLIC . WEEKLY_SOURCE_REPORT_SCOPES",
+          "key": "[\"public.weekly_source_upload_context_v1(jsonb)\",\"ROWTYPE_SELECT:V_SCOPE:PUBLIC . WEEKLY_SOURCE_REPORT_SCOPES\",\"select * into v_scope\\n    from public.weekly_source_report_scopes where id=v_report_scope_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_PUBLICATION:PUBLIC . WEEKLY_SOURCE_PROJECTION_PUBLICATIONS",
+          "key": "[\"public.weekly_source_upload_context_v1(jsonb)\",\"ROWTYPE_SELECT:V_PUBLICATION:PUBLIC . WEEKLY_SOURCE_PROJECTION_PUBLICATIONS\",\"select * into strict v_publication from public.weekly_source_projection_publications\\n      where upload_id=v_upload.id and authority_scope_kind='SELF_BILL_REPORT_SCOPE'\\n        and report_scope_id=v_scope.id and authority_scope_version=v_scope.version and state in ('BUILDING','CURRENT');\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_PROFILE:PUBLIC . WEEKLY_SOURCE_FORMAT_PROFILES",
+          "key": "[\"public.weekly_source_upload_context_v1(jsonb)\",\"ROWTYPE_SELECT:V_PROFILE:PUBLIC . WEEKLY_SOURCE_FORMAT_PROFILES\",\"select * into strict v_profile\\n  from public.weekly_source_format_profiles where id=v_upload.source_format_profile_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_OFFICE_CHOICE:PRIVATE . WEEKLY_SOURCE_OFFICE_ROW_CHOICES",
+          "key": "[\"public.weekly_source_upload_context_v1(jsonb)\",\"ROWTYPE_SELECT:V_OFFICE_CHOICE:PRIVATE . WEEKLY_SOURCE_OFFICE_ROW_CHOICES\",\"select * into v_office_choice from private.weekly_source_office_row_choices\\n      where upload_row_id=v_source_row.id order by id desc limit 1;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "UUID_CARDINALITY_UNCLASSIFIED",
+          "key": "[\"public.weekly_source_upload_context_v1(jsonb)\",\"UUID_CARDINALITY_UNCLASSIFIED\",\"if v_row_client_id is null and v_profile.profile_code='NHSP_PREFINAL_RELEASED_V1' then\\n      select case when pg_catalog.count(*)=1 then pg_catalog.min(client.id::text)::uuid end\\n        into v_row_client_id\\n      from public.clients client\\n      where private.weekly_source_upload_client_eligible_v1(\\n          v_upload.id,client.id,v_source_row.work_date)\\n        and pg_catalog.lower(pg_catalog.btrim(client.name))=\\n          pg_catalog.lower(pg_catalog.btrim(coalesce(v_source_client,'')));\"]",
+          "count": 1
+        },
+        {
+          "hazard": "UUID_CARDINALITY_UNCLASSIFIED",
+          "key": "[\"public.weekly_source_upload_context_v1(jsonb)\",\"UUID_CARDINALITY_UNCLASSIFIED\",\"else\\n         \\n         \\n         \\n         \\n         \\n         \\n         \\n         \\n        select pg_catalog.count(*)::integer,\\n               pg_catalog.min(event.id::text)::uuid\\n          into v_prior_candidate_count,v_prior_work_event_id\\n        from public.weekly_work_events event\\n        where event.first_source_group_id=v_group.id\\n          and event.source_format_profile_id=v_profile.id\\n          and event.identity_kind='SCHEDULE_TUPLE'\\n          and event.candidate_id=v_candidate_id and event.client_id=v_row_client_id\\n          and event.work_date=v_source_row.work_date\\n          and private.weekly_source_work_event_schedule_compatible_v1(\\n                event.id,v_source_row.start_at_local,v_source_row.end_at_local\\n              );\"]",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "file": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/03_complete_projection_rows.sqlinc",
+      "sha256": "0cd140692ed4a5d7b2f539d7f86ff2876ceebb51d1f19e1c221b39926453fc35",
+      "points": [
+        {
+          "hazard": "ROWTYPE_SELECT:V_PUBLICATION:PUBLIC . WEEKLY_SOURCE_PROJECTION_PUBLICATIONS",
+          "key": "[\"public.weekly_source_projection_rows_apply_atomic_v1(uuid,uuid,jsonb)\",\"ROWTYPE_SELECT:V_PUBLICATION:PUBLIC . WEEKLY_SOURCE_PROJECTION_PUBLICATIONS\",\"select * into v_publication\\n  from public.weekly_source_projection_publications\\n  where id=p_publication_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_UPLOAD:PUBLIC . WEEKLY_SOURCE_UPLOADS",
+          "key": "[\"public.weekly_source_projection_rows_apply_atomic_v1(uuid,uuid,jsonb)\",\"ROWTYPE_SELECT:V_UPLOAD:PUBLIC . WEEKLY_SOURCE_UPLOADS\",\"select * into strict v_upload\\n  from public.weekly_source_uploads\\n  where id=v_publication.upload_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_CYCLE:PUBLIC . WEEKLY_SOURCE_CYCLES",
+          "key": "[\"public.weekly_source_projection_rows_apply_atomic_v1(uuid,uuid,jsonb)\",\"ROWTYPE_SELECT:V_CYCLE:PUBLIC . WEEKLY_SOURCE_CYCLES\",\"select * into strict v_cycle\\n  from public.weekly_source_cycles\\n  where id=v_publication.source_cycle_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_GROUP:PUBLIC . WEEKLY_SOURCE_GROUPS",
+          "key": "[\"public.weekly_source_projection_rows_apply_atomic_v1(uuid,uuid,jsonb)\",\"ROWTYPE_SELECT:V_GROUP:PUBLIC . WEEKLY_SOURCE_GROUPS\",\"select * into strict v_group\\n  from public.weekly_source_groups\\n  where id=v_cycle.source_group_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_CYCLE:PUBLIC . WEEKLY_SOURCE_CYCLES",
+          "key": "[\"public.weekly_source_projection_rows_apply_atomic_v1(uuid,uuid,jsonb)\",\"ROWTYPE_SELECT:V_CYCLE:PUBLIC . WEEKLY_SOURCE_CYCLES\",\"select * into strict v_cycle\\n    from public.weekly_source_cycles\\n    where id=v_publication.source_cycle_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_SCOPE:PUBLIC . WEEKLY_SOURCE_REPORT_SCOPES",
+          "key": "[\"public.weekly_source_projection_rows_apply_atomic_v1(uuid,uuid,jsonb)\",\"ROWTYPE_SELECT:V_SCOPE:PUBLIC . WEEKLY_SOURCE_REPORT_SCOPES\",\"select * into strict v_scope\\n    from public.weekly_source_report_scopes\\n    where id=v_publication.report_scope_id\\n    for update;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_CYCLE:PUBLIC . WEEKLY_SOURCE_CYCLES",
+          "key": "[\"public.weekly_source_projection_rows_apply_atomic_v1(uuid,uuid,jsonb)\",\"ROWTYPE_SELECT:V_CYCLE:PUBLIC . WEEKLY_SOURCE_CYCLES\",\"select * into strict v_cycle\\n    from public.weekly_source_cycles\\n    where id=v_publication.source_cycle_id\\n    for update;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_PUBLICATION:PUBLIC . WEEKLY_SOURCE_PROJECTION_PUBLICATIONS",
+          "key": "[\"public.weekly_source_projection_rows_apply_atomic_v1(uuid,uuid,jsonb)\",\"ROWTYPE_SELECT:V_PUBLICATION:PUBLIC . WEEKLY_SOURCE_PROJECTION_PUBLICATIONS\",\"select * into strict v_publication\\n  from public.weekly_source_projection_publications\\n  where id=p_publication_id\\n  for update;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_UPLOAD:PUBLIC . WEEKLY_SOURCE_UPLOADS",
+          "key": "[\"public.weekly_source_projection_rows_apply_atomic_v1(uuid,uuid,jsonb)\",\"ROWTYPE_SELECT:V_UPLOAD:PUBLIC . WEEKLY_SOURCE_UPLOADS\",\"select * into strict v_upload\\n  from public.weekly_source_uploads\\n  where id=v_publication.upload_id\\n  for share;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_PROFILE:PUBLIC . WEEKLY_SOURCE_FORMAT_PROFILES",
+          "key": "[\"public.weekly_source_projection_rows_apply_atomic_v1(uuid,uuid,jsonb)\",\"ROWTYPE_SELECT:V_PROFILE:PUBLIC . WEEKLY_SOURCE_FORMAT_PROFILES\",\"select * into strict v_profile\\n  from public.weekly_source_format_profiles profile\\n  where profile.id=v_upload.source_format_profile_id and profile.active;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_CORRECTION:PUBLIC . WEEKLY_FINAL_SOURCE_CORRECTION_SESSIONS",
+          "key": "[\"public.weekly_source_projection_rows_apply_atomic_v1(uuid,uuid,jsonb)\",\"ROWTYPE_SELECT:V_CORRECTION:PUBLIC . WEEKLY_FINAL_SOURCE_CORRECTION_SESSIONS\",\"select * into v_correction\\n    from public.weekly_final_source_correction_sessions\\n    where id=v_publication.correction_session_id for update;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_SOURCE_ROW:PUBLIC . WEEKLY_SOURCE_UPLOAD_ROWS",
+          "key": "[\"public.weekly_source_projection_rows_apply_atomic_v1(uuid,uuid,jsonb)\",\"ROWTYPE_SELECT:V_SOURCE_ROW:PUBLIC . WEEKLY_SOURCE_UPLOAD_ROWS\",\"select * into strict v_source_row\\n    from public.weekly_source_upload_rows source_row\\n    where source_row.id=(v_row_json->>'upload_row_id')::uuid\\n      and source_row.upload_id=v_upload.id\\n    for share;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_CONTRACT:PUBLIC . CONTRACTS",
+          "key": "[\"public.weekly_source_projection_rows_apply_atomic_v1(uuid,uuid,jsonb)\",\"ROWTYPE_SELECT:V_CONTRACT:PUBLIC . CONTRACTS\",\"select * into strict v_contract\\n      from public.contracts contract\\n      where contract.id=v_contract_id\\n        and contract.candidate_id=v_candidate_id\\n        and contract.client_id=v_client_id\\n        and v_source_row.work_date between contract.start_date and coalesce(contract.end_date,'infinity'::date);\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_WORK_EVENT:PUBLIC . WEEKLY_WORK_EVENTS",
+          "key": "[\"public.weekly_source_projection_rows_apply_atomic_v1(uuid,uuid,jsonb)\",\"ROWTYPE_SELECT:V_WORK_EVENT:PUBLIC . WEEKLY_WORK_EVENTS\",\"select * into strict v_work_event\\n        from public.weekly_work_events work_event\\n        where work_event.id=v_prior_work_event_id\\n          and work_event.candidate_id=v_candidate_id\\n          and work_event.client_id=v_client_id\\n          and work_event.first_source_group_id=v_group.id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "UUID_CARDINALITY_UNCLASSIFIED",
+          "key": "[\"public.weekly_source_projection_rows_apply_atomic_v1(uuid,uuid,jsonb)\",\"UUID_CARDINALITY_UNCLASSIFIED\",\"select pg_catalog.count(*)::integer,\\n                 pg_catalog.min(work_event.id::text)::uuid\\n            into v_compatible_count,v_compatible_event_id\\n          from public.weekly_work_events work_event\\n          where work_event.first_source_group_id=v_group.id\\n            and work_event.source_format_profile_id=v_upload.source_format_profile_id\\n            and work_event.identity_kind='SCHEDULE_TUPLE'\\n            and work_event.candidate_id=v_candidate_id\\n            and work_event.client_id=v_client_id\\n            and work_event.work_date=v_source_row.work_date\\n            and private.weekly_source_work_event_schedule_compatible_v1(\\n                  work_event.id,v_source_row.start_at_local,v_source_row.end_at_local\\n                );\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_WORK_EVENT:PUBLIC . WEEKLY_WORK_EVENTS",
+          "key": "[\"public.weekly_source_projection_rows_apply_atomic_v1(uuid,uuid,jsonb)\",\"ROWTYPE_SELECT:V_WORK_EVENT:PUBLIC . WEEKLY_WORK_EVENTS\",\"select * into strict v_work_event\\n          from public.weekly_work_events work_event\\n          where work_event.id=v_compatible_event_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_WORK_EVENT:PUBLIC . WEEKLY_WORK_EVENTS",
+          "key": "[\"public.weekly_source_projection_rows_apply_atomic_v1(uuid,uuid,jsonb)\",\"ROWTYPE_SELECT:V_WORK_EVENT:PUBLIC . WEEKLY_WORK_EVENTS\",\"select * into strict v_work_event\\n          from public.weekly_work_events work_event\\n          where work_event.durable_identity_hash=v_durable_identity_hash;\"]",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "file": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/04_kept_read_admission.sqlinc",
+      "sha256": "cdcac4c2c2053194bc3bc68c28d701c5bbb334e82bda3e8e41b79ca59e53a9aa",
+      "points": [
+        {
+          "hazard": "ROWTYPE_SELECT:V_EVENT:PUBLIC . WEEKLY_WORK_EVENTS",
+          "key": "[\"private.weekly_source_kept_as_paid_read_admit_v1(uuid,uuid)\",\"ROWTYPE_SELECT:V_EVENT:PUBLIC . WEEKLY_WORK_EVENTS\",\"select * into strict v_event from public.weekly_work_events where id=p_work_event_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_RESOLUTION:PUBLIC . WEEKLY_SOURCE_ROW_RESOLUTIONS",
+          "key": "[\"private.weekly_source_kept_as_paid_read_admit_v1(uuid,uuid)\",\"ROWTYPE_SELECT:V_RESOLUTION:PUBLIC . WEEKLY_SOURCE_ROW_RESOLUTIONS\",\"select * into strict v_resolution from public.weekly_source_row_resolutions\\n    where work_event_id=v_event.id and mapping_state='RESOLVED'\\n    order by created_at_utc desc,id desc limit 1;\"]",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "file": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/05_kept_as_paid_facts.sqlinc",
+      "sha256": "c06e67b60dd71b2cc748a22da8b4089ac44a140f4014e181b0abb8d170ac2afa",
+      "points": [
+        {
+          "hazard": "ROWTYPE_SELECT:V_EVENT:PUBLIC . WEEKLY_WORK_EVENTS",
+          "key": "[\"private.weekly_source_kept_as_paid_facts_v1(uuid,text)\",\"ROWTYPE_SELECT:V_EVENT:PUBLIC . WEEKLY_WORK_EVENTS\",\"select * into strict v_event from public.weekly_work_events where id=p_work_event_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_UPLOAD:PUBLIC . WEEKLY_SOURCE_UPLOADS",
+          "key": "[\"private.weekly_source_kept_as_paid_facts_v1(uuid,text)\",\"ROWTYPE_SELECT:V_UPLOAD:PUBLIC . WEEKLY_SOURCE_UPLOADS\",\"select * into strict v_upload from public.weekly_source_uploads where id=v_publication.upload_id;\"]",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "file": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/06_kept_as_paid_context.sqlinc",
+      "sha256": "aee3cfccffcff7e81a98ac1e8dac212d0803310e91a810d8536c845b1cd84592",
+      "points": [
+        {
+          "hazard": "ROWTYPE_SELECT:V_EVENT:PUBLIC . WEEKLY_WORK_EVENTS",
+          "key": "[\"private.weekly_source_kept_as_paid_context_v1(uuid,uuid)\",\"ROWTYPE_SELECT:V_EVENT:PUBLIC . WEEKLY_WORK_EVENTS\",\"select * into strict v_event from public.weekly_work_events where id=p_work_event_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_RESOLUTION:PUBLIC . WEEKLY_SOURCE_ROW_RESOLUTIONS",
+          "key": "[\"private.weekly_source_kept_as_paid_context_v1(uuid,uuid)\",\"ROWTYPE_SELECT:V_RESOLUTION:PUBLIC . WEEKLY_SOURCE_ROW_RESOLUTIONS\",\"select * into strict v_resolution from public.weekly_source_row_resolutions\\n    where work_event_id=v_event.id and mapping_state='RESOLVED'\\n    order by created_at_utc desc,id desc limit 1;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_DECISION:PUBLIC . WEEKLY_SOURCE_KEPT_AS_PAID_DECISIONS",
+          "key": "[\"private.weekly_source_kept_as_paid_context_v1(uuid,uuid)\",\"ROWTYPE_SELECT:V_DECISION:PUBLIC . WEEKLY_SOURCE_KEPT_AS_PAID_DECISIONS\",\"select * into strict v_decision from public.weekly_source_kept_as_paid_decisions\\n      where id=(v_ack.after_json->>'decision_id')::uuid and work_event_id=v_event.id;\"]",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "file": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/07_keep_as_paid_decide.sqlinc",
+      "sha256": "2532ae8f82630d66230712c966a7913c1011c3f8f4ae7f5e74e5f2aa9e4f1922",
+      "points": [
+        {
+          "hazard": "JSON_CONCAT",
+          "key": "[\"public.weekly_source_keep_as_paid_decide_atomic_v1(jsonb)\",\"JSON_CONCAT\",\"return v_audit.after_json->'result'||jsonb_build_object('idempotent_replay',true);\"]",
+          "count": 2
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_EVENT:PUBLIC . WEEKLY_WORK_EVENTS",
+          "key": "[\"public.weekly_source_keep_as_paid_decide_atomic_v1(jsonb)\",\"ROWTYPE_SELECT:V_EVENT:PUBLIC . WEEKLY_WORK_EVENTS\",\"select * into strict v_event from public.weekly_work_events where id=v_event_id;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_DECISION:PUBLIC . WEEKLY_SOURCE_KEPT_AS_PAID_DECISIONS",
+          "key": "[\"public.weekly_source_keep_as_paid_decide_atomic_v1(jsonb)\",\"ROWTYPE_SELECT:V_DECISION:PUBLIC . WEEKLY_SOURCE_KEPT_AS_PAID_DECISIONS\",\"select * into strict v_decision from public.weekly_source_kept_as_paid_decisions\\n    where work_event_id=v_event.id and reason=v_reason and credit_invoice_line_id is not distinct from v_credit\\n      and facts_fingerprint=v_facts;\"]",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "file": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/08_credited_targets_admit.sqlinc",
+      "sha256": "a4fae82f9b01a139923834d853310c175daebeef559874ed50c3c0436399f10c",
+      "points": [
+        {
+          "hazard": "ROWTYPE_SELECT:V_INVOICE:PUBLIC . INVOICES",
+          "key": "[\"private.weekly_source_invoice_credited_targets_admit_v1(uuid,jsonb,uuid)\",\"ROWTYPE_SELECT:V_INVOICE:PUBLIC . INVOICES\",\"select * into strict v_invoice from public.invoices where id=p_invoice_id;\"]",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "file": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/09_complete_invoice_apply_edits.sqlinc",
+      "sha256": "b68439cb5928e008d4b315303a83e0b97ef867ea779b0ba1dabbc553974ed16b",
+      "points": [
+        {
+          "hazard": "AGGREGATE_TYPE_UNCLASSIFIED",
+          "key": "[\"public.invoice_apply_edits(uuid,jsonb,uuid)\",\"AGGREGATE_TYPE_UNCLASSIFIED\",\"for v_refupd in select value from jsonb_array_elements(v_reference_updates) value loop\\n    if v_refupd is not null and jsonb_typeof(v_refupd)='object' then\\n      select min(field_name) into v_source_unsupported_field\\n      from jsonb_object_keys(v_refupd) field_name\\n      where not (field_name=any(v_allowed_reference_fields));\"]",
+          "count": 1
+        },
+        {
+          "hazard": "AGGREGATE_TYPE_UNCLASSIFIED",
+          "key": "[\"public.invoice_apply_edits(uuid,jsonb,uuid)\",\"AGGREGATE_TYPE_UNCLASSIFIED\",\"for v_location_update in select value from jsonb_array_elements(v_location_updates) value loop\\n    if v_location_update is not null and jsonb_typeof(v_location_update)='object' then\\n      select min(field_name) into v_source_unsupported_field\\n      from jsonb_object_keys(v_location_update) field_name\\n      where not (field_name=any(v_allowed_location_fields));\"]",
+          "count": 1
+        },
+        {
+          "hazard": "AGGREGATE_TYPE_UNCLASSIFIED",
+          "key": "[\"public.invoice_apply_edits(uuid,jsonb,uuid)\",\"AGGREGATE_TYPE_UNCLASSIFIED\",\"select min(field_name) into v_source_unsupported_field\\n            from jsonb_object_keys(v_source_payload_segment) field_name\\n            where not (field_name=any(v_allowed_reference_segment_fields));\"]",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "file": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/10_complete_adjustments_apply.sqlinc",
+      "sha256": "a88d2dffcbcbe2aac4af67edd1a93c4de255f2525c859cd94796c602fe7a5e7b",
+      "points": [
+        {
+          "hazard": "ROWTYPE_SELECT:INV:PUBLIC . INVOICES",
+          "key": "[\"private.weekly_source_invoice_adjustments_apply_v1(uuid,jsonb,uuid)\",\"ROWTYPE_SELECT:INV:PUBLIC . INVOICES\",\"select * into strict inv from public.invoices where id=p_invoice_id for update;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:LINE:PUBLIC . INVOICE_LINES",
+          "key": "[\"private.weekly_source_invoice_adjustments_apply_v1(uuid,jsonb,uuid)\",\"ROWTYPE_SELECT:LINE:PUBLIC . INVOICE_LINES\",\"select value::uuid from jsonb_array_elements_text(p_payload->'remove_invoice_line_ids') value loop\\n      select * into strict line from public.invoice_lines where id=v_id and invoice_id=p_invoice_id for update;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:LINE:PUBLIC . INVOICE_LINES",
+          "key": "[\"private.weekly_source_invoice_adjustments_apply_v1(uuid,jsonb,uuid)\",\"ROWTYPE_SELECT:LINE:PUBLIC . INVOICE_LINES\",\"select * into line from public.invoice_lines where invoice_id=p_invoice_id and source_key='ADJ:'||v_token;\"]",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "file": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/11_complete_adjustment_line_valid.sqlinc",
+      "sha256": "071248b182a7aa2f0619378ff80115bbd6c75736ec6bfd8f278702370ff7c5bc",
+      "points": [
+        {
+          "hazard": "ROWTYPE_SELECT:LINE:PUBLIC . INVOICE_LINES",
+          "key": "[\"private.weekly_source_invoice_adjustment_line_valid_v1(uuid,uuid)\",\"ROWTYPE_SELECT:LINE:PUBLIC . INVOICE_LINES\",\"select * into line from public.invoice_lines where id=p_invoice_line_id and invoice_id=p_invoice_id;\"]",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "file": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/12_keep_ack_native_guard.sqlinc",
+      "sha256": "e6744c534740ddc5c15e860ba4b1eee501386ece84c2468ea10c0ac951f129c2",
+      "points": [
+        {
+          "hazard": "ROWTYPE_SELECT:V_DECISION:PUBLIC . WEEKLY_SOURCE_KEPT_AS_PAID_DECISIONS",
+          "key": "[\"private.weekly_source_keep_ack_native_guard_v1()\",\"ROWTYPE_SELECT:V_DECISION:PUBLIC . WEEKLY_SOURCE_KEPT_AS_PAID_DECISIONS\",\"select * into strict v_decision from public.weekly_source_kept_as_paid_decisions\\n    where id=(v_after->>'decision_id')::uuid;\"]",
+          "count": 1
+        },
+        {
+          "hazard": "ROWTYPE_SELECT:V_EVENT:PUBLIC . WEEKLY_WORK_EVENTS",
+          "key": "[\"private.weekly_source_keep_ack_native_guard_v1()\",\"ROWTYPE_SELECT:V_EVENT:PUBLIC . WEEKLY_WORK_EVENTS\",\"select * into strict v_event from public.weekly_work_events where id=v_decision.work_event_id;\"]",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "file": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/98_complete_current_classification.sqlinc",
+      "sha256": "fe1cbb0de3332a021d1459a2e46f5c201e58d4ded7ade5f9f58fae876b8547e4",
+      "points": [
+        {
+          "hazard": "AGGREGATE_TYPE_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/98_complete_current_classification.sqlinc\",\"AGGREGATE_TYPE_UNCLASSIFIED\",\"if exists(\\n    select 1\\n    from private._weekly_source_acl_lifecycle_column_contract_v1() allowed\\n    left join pg_catalog.pg_attribute a\\n      on a.attrelid=pg_catalog.to_regclass(pg_catalog.format('public.%I',allowed.table_name))\\n     and a.attname=allowed.column_name\\n     and a.attnum>0\\n     and not a.attisdropped\\n    where a.attrelid is null\\n  )\\n  or exists(\\n    select 1\\n    from private._weekly_source_acl_lifecycle_column_contract_v1() allowed\\n    group by allowed.table_name\\n    having pg_catalog.min(allowed.column_ordinal)<>1\\n       or pg_catalog.max(allowed.column_ordinal)<>count(*)\\n       or count(distinct allowed.column_ordinal)<>count(*)\\n  ) then\\n    raise exception 'WEEKLY_SOURCE_ACL_LIFECYCLE_COLUMN_INVALID' using errcode='55000';\"]",
+          "count": 1
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"for v_table in\\n    select c.table_name,c.record_class\\n    from private._weekly_source_acl_table_contract_v1() c\\n    order by c.table_name\\n  loop\\n    execute pg_catalog.format('alter table public.%I enable row level security',v_table.table_name);\"]",
+          "count": 1
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"execute pg_catalog.format('alter table public.%I force row level security',v_table.table_name);\"]",
+          "count": 1
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"execute pg_catalog.format(\\n      'revoke all on table public.%I from public,anon,authenticated,service_role',\\n      v_table.table_name\\n    );\"]",
+          "count": 1
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"if exists(select 1 from pg_catalog.pg_roles where rolname='authenticator') then\\n      execute pg_catalog.format('revoke all on table public.%I from authenticator',v_table.table_name);\"]",
+          "count": 1
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"if exists(select 1 from pg_catalog.pg_roles where rolname='supabase_admin') then\\n      execute pg_catalog.format('revoke all on table public.%I from supabase_admin',v_table.table_name);\"]",
+          "count": 1
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"execute pg_catalog.format(\\n      'drop policy if exists cloudtms_miget_service_owner_all on public.%I',\\n      v_table.table_name\\n    );\"]",
+          "count": 1
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"execute pg_catalog.format(\\n      'create policy cloudtms_miget_service_owner_all on public.%I for all to %I, service_role using (true) with check (true)',\\n      v_table.table_name,current_user\\n    );\"]",
+          "count": 1
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"execute pg_catalog.format(\\n      'drop trigger if exists weekly_source_immutable_record_guard on public.%I',\\n      v_table.table_name\\n    );\"]",
+          "count": 1
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"execute pg_catalog.format(\\n      'drop trigger if exists weekly_source_immutable_fact_guard on public.%I',\\n      v_table.table_name\\n    );\"]",
+          "count": 1
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"execute pg_catalog.format(\\n      'drop trigger if exists weekly_source_immutable_truncate_guard on public.%I',\\n      v_table.table_name\\n    );\"]",
+          "count": 1
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"if v_table.record_class='IMMUTABLE_APPEND_ONLY' then\\n      execute pg_catalog.format(\\n        'create trigger weekly_source_immutable_record_guard before update or delete on public.%I for each row execute function private._weekly_source_immutable_record_guard_v1()',\\n        v_table.table_name\\n      );\"]",
+          "count": 1
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"execute pg_catalog.format(\\n        'create trigger weekly_source_immutable_fact_guard before update or delete on public.%I for each row execute function private._weekly_source_immutable_fact_guard_v1(%s)',\\n        v_table.table_name,v_lifecycle_columns\\n      );\"]",
+          "count": 1
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"if v_table.record_class in ('IMMUTABLE_APPEND_ONLY','IMMUTABLE_FACTS_WITH_LIFECYCLE') then\\n      execute pg_catalog.format(\\n        'create trigger weekly_source_immutable_truncate_guard before truncate on public.%I for each statement execute function private._weekly_source_immutable_record_guard_v1()',\\n        v_table.table_name\\n      );\"]",
+          "count": 1
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"begin\\n  for v_function in\\n    select p.oid,p.proowner,n.nspname,p.proname,\\n           pg_catalog.pg_get_function_identity_arguments(p.oid) as identity_arguments\\n    from pg_catalog.pg_proc p\\n    join pg_catalog.pg_namespace n on n.oid=p.pronamespace\\n    where n.nspname in ('public','private')\\n      and (\\n        p.proname like 'weekly\\\\_source\\\\_%' escape '\\\\'\\n        or p.proname like '\\\\_weekly\\\\_source\\\\_%' escape '\\\\'\\n        or p.proname like '\\\\_ctms\\\\_weekly\\\\_source\\\\_%' escape '\\\\'\\n        or p.proname like 'weekly\\\\_exceptional\\\\_%' escape '\\\\'\\n      )\\n  loop\\n    execute pg_catalog.format(\\n      'revoke all on function %I.%I(%s) from public,anon,authenticated,service_role',\\n      v_function.nspname,v_function.proname,v_function.identity_arguments\\n    );\"]",
+          "count": 1
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"if exists(select 1 from pg_catalog.pg_roles where rolname='authenticator') then\\n      execute pg_catalog.format(\\n        'revoke all on function %I.%I(%s) from authenticator',\\n        v_function.nspname,v_function.proname,v_function.identity_arguments\\n      );\"]",
+          "count": 1
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"if exists(select 1 from pg_catalog.pg_roles where rolname='supabase_admin') then\\n      execute pg_catalog.format(\\n        'revoke all on function %I.%I(%s) from supabase_admin',\\n        v_function.nspname,v_function.proname,v_function.identity_arguments\\n      );\"]",
+          "count": 1
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"for v_signature in\\n    select function_signature\\n    from private._weekly_source_acl_service_rpc_contract_v1()\\n  loop\\n    if pg_catalog.to_regprocedure(v_signature) is not null then\\n      execute 'grant execute on function '||v_signature||' to service_role';\"]",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "file": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/99_exact_function_acl.sqlinc",
+      "sha256": "7c8c73f8eb949db888afdc566968c442433ab92ced5c45b571f9e1fc9081cb32",
+      "points": []
+    },
+    {
+      "file": "supabase/repeatable/17102026_0135_correction_entry_reader/01_complete_entry_reader.sqlinc",
+      "sha256": "0f7c01eb27ba3842b90524e550a0c2bbbe3a5406664c8e4c4bf1f27d831386f5",
+      "points": []
+    },
+    {
+      "file": "supabase/migrations/17102026_0135_correction_entry_admission.sql",
+      "sha256": "9af6c9b8993e918a0c28bdc29dae0d6b4cc9477cc13075329180395d53fbd8e7",
+      "points": []
+    },
+    {
+      "file": "supabase/repeatable/17102026_0135_correction_entry_reader/98_complete_current_classification.sqlinc",
+      "sha256": "587a7bd81efa24d721b1632a4c1a5af902fdeb56a3d39c0736615df51024fd78",
+      "points": [
+        {
+          "hazard": "AGGREGATE_TYPE_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0135_correction_entry_reader/98_complete_current_classification.sqlinc\",\"AGGREGATE_TYPE_UNCLASSIFIED\",\"if exists(\\n    select 1\\n    from private._weekly_source_acl_lifecycle_column_contract_v1() allowed\\n    left join pg_catalog.pg_attribute a\\n      on a.attrelid=pg_catalog.to_regclass(pg_catalog.format('public.%I',allowed.table_name))\\n     and a.attname=allowed.column_name\\n     and a.attnum>0\\n     and not a.attisdropped\\n    where a.attrelid is null\\n  )\\n  or exists(\\n    select 1\\n    from private._weekly_source_acl_lifecycle_column_contract_v1() allowed\\n    group by allowed.table_name\\n    having pg_catalog.min(allowed.column_ordinal)<>1\\n       or pg_catalog.max(allowed.column_ordinal)<>count(*)\\n       or count(distinct allowed.column_ordinal)<>count(*)\\n  ) then\\n    raise exception 'WEEKLY_SOURCE_ACL_LIFECYCLE_COLUMN_INVALID' using errcode='55000';\"]",
+          "count": 1
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0135_correction_entry_reader/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"for v_table in\\n    select c.table_name,c.record_class\\n    from private._weekly_source_acl_table_contract_v1() c\\n    order by c.table_name\\n  loop\\n    execute pg_catalog.format('alter table public.%I enable row level security',v_table.table_name);\"]",
+          "count": 1
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0135_correction_entry_reader/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"execute pg_catalog.format('alter table public.%I force row level security',v_table.table_name);\"]",
+          "count": 1
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0135_correction_entry_reader/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"execute pg_catalog.format(\\n      'revoke all on table public.%I from public,anon,authenticated,service_role',\\n      v_table.table_name\\n    );\"]",
+          "count": 1
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0135_correction_entry_reader/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"if exists(select 1 from pg_catalog.pg_roles where rolname='authenticator') then\\n      execute pg_catalog.format('revoke all on table public.%I from authenticator',v_table.table_name);\"]",
+          "count": 1
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0135_correction_entry_reader/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"if exists(select 1 from pg_catalog.pg_roles where rolname='supabase_admin') then\\n      execute pg_catalog.format('revoke all on table public.%I from supabase_admin',v_table.table_name);\"]",
+          "count": 1
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0135_correction_entry_reader/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"execute pg_catalog.format(\\n      'drop policy if exists cloudtms_miget_service_owner_all on public.%I',\\n      v_table.table_name\\n    );\"]",
+          "count": 1
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0135_correction_entry_reader/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"execute pg_catalog.format(\\n      'create policy cloudtms_miget_service_owner_all on public.%I for all to %I, service_role using (true) with check (true)',\\n      v_table.table_name,current_user\\n    );\"]",
+          "count": 1
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0135_correction_entry_reader/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"execute pg_catalog.format(\\n      'drop trigger if exists weekly_source_immutable_record_guard on public.%I',\\n      v_table.table_name\\n    );\"]",
+          "count": 1
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0135_correction_entry_reader/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"execute pg_catalog.format(\\n      'drop trigger if exists weekly_source_immutable_fact_guard on public.%I',\\n      v_table.table_name\\n    );\"]",
+          "count": 1
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0135_correction_entry_reader/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"execute pg_catalog.format(\\n      'drop trigger if exists weekly_source_immutable_truncate_guard on public.%I',\\n      v_table.table_name\\n    );\"]",
+          "count": 1
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0135_correction_entry_reader/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"if v_table.record_class='IMMUTABLE_APPEND_ONLY' then\\n      execute pg_catalog.format(\\n        'create trigger weekly_source_immutable_record_guard before update or delete on public.%I for each row execute function private._weekly_source_immutable_record_guard_v1()',\\n        v_table.table_name\\n      );\"]",
+          "count": 1
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0135_correction_entry_reader/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"execute pg_catalog.format(\\n        'create trigger weekly_source_immutable_fact_guard before update or delete on public.%I for each row execute function private._weekly_source_immutable_fact_guard_v1(%s)',\\n        v_table.table_name,v_lifecycle_columns\\n      );\"]",
+          "count": 1
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0135_correction_entry_reader/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"if v_table.record_class in ('IMMUTABLE_APPEND_ONLY','IMMUTABLE_FACTS_WITH_LIFECYCLE') then\\n      execute pg_catalog.format(\\n        'create trigger weekly_source_immutable_truncate_guard before truncate on public.%I for each statement execute function private._weekly_source_immutable_record_guard_v1()',\\n        v_table.table_name\\n      );\"]",
+          "count": 1
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0135_correction_entry_reader/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"begin\\n  for v_function in\\n    select p.oid,p.proowner,n.nspname,p.proname,\\n           pg_catalog.pg_get_function_identity_arguments(p.oid) as identity_arguments\\n    from pg_catalog.pg_proc p\\n    join pg_catalog.pg_namespace n on n.oid=p.pronamespace\\n    where n.nspname in ('public','private')\\n      and (\\n        p.proname like 'weekly\\\\_source\\\\_%' escape '\\\\'\\n        or p.proname like '\\\\_weekly\\\\_source\\\\_%' escape '\\\\'\\n        or p.proname like '\\\\_ctms\\\\_weekly\\\\_source\\\\_%' escape '\\\\'\\n        or p.proname like 'weekly\\\\_exceptional\\\\_%' escape '\\\\'\\n      )\\n  loop\\n    execute pg_catalog.format(\\n      'revoke all on function %I.%I(%s) from public,anon,authenticated,service_role',\\n      v_function.nspname,v_function.proname,v_function.identity_arguments\\n    );\"]",
+          "count": 1
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0135_correction_entry_reader/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"if exists(select 1 from pg_catalog.pg_roles where rolname='authenticator') then\\n      execute pg_catalog.format(\\n        'revoke all on function %I.%I(%s) from authenticator',\\n        v_function.nspname,v_function.proname,v_function.identity_arguments\\n      );\"]",
+          "count": 1
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0135_correction_entry_reader/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"if exists(select 1 from pg_catalog.pg_roles where rolname='supabase_admin') then\\n      execute pg_catalog.format(\\n        'revoke all on function %I.%I(%s) from supabase_admin',\\n        v_function.nspname,v_function.proname,v_function.identity_arguments\\n      );\"]",
+          "count": 1
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0135_correction_entry_reader/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"for v_signature in\\n    select function_signature\\n    from private._weekly_source_acl_service_rpc_contract_v1()\\n  loop\\n    if pg_catalog.to_regprocedure(v_signature) is not null then\\n      execute 'grant execute on function '||v_signature||' to service_role';\"]",
+          "count": 1
+        }
+      ]
+    }
+  ],
+  "inputs": [
+    {
+      "path": "supabase/migrations/17102026_0113_weekly_source_kept_10_decision_schema.sql",
+      "sha256": "726853c33c9ace512c96a225db448504443c723020e43eebd889b8903c356c15"
+    },
+    {
+      "path": "supabase/migrations/17102026_0113_weekly_source_kept_20_audit_guards.sql",
+      "sha256": "1c71853bbf810eb8270b1f0ec63477ef97a534bfd11a1d7140d16de639fbdf00"
+    },
+    {
+      "path": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/01_identical_rekey_prior.sqlinc",
+      "sha256": "1f102a04838e30fb0d0dcb12593d2024a7b67e99d77e68404f19f35a675449f0"
+    },
+    {
+      "path": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/02_complete_upload_context.sqlinc",
+      "sha256": "2e33b433f774ee497102dc95a0c36ad751d7510caa4e1b6cba47bd8c6d286514"
+    },
+    {
+      "path": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/03_complete_projection_rows.sqlinc",
+      "sha256": "0cd140692ed4a5d7b2f539d7f86ff2876ceebb51d1f19e1c221b39926453fc35"
+    },
+    {
+      "path": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/04_kept_read_admission.sqlinc",
+      "sha256": "cdcac4c2c2053194bc3bc68c28d701c5bbb334e82bda3e8e41b79ca59e53a9aa"
+    },
+    {
+      "path": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/05_kept_as_paid_facts.sqlinc",
+      "sha256": "c06e67b60dd71b2cc748a22da8b4089ac44a140f4014e181b0abb8d170ac2afa"
+    },
+    {
+      "path": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/06_kept_as_paid_context.sqlinc",
+      "sha256": "aee3cfccffcff7e81a98ac1e8dac212d0803310e91a810d8536c845b1cd84592"
+    },
+    {
+      "path": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/07_keep_as_paid_decide.sqlinc",
+      "sha256": "2532ae8f82630d66230712c966a7913c1011c3f8f4ae7f5e74e5f2aa9e4f1922"
+    },
+    {
+      "path": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/08_credited_targets_admit.sqlinc",
+      "sha256": "a4fae82f9b01a139923834d853310c175daebeef559874ed50c3c0436399f10c"
+    },
+    {
+      "path": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/09_complete_invoice_apply_edits.sqlinc",
+      "sha256": "b68439cb5928e008d4b315303a83e0b97ef867ea779b0ba1dabbc553974ed16b"
+    },
+    {
+      "path": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/10_complete_adjustments_apply.sqlinc",
+      "sha256": "a88d2dffcbcbe2aac4af67edd1a93c4de255f2525c859cd94796c602fe7a5e7b"
+    },
+    {
+      "path": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/11_complete_adjustment_line_valid.sqlinc",
+      "sha256": "071248b182a7aa2f0619378ff80115bbd6c75736ec6bfd8f278702370ff7c5bc"
+    },
+    {
+      "path": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/12_keep_ack_native_guard.sqlinc",
+      "sha256": "e6744c534740ddc5c15e860ba4b1eee501386ece84c2468ea10c0ac951f129c2"
+    },
+    {
+      "path": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/98_complete_current_classification.sqlinc",
+      "sha256": "fe1cbb0de3332a021d1459a2e46f5c201e58d4ded7ade5f9f58fae876b8547e4"
+    },
+    {
+      "path": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/99_exact_function_acl.sqlinc",
+      "sha256": "7c8c73f8eb949db888afdc566968c442433ab92ced5c45b571f9e1fc9081cb32"
+    },
+    {
+      "path": "supabase/repeatable/17102026_0135_correction_entry_reader/01_complete_entry_reader.sqlinc",
+      "sha256": "0f7c01eb27ba3842b90524e550a0c2bbbe3a5406664c8e4c4bf1f27d831386f5"
+    },
+    {
+      "path": "supabase/migrations/17102026_0135_correction_entry_admission.sql",
+      "sha256": "9af6c9b8993e918a0c28bdc29dae0d6b4cc9477cc13075329180395d53fbd8e7"
+    },
+    {
+      "path": "supabase/repeatable/17102026_0135_correction_entry_reader/98_complete_current_classification.sqlinc",
+      "sha256": "587a7bd81efa24d721b1632a4c1a5af902fdeb56a3d39c0736615df51024fd78"
+    },
+    {
+      "path": "supabase/release/current-contract.json",
+      "sha256": "da0e0870442c151534c04d108757a0d76a812879aafae71f01486c7077ce674a"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/CURRENT_OWNER_EDITS.json",
+      "sha256": "b0a13807e15c822d73c3591eda8ea89628b18a6bfb12f4d30f1ec14f51804a40"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/current/02_complete_upload_context.sqlinc",
+      "sha256": "ad1af6d303a0dff773f53d5aee17300e8ae45be66617a03fe90c1f134270078a"
+    },
+    {
+      "path": "supabase/repeatable/13102026_2110_healthroster_report_native_fin_worker/08_complete_upload_context.sqlinc",
+      "sha256": "712ed4bc6b9e8dd367d45da298ef2c83312564ff197f63f04292b875f4d38220"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/current/03_complete_projection_rows.sqlinc",
+      "sha256": "a03883d889e614ea7c72cdd2cdd13cf6a2b39cf8f8259e49dfd8160eeb88b689"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1561_weekly_source_magnit_contract_price_v1.sql",
+      "sha256": "517ec09509d02ffcbfbf3451162ce011fc5e2bacc411590d9db7166902a59b4d"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/current/09_complete_invoice_apply_edits.sqlinc",
+      "sha256": "04135f211f90e991a6c2976e3ad77ced587c3dae374285a2ecb277464e86ae5b"
+    },
+    {
+      "path": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority/01_complete_invoice_authorities.sqlinc",
+      "sha256": "e03acb39db8cc2441cde46125ad9b38e8594b3790c772b247cea76a052cb2044"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/current/10_complete_adjustments_apply.sqlinc",
+      "sha256": "2f60a2eea19cf4f5fb1b22c22f892b21508ac124a7e75465d4881078c3cb0b86"
+    },
+    {
+      "path": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/00_adjustment_owners.sqlinc",
+      "sha256": "1fbdaafdb9b92fb4b0e53c539613d5ec952a8048708cd4165331f876d676df2e"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/current/11_complete_adjustment_line_valid.sqlinc",
+      "sha256": "50f848ccd573221b5b7e2eacc59fc5449f64da4a3fcbe405e9cac2e9dfca1140"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/CLASSIFIER_EDITS.json",
+      "sha256": "d93da1185f9cfb3183d1a6d9823283edeebc1357e526776ddb24c39652a208f7"
+    },
+    {
+      "path": "supabase/repeatable/14102026_0709_healthroster_current_literal_classification/01_complete_current_literal_classification.sqlinc",
+      "sha256": "694d445832adbc88887b3592f806b296298a6ef95f20c4c24bc5916316c91ad8"
+    },
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/CORRECTION_ENTRY_ROOT_MOUNT_20261017.json",
+      "sha256": "e88c87ed02512d050f7ecac67d9d0fa3a22e874bb8cf572d35a3bfbda98f9641"
+    },
+    {
+      "path": "scripts/healthroster-rowtype-type-review.mjs",
+      "sha256": "fe380ca1c44803f8dad5b04aa0779e025cbdd8ff4c7104356835e5be739496e3"
+    },
+    {
+      "path": "scripts/healthroster-dynamic-source-review.mjs",
+      "sha256": "18937e1bad9001d36a7f81ae6e102cb1664e33c1ef6b8dce9ea5c810df047ec5"
+    },
+    {
+      "path": "scripts/healthroster-aggregate-type-review.mjs",
+      "sha256": "af2a6248ea188b3ed1d4ce5b8dd418e9cf8898b10f3117ee91fb6e726c4dc7e8"
+    }
+  ],
+  "schema": {
+    "path": "supabase/release/current-contract.json",
+    "relations": {
+      "public.weekly_work_events": {
+        "kind": "r",
+        "columns": [
+          {
+            "name": "candidate_id",
+            "type": "uuid",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "client_id",
+            "type": "uuid",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "created_at_utc",
+            "type": "timestamp with time zone",
+            "default": "transaction_timestamp()",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "durable_identity_hash",
+            "type": "bytea",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "first_source_group_id",
+            "type": "uuid",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "id",
+            "type": "uuid",
+            "default": "gen_random_uuid()",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "identity_kind",
+            "type": "text",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "profile_external_key",
+            "type": "text",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "source_format_profile_id",
+            "type": "uuid",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "work_date",
+            "type": "date",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          }
+        ]
+      },
+      "public.weekly_source_upload_rows": {
+        "kind": "r",
+        "columns": [
+          {
+            "name": "actual_net_minutes",
+            "type": "integer",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "bounded_raw_columns_json",
+            "type": "jsonb",
+            "default": "'{}'::jsonb",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "break_minutes",
+            "type": "integer",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "created_at_utc",
+            "type": "timestamp with time zone",
+            "default": "transaction_timestamp()",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "end_at_local",
+            "type": "timestamp without time zone",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "external_source_key",
+            "type": "text",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "finalised_by",
+            "type": "text",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "id",
+            "type": "uuid",
+            "default": "gen_random_uuid()",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "normalised_row_hash",
+            "type": "bytea",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "role_band_source",
+            "type": "text",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "row_finalisation_state",
+            "type": "text",
+            "default": "'NOT_APPLICABLE'::text",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "source_candidate_identity",
+            "type": "text",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "source_client_identity",
+            "type": "text",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "source_commission_pence",
+            "type": "bigint",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "source_expense_parse_state",
+            "type": "text",
+            "default": "'NOT_APPLICABLE'::text",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "source_expense_pence",
+            "type": "bigint",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "source_money_parse_state",
+            "type": "text",
+            "default": "'NOT_APPLICABLE'::text",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "source_qualification_profile_version",
+            "type": "text",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "source_row_ordinal",
+            "type": "integer",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "source_shift_charge_pence",
+            "type": "bigint",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "source_total_cost_pence",
+            "type": "bigint",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "start_at_local",
+            "type": "timestamp without time zone",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "upload_id",
+            "type": "uuid",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "work_date",
+            "type": "date",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          }
+        ]
+      },
+      "public.weekly_source_uploads": {
+        "kind": "r",
+        "columns": [
+          {
+            "name": "accepted_count",
+            "type": "integer",
+            "default": "0",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "blocked_count",
+            "type": "integer",
+            "default": "0",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "blocking_economic_duplicate_count",
+            "type": "integer",
+            "default": "0",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "byte_count",
+            "type": "bigint",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "confirmed_coverage_end_local_date",
+            "type": "date",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "confirmed_coverage_start_local_date",
+            "type": "date",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "content_sha256",
+            "type": "bytea",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "continuation_count",
+            "type": "integer",
+            "default": "0",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "correction_session_id",
+            "type": "uuid",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "coverage_confirmation_version",
+            "type": "text",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "coverage_confirmed_at_utc",
+            "type": "timestamp with time zone",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "coverage_confirmed_by_user_id",
+            "type": "uuid",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "coverage_proof_kind",
+            "type": "text",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "coverage_shrink_acknowledged",
+            "type": "boolean",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "coverage_state",
+            "type": "text",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "coverage_timezone",
+            "type": "text",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "declared_scope_fingerprint",
+            "type": "bytea",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "file_metadata_json",
+            "type": "jsonb",
+            "default": "'{}'::jsonb",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "header_coordinate_map_hash",
+            "type": "bytea",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "header_coordinate_map_json",
+            "type": "jsonb",
+            "default": "'{}'::jsonb",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "header_count",
+            "type": "integer",
+            "default": "0",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "id",
+            "type": "uuid",
+            "default": "gen_random_uuid()",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "malformed_count",
+            "type": "integer",
+            "default": "0",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "money_lexical_authority_version",
+            "type": "text",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "normaliser_version",
+            "type": "text",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "original_filename",
+            "type": "text",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "parser_summary_json",
+            "type": "jsonb",
+            "default": "'{}'::jsonb",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "parser_version",
+            "type": "text",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "physical_row_count",
+            "type": "integer",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "purpose",
+            "type": "text",
+            "default": "'ORDINARY'::text",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "report_scope_id",
+            "type": "uuid",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "row_manifest_hash",
+            "type": "bytea",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "source_cycle_id",
+            "type": "uuid",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "source_format_profile_id",
+            "type": "uuid",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "state",
+            "type": "text",
+            "default": "'STAGING'::text",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "suggested_coverage_end_local_date",
+            "type": "date",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "suggested_coverage_start_local_date",
+            "type": "date",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "trailer_count",
+            "type": "integer",
+            "default": "0",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "uploaded_at_utc",
+            "type": "timestamp with time zone",
+            "default": "transaction_timestamp()",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "uploaded_by_user_id",
+            "type": "uuid",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "workbook_part_and_sheet_fingerprint",
+            "type": "bytea",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          }
+        ]
+      },
+      "public.weekly_source_cycles": {
+        "kind": "r",
+        "columns": [
+          {
+            "name": "created_at_utc",
+            "type": "timestamp with time zone",
+            "default": "transaction_timestamp()",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "current_complete_upload_id",
+            "type": "uuid",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "current_final_revision_id",
+            "type": "uuid",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "current_projection_publication_id",
+            "type": "uuid",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "cutoff_at_utc",
+            "type": "timestamp with time zone",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "finalisation_week_ending",
+            "type": "date",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "finalised_at_utc",
+            "type": "timestamp with time zone",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "finalised_by_user_id",
+            "type": "uuid",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "id",
+            "type": "uuid",
+            "default": "gen_random_uuid()",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "projection_state",
+            "type": "text",
+            "default": "'NONE'::text",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "scope_client_id",
+            "type": "uuid",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "source_group_id",
+            "type": "uuid",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "state",
+            "type": "text",
+            "default": "'OPEN'::text",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "version",
+            "type": "bigint",
+            "default": "0",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          }
+        ]
+      },
+      "public.weekly_source_format_profiles": {
+        "kind": "r",
+        "columns": [
+          {
+            "name": "active",
+            "type": "boolean",
+            "default": "true",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "container_kind",
+            "type": "text",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "created_at_utc",
+            "type": "timestamp with time zone",
+            "default": "transaction_timestamp()",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "final_authority_kind",
+            "type": "text",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "fmc_must_equal_zero",
+            "type": "boolean",
+            "default": "false",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "id",
+            "type": "uuid",
+            "default": "gen_random_uuid()",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "omission_meaning",
+            "type": "text",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "physical_negative_meaning",
+            "type": "text",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "profile_code",
+            "type": "text",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "profile_json",
+            "type": "jsonb",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "profile_sha256",
+            "type": "bytea",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "report_number_required",
+            "type": "boolean",
+            "default": "false",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "row_finalisation_capability",
+            "type": "text",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "scheduled_hours_fallback",
+            "type": "boolean",
+            "default": "false",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "single_client_required",
+            "type": "boolean",
+            "default": "true",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "version",
+            "type": "integer",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "worked_duration_authority",
+            "type": "text",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          }
+        ]
+      },
+      "private.weekly_source_office_row_choices": {
+        "kind": "r",
+        "columns": [
+          {
+            "name": "actor_user_id",
+            "type": "uuid",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "candidate_id",
+            "type": "uuid",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "chosen_at_utc",
+            "type": "timestamp with time zone",
+            "default": "transaction_timestamp()",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "client_id",
+            "type": "uuid",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "contract_id",
+            "type": "uuid",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "id",
+            "type": "bigint",
+            "default": null,
+            "identity": "a",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "match_reason",
+            "type": "text",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "separate_shift",
+            "type": "boolean",
+            "default": "false",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "upload_row_id",
+            "type": "uuid",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "work_event_id",
+            "type": "uuid",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          }
+        ]
+      },
+      "public.weekly_source_groups": {
+        "kind": "r",
+        "columns": [
+          {
+            "name": "active",
+            "type": "boolean",
+            "default": "true",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "agency_id",
+            "type": "uuid",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "code",
+            "type": "text",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "created_at_utc",
+            "type": "timestamp with time zone",
+            "default": "transaction_timestamp()",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "cutoff_local_time",
+            "type": "time without time zone",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "cutoff_weekday",
+            "type": "smallint",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "display_name",
+            "type": "text",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "environment",
+            "type": "text",
+            "default": "'TEST'::text",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "id",
+            "type": "uuid",
+            "default": "gen_random_uuid()",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "nhsp_report_heading_name",
+            "type": "text",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "source_family",
+            "type": "text",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "timezone",
+            "type": "text",
+            "default": "'Europe/London'::text",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "updated_at_utc",
+            "type": "timestamp with time zone",
+            "default": "transaction_timestamp()",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "updated_by_user_id",
+            "type": "uuid",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "version",
+            "type": "bigint",
+            "default": "1",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          }
+        ]
+      },
+      "public.weekly_source_report_scopes": {
+        "kind": "r",
+        "columns": [
+          {
+            "name": "agency_id",
+            "type": "uuid",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "client_id",
+            "type": "uuid",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "created_at_utc",
+            "type": "timestamp with time zone",
+            "default": "transaction_timestamp()",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "current_complete_upload_id",
+            "type": "uuid",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "current_final_revision_id",
+            "type": "uuid",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "current_projection_publication_id",
+            "type": "uuid",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "cutoff_at_utc",
+            "type": "timestamp with time zone",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "environment",
+            "type": "text",
+            "default": "'TEST'::text",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "id",
+            "type": "uuid",
+            "default": "gen_random_uuid()",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "projection_state",
+            "type": "text",
+            "default": "'NONE'::text",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "source_cycle_id",
+            "type": "uuid",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "source_group_id",
+            "type": "uuid",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "state",
+            "type": "text",
+            "default": "'OPEN'::text",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "updated_at_utc",
+            "type": "timestamp with time zone",
+            "default": "transaction_timestamp()",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "version",
+            "type": "bigint",
+            "default": "0",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          }
+        ]
+      },
+      "public.weekly_source_projection_publications": {
+        "kind": "r",
+        "columns": [
+          {
+            "name": "authority_scope_kind",
+            "type": "text",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "authority_scope_version",
+            "type": "bigint",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "comparison_manifest_hash",
+            "type": "bytea",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "correction_session_id",
+            "type": "uuid",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "created_at_utc",
+            "type": "timestamp with time zone",
+            "default": "transaction_timestamp()",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "failure_code",
+            "type": "text",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "id",
+            "type": "uuid",
+            "default": "gen_random_uuid()",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "issue_set_hash",
+            "type": "bytea",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "projection_generation",
+            "type": "integer",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "published_at_utc",
+            "type": "timestamp with time zone",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "ready_session_version",
+            "type": "bigint",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "rebuild_idempotency_key",
+            "type": "text",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "rebuild_request_hash",
+            "type": "bytea",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "report_scope_id",
+            "type": "uuid",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "source_cycle_id",
+            "type": "uuid",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "state",
+            "type": "text",
+            "default": "'BUILDING'::text",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "upload_id",
+            "type": "uuid",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          }
+        ]
+      },
+      "public.weekly_final_source_correction_sessions": {
+        "kind": "r",
+        "columns": [
+          {
+            "name": "actor_user_id",
+            "type": "uuid",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "applied_final_revision_id",
+            "type": "uuid",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "apply_idempotency_key",
+            "type": "text",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "apply_request_hash",
+            "type": "bytea",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "authority_scope_kind",
+            "type": "text",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "completed_at_utc",
+            "type": "timestamp with time zone",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "created_at_utc",
+            "type": "timestamp with time zone",
+            "default": "transaction_timestamp()",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "expected_current_final_revision_id",
+            "type": "uuid",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "expected_final_manifest_hash",
+            "type": "bytea",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "guard_fingerprint",
+            "type": "bytea",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "id",
+            "type": "uuid",
+            "default": "gen_random_uuid()",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "idempotency_key",
+            "type": "text",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "prepare_idempotency_key",
+            "type": "text",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "prepare_request_hash",
+            "type": "bytea",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "prepare_result_hash",
+            "type": "bytea",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "prepare_result_json",
+            "type": "jsonb",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "prepared_final_revision_id",
+            "type": "uuid",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "reason",
+            "type": "text",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "replacement_correction_upload_id",
+            "type": "uuid",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "replacement_projection_publication_id",
+            "type": "uuid",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "report_scope_id",
+            "type": "uuid",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "request_hash",
+            "type": "bytea",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "result_hash",
+            "type": "bytea",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "result_json",
+            "type": "jsonb",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "review_idempotency_key",
+            "type": "text",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "review_request_hash",
+            "type": "bytea",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "review_result_hash",
+            "type": "bytea",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "review_result_json",
+            "type": "jsonb",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "source_cycle_id",
+            "type": "uuid",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "state",
+            "type": "text",
+            "default": "'DRAFT'::text",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "updated_at_utc",
+            "type": "timestamp with time zone",
+            "default": "transaction_timestamp()",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "version",
+            "type": "bigint",
+            "default": "1",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          }
+        ]
+      },
+      "public.contracts": {
+        "kind": "r",
+        "columns": [
+          {
+            "name": "additional_rates_json",
+            "type": "jsonb",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "auto_invoice",
+            "type": "boolean",
+            "default": "false",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "autoprocess_hr",
+            "type": "boolean",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "band",
+            "type": "text",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "bucket_labels_json",
+            "type": "jsonb",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "candidate_electronic_auto_authorise_override",
+            "type": "boolean",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "candidate_expense_invoice_email_override",
+            "type": "text",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "candidate_expenses_require_separate_timesheet_override",
+            "type": "boolean",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "candidate_id",
+            "type": "uuid",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "candidate_manager_approval_policy_json",
+            "type": "jsonb",
+            "default": "'{\"mode\": \"INHERIT\"}'::jsonb",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "candidate_paper_submission_enabled_override",
+            "type": "boolean",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "client_id",
+            "type": "uuid",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "created_at",
+            "type": "timestamp with time zone",
+            "default": "now()",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "daily_calc_of_invoices",
+            "type": "boolean",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "default_submission_mode",
+            "type": "submission_mode_enum",
+            "default": "'ELECTRONIC'::submission_mode_enum",
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "display_site",
+            "type": "text",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "end_date",
+            "type": "date",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "group_nightsat_sunbh",
+            "type": "boolean",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "healthroster_import_auto_authorise_override",
+            "type": "boolean",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "hr_attach_to_invoice",
+            "type": "boolean",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "id",
+            "type": "uuid",
+            "default": "gen_random_uuid()",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "is_ad_hoc",
+            "type": "boolean",
+            "default": "false",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "is_nhsp",
+            "type": "boolean",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "manual_invoices_alt_email_address",
+            "type": "text",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "mileage_charge_rate",
+            "type": "numeric(10,2)",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "mileage_pay_rate",
+            "type": "numeric(10,2)",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "nhsp_import_auto_authorise_override",
+            "type": "boolean",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "no_timesheet_required",
+            "type": "boolean",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "overrideclientsettings",
+            "type": "boolean",
+            "default": "false",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "pay_method_snapshot",
+            "type": "text",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "rates_json",
+            "type": "jsonb",
+            "default": "'{}'::jsonb",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "reference_number_required_to_issue_invoice",
+            "type": "boolean",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "require_reference_to_invoice",
+            "type": "boolean",
+            "default": "false",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "require_reference_to_pay",
+            "type": "boolean",
+            "default": "false",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "requires_hr",
+            "type": "boolean",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "role",
+            "type": "text",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "self_bill",
+            "type": "boolean",
+            "default": "false",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "send_manual_invoices_to_different_email",
+            "type": "boolean",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "send_ts_queries_to_different_email",
+            "type": "boolean",
+            "default": "false",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "start_date",
+            "type": "date",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "std_hours_json",
+            "type": "jsonb",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "std_schedule_json",
+            "type": "jsonb",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "timesheet_break_entry_mode",
+            "type": "timesheet_break_entry_mode_enum",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "ts_attach_to_invoice",
+            "type": "boolean",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "ts_queries_alt_email_address",
+            "type": "text",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "updated_at",
+            "type": "timestamp with time zone",
+            "default": "now()",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "ward_hint",
+            "type": "text",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "week_ending_weekday_snapshot",
+            "type": "smallint",
+            "default": "0",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "weekly_timesheet_source",
+            "type": "weekly_timesheet_source_enum",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          }
+        ]
+      },
+      "public.weekly_source_row_resolutions": {
+        "kind": "r",
+        "columns": [
+          {
+            "name": "blocker_code",
+            "type": "text",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "candidate_id",
+            "type": "uuid",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "client_id",
+            "type": "uuid",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "contract_and_rate_fingerprint",
+            "type": "bytea",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "contract_id",
+            "type": "uuid",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "contract_selection_method",
+            "type": "text",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "created_at_utc",
+            "type": "timestamp with time zone",
+            "default": "transaction_timestamp()",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "effective_policy_fingerprint",
+            "type": "bytea",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "generation",
+            "type": "integer",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "id",
+            "type": "uuid",
+            "default": "gen_random_uuid()",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "mapping_state",
+            "type": "text",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "paid_minutes",
+            "type": "integer",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "qualification_profile_fingerprint",
+            "type": "bytea",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "qualifying_contract_count",
+            "type": "integer",
+            "default": "0",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "qualifying_contract_set_hash",
+            "type": "bytea",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "rate_classifications_json",
+            "type": "jsonb",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "source_row_fingerprint",
+            "type": "bytea",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "upload_row_id",
+            "type": "uuid",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "work_event_id",
+            "type": "uuid",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "work_event_match_fingerprint",
+            "type": "bytea",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "work_event_match_kind",
+            "type": "text",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          }
+        ]
+      },
+      "public.invoices": {
+        "kind": "r",
+        "columns": [
+          {
+            "name": "active_document_operation_id",
+            "type": "uuid",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "active_issue_operation_id",
+            "type": "uuid",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "client_id",
+            "type": "uuid",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "created_at",
+            "type": "timestamp with time zone",
+            "default": "now()",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "credit_note_created_at_utc",
+            "type": "timestamp with time zone",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "do_not_send",
+            "type": "boolean",
+            "default": "false",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "document_revision",
+            "type": "bigint",
+            "default": "1",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "document_state",
+            "type": "text",
+            "default": "'NOT_REQUESTED'::text",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "due_at_utc",
+            "type": "timestamp with time zone",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "header_snapshot_json",
+            "type": "jsonb",
+            "default": "'{}'::jsonb",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "id",
+            "type": "uuid",
+            "default": "gen_random_uuid()",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "invoice_no",
+            "type": "text",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "invoice_pdf_generated_at_utc",
+            "type": "timestamp with time zone",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "invoice_pdf_r2_key",
+            "type": "text",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "invoice_render_manifest",
+            "type": "jsonb",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "issue_state",
+            "type": "text",
+            "default": "'NOT_STARTED'::text",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "issued_at_utc",
+            "type": "timestamp with time zone",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "issued_document_version_id",
+            "type": "uuid",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "last_document_error_json",
+            "type": "jsonb",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "notes",
+            "type": "text",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "on_hold_reason",
+            "type": "text",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "original_invoice_id",
+            "type": "uuid",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "paid_at_utc",
+            "type": "timestamp with time zone",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "paper_ts_r2_manifest",
+            "type": "jsonb",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "preview_document_version_id",
+            "type": "uuid",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "status",
+            "type": "invoice_status_enum",
+            "default": "'DRAFT'::invoice_status_enum",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "status_date_utc",
+            "type": "timestamp with time zone",
+            "default": "now()",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "subtotal_ex_vat",
+            "type": "numeric(12,2)",
+            "default": "0",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "total_inc_vat",
+            "type": "numeric(12,2)",
+            "default": "0",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "type",
+            "type": "invoice_type_enum",
+            "default": "'INVOICE'::invoice_type_enum",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "updated_at",
+            "type": "timestamp with time zone",
+            "default": "now()",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "vat_amount",
+            "type": "numeric(12,2)",
+            "default": "0",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          }
+        ]
+      },
+      "public.invoice_lines": {
+        "kind": "r",
+        "columns": [
+          {
+            "name": "booking_id",
+            "type": "text",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "charge_bh",
+            "type": "numeric(10,2)",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "charge_day",
+            "type": "numeric(10,2)",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "charge_night",
+            "type": "numeric(10,2)",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "charge_sat",
+            "type": "numeric(10,2)",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "charge_sun",
+            "type": "numeric(10,2)",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "created_at",
+            "type": "timestamp with time zone",
+            "default": "now()",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "description",
+            "type": "text",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "hours_bh",
+            "type": "numeric(7,2)",
+            "default": "0",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "hours_day",
+            "type": "numeric(7,2)",
+            "default": "0",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "hours_night",
+            "type": "numeric(7,2)",
+            "default": "0",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "hours_sat",
+            "type": "numeric(7,2)",
+            "default": "0",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "hours_sun",
+            "type": "numeric(7,2)",
+            "default": "0",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "id",
+            "type": "uuid",
+            "default": "gen_random_uuid()",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "invoice_id",
+            "type": "uuid",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "margin_ex_vat",
+            "type": "numeric(12,2)",
+            "default": "0",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "meta_json",
+            "type": "jsonb",
+            "default": "'{}'::jsonb",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "paper_ts_r2_key",
+            "type": "text",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "pay_bh",
+            "type": "numeric(10,2)",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "pay_day",
+            "type": "numeric(10,2)",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "pay_night",
+            "type": "numeric(10,2)",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "pay_sat",
+            "type": "numeric(10,2)",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "pay_sun",
+            "type": "numeric(10,2)",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "source_key",
+            "type": "text",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "timesheet_id",
+            "type": "uuid",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "total_charge_ex_vat",
+            "type": "numeric(12,2)",
+            "default": "0",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "total_inc_vat",
+            "type": "numeric(12,2)",
+            "default": "0",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "total_pay_ex_vat",
+            "type": "numeric(12,2)",
+            "default": "0",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "vat_amount",
+            "type": "numeric(12,2)",
+            "default": "0",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "vat_rate_pct",
+            "type": "numeric(5,2)",
+            "default": "20.00",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          }
+        ]
+      },
+      "public.weekly_source_group_clients": {
+        "kind": "r",
+        "columns": [
+          {
+            "name": "client_id",
+            "type": "uuid",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "created_at_utc",
+            "type": "timestamp with time zone",
+            "default": "transaction_timestamp()",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "created_by_user_id",
+            "type": "uuid",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "id",
+            "type": "uuid",
+            "default": "gen_random_uuid()",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "source_group_id",
+            "type": "uuid",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "valid_from",
+            "type": "date",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "valid_to",
+            "type": "date",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          }
+        ]
+      },
+      "public.audit_events": {
+        "kind": "r",
+        "columns": [
+          {
+            "name": "action",
+            "type": "text",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "actor_display",
+            "type": "text",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "actor_role_at_time",
+            "type": "text",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "actor_user_id",
+            "type": "uuid",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "after_json",
+            "type": "jsonb",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "before_json",
+            "type": "jsonb",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "correlation_id",
+            "type": "text",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "event_sequence",
+            "type": "bigint",
+            "default": null,
+            "identity": "a",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "event_sequence_is_authoritative",
+            "type": "boolean",
+            "default": "true",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "id",
+            "type": "uuid",
+            "default": "gen_random_uuid()",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "ip",
+            "type": "text",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "object_id_text",
+            "type": "text",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "object_type",
+            "type": "text",
+            "default": null,
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "reason",
+            "type": "text",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          },
+          {
+            "name": "ts_utc",
+            "type": "timestamp with time zone",
+            "default": "now()",
+            "identity": "",
+            "not_null": true,
+            "generated": ""
+          },
+          {
+            "name": "user_agent",
+            "type": "text",
+            "default": null,
+            "identity": "",
+            "not_null": false,
+            "generated": ""
+          }
+        ]
+      },
+      "public.weekly_source_kept_as_paid_decisions": {
+        "kind": "r",
+        "ddlPath": "supabase/migrations/17102026_0113_weekly_source_kept_10_decision_schema.sql",
+        "ddl": "create table public.weekly_source_kept_as_paid_decisions (\n  id uuid primary key default pg_catalog.gen_random_uuid(),\n  work_event_id uuid not null references public.weekly_work_events(id) on delete restrict,\n  decision text not null check (decision='KEEP_AS_PAID'),\n  reason text not null check (reason in ('CREDITED','NOT_INVOICED_DISAPPEARED')),\n  credit_invoice_line_id uuid references public.invoice_lines(id) on delete restrict,\n  facts_fingerprint bytea not null check (pg_catalog.octet_length(facts_fingerprint)=32),\n  actor_user_id uuid not null references public.tms_users(id) on delete restrict,\n  created_at_utc timestamptz not null default pg_catalog.transaction_timestamp(),\n  check ((reason='CREDITED')=(credit_invoice_line_id is not null))\n);",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid"
+          },
+          {
+            "name": "work_event_id",
+            "type": "uuid"
+          },
+          {
+            "name": "decision",
+            "type": "text"
+          },
+          {
+            "name": "reason",
+            "type": "text"
+          },
+          {
+            "name": "credit_invoice_line_id",
+            "type": "uuid"
+          },
+          {
+            "name": "facts_fingerprint",
+            "type": "bytea"
+          },
+          {
+            "name": "actor_user_id",
+            "type": "uuid"
+          },
+          {
+            "name": "created_at_utc",
+            "type": "timestamptz"
+          }
+        ]
+      }
+    }
+  },
+  "ownerReverses": [
+    {
+      "signature": "public.weekly_source_upload_context_v1(jsonb)",
+      "file": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/02_complete_upload_context.sqlinc",
+      "priorFile": "supabase/repeatable/13102026_2110_healthroster_report_native_fin_worker/08_complete_upload_context.sqlinc",
+      "currentStatementSha256": "d1cec8aaf630daf2d550bb75b44eb39db2f948a3148ee04891f17ce4c7341975",
+      "successorStatementSha256": "c45f7a2f483419e65484c733a3b321a732b5673968033a07ab867761bd5c0bc2",
+      "hunks": [
+        {
+          "before": "        order by event.created_at_utc,event.id limit 1;",
+          "after": "        order by event.created_at_utc,event.id limit 1;\n        -- Primary03 section6.1: unmatched finalised external keys use one\n        -- native exact-tuple/absent-old-key proof, not schedule compatibility.\n        if v_prior_work_event_id is null then\n          begin\n            v_prior_work_event_id:=private.weekly_source_identical_rekey_prior_v1(v_source_row.id);\n          exception when sqlstate '55000' then\n            if SQLERRM is distinct from 'WEEKLY_SOURCE_IDENTICAL_REKEY_AMBIGUOUS' then raise; end if;\n            -- Keep discovery usable, but expose a real ambiguity. The native\n            -- projection independently repeats the helper and refuses it.\n            v_prior_candidate_count:=2; v_prior_work_event_id:=null;\n          end;\n          if v_prior_work_event_id is not null then\n            select saved.contract_id into v_prior_contract_id\n            from public.weekly_source_row_resolutions saved\n            where saved.work_event_id=v_prior_work_event_id and saved.mapping_state='RESOLVED'\n            order by saved.created_at_utc desc,saved.id desc limit 1;\n          end if;\n        end if;"
+        }
+      ],
+      "currentFile": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/current/02_complete_upload_context.sqlinc"
+    },
+    {
+      "signature": "public.weekly_source_projection_rows_apply_atomic_v1(uuid,uuid,jsonb)",
+      "file": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/03_complete_projection_rows.sqlinc",
+      "priorFile": "supabase/repeatable/13102026_1561_weekly_source_magnit_contract_price_v1.sql",
+      "currentStatementSha256": "b3fe796d797bd130bc55caaf858b7bf578fe3be25b3194bd5801e766086d27fc",
+      "successorStatementSha256": "fd5857ec2b864ff479989901fa93febf8ac2fe590f5e6e1d96a97ce99134cd14",
+      "hunks": [
+        {
+          "before": "  v_prior_work_event_id uuid;",
+          "after": "  v_prior_work_event_id uuid;\n  v_identical_rekey_prior uuid;"
+        },
+        {
+          "before": "      if v_prior_work_event_id is not null then",
+          "after": "      -- A new external key may reuse an old event only through the native\n      -- identical proof or the independently admitted explicit Office choice.\n      -- The current protected choice above was re-proved, never caller flags.\n      if v_source_authority and v_identity_kind='PROFILE_EXTERNAL_KEY'\n        and not exists(select 1 from public.weekly_work_events key_event\n          where key_event.first_source_group_id=v_group.id\n            and key_event.source_format_profile_id=v_upload.source_format_profile_id\n            and key_event.identity_kind='PROFILE_EXTERNAL_KEY'\n            and key_event.profile_external_key=v_profile_external_key)\n        and not (v_source_authority and v_protected_choice is not null\n          and v_protected_choice=v_prior_work_event_id) then\n        v_identical_rekey_prior:=private.weekly_source_identical_rekey_prior_v1(v_source_row.id);\n        if v_identical_rekey_prior is distinct from v_prior_work_event_id\n          or (v_identical_rekey_prior is not null and (select saved.contract_id from public.weekly_source_row_resolutions saved\n            where saved.work_event_id=v_prior_work_event_id and saved.mapping_state='RESOLVED'\n            order by saved.created_at_utc desc,saved.id desc limit 1) is distinct from v_contract_id) then\n          raise exception 'WEEKLY_SOURCE_REKEY_MATCH_UNPROVEN' using errcode='40001';\n        end if;\n      end if;\n      if v_prior_work_event_id is not null then"
+        }
+      ],
+      "currentFile": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/current/03_complete_projection_rows.sqlinc"
+    },
+    {
+      "signature": "public.invoice_apply_edits(uuid,jsonb,uuid)",
+      "file": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/09_complete_invoice_apply_edits.sqlinc",
+      "priorFile": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority/01_complete_invoice_authorities.sqlinc",
+      "currentStatementSha256": "b42a727a94d8adf5336f4b865ec9c332fe528be66611d08682de8a00ef334b41",
+      "successorStatementSha256": "b71be31282ac47df019d26a84006999f7667452a823b32e4f0c6aff7e357c678",
+      "hunks": [
+        {
+          "before": "  perform public._ctms_assert_invoice_mutable_draft_v1(",
+          "after": "  -- Source F4 target admission takes complete native I-1 roots BEFORE the\n  -- original first invoice mutability/row lock. Ordinary owners are untouched.\n  if exists(select 1 from public.invoices invoice where invoice.id=p_invoice_id\n    and invoice.header_snapshot_json->>'schema_version'='WEEKLY_SOURCE_SELF_BILL_INVOICE_V1'\n    and invoice.header_snapshot_json#>>'{meta,source}'='WEEKLY_FINAL_SOURCE')\n    and exists(select 1 from jsonb_array_elements(case when jsonb_typeof(p_payload->'add_adjustments')='array'\n      then p_payload->'add_adjustments' else '[]'::jsonb end) item where item ? 'credited_work_event_id') then\n    perform private.weekly_source_invoice_credited_targets_admit_v1(p_invoice_id,p_payload,p_actor_user_id);\n  end if;\n  perform public._ctms_assert_invoice_mutable_draft_v1("
+        },
+        {
+          "before": "  -- Source F4 target admission takes complete native I-1 roots BEFORE the\n  -- original first invoice mutability/row lock. Ordinary owners are untouched.\n  if exists(select 1 from public.invoices invoice where invoice.id=p_invoice_id\n    and invoice.header_snapshot_json->>'schema_version'='WEEKLY_SOURCE_SELF_BILL_INVOICE_V1'\n    and invoice.header_snapshot_json#>>'{meta,source}'='WEEKLY_FINAL_SOURCE')\n    and exists(select 1 from jsonb_array_elements(case when jsonb_typeof(p_payload->'add_adjustments')='array'\n      then p_payload->'add_adjustments' else '[]'::jsonb end) item where item ? 'credited_work_event_id') then\n    perform private.weekly_source_invoice_credited_targets_admit_v1(p_invoice_id,p_payload,p_actor_user_id);\n  end if;\n  perform public._ctms_assert_invoice_mutable_draft_v1(",
+          "after": "  -- Source F4 target admission takes complete native I-1 roots BEFORE the\n  -- original first invoice mutability/row lock. Ordinary owners are untouched.\n  if exists(select 1 from public.invoices invoice where invoice.id=p_invoice_id\n    and invoice.header_snapshot_json->>'schema_version'='WEEKLY_SOURCE_SELF_BILL_INVOICE_V1'\n    and invoice.header_snapshot_json#>>'{meta,source}'='WEEKLY_FINAL_SOURCE')\n    and (exists(select 1 from jsonb_array_elements(case when jsonb_typeof(p_payload->'add_adjustments')='array'\n      then p_payload->'add_adjustments' else '[]'::jsonb end) item where item ? 'credited_work_event_id')\n    or exists(select 1 from public.invoice_lines removed\n      cross join lateral jsonb_array_elements_text(case when jsonb_typeof(p_payload->'remove_invoice_line_ids')='array'\n        then p_payload->'remove_invoice_line_ids' else '[]'::jsonb end) requested(value)\n      where removed.invoice_id=p_invoice_id and removed.id=case when pg_input_is_valid(requested.value,'uuid')\n        then requested.value::uuid else null end and removed.meta_json ? 'credited_work_event_id')) then\n    perform private.weekly_source_invoice_credited_targets_admit_v1(p_invoice_id,p_payload,p_actor_user_id);\n  end if;\n  perform public._ctms_assert_invoice_mutable_draft_v1("
+        }
+      ],
+      "currentFile": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/current/09_complete_invoice_apply_edits.sqlinc"
+    },
+    {
+      "signature": "private.weekly_source_invoice_adjustments_apply_v1(uuid,jsonb,uuid)",
+      "file": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/10_complete_adjustments_apply.sqlinc",
+      "priorFile": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/00_adjustment_owners.sqlinc",
+      "currentStatementSha256": "b5f33b2c2ac90ee7c92fef78a579f5336adef620b94725448a27f6b2604bee5d",
+      "successorStatementSha256": "9d7a81494cda240073a9a2afa04df36653aeaffbf768fe815015f29752e9cc9e",
+      "hunks": [
+        {
+          "before": "  v_ex numeric; v_vat numeric; v_token text; v_description text; v_meta jsonb; v_ids uuid[]; v_id uuid; v_result jsonb;",
+          "after": "  v_ex numeric; v_vat numeric; v_token text; v_description text; v_meta jsonb; v_ids uuid[]; v_id uuid; v_result jsonb;\n  v_credit_frame jsonb; v_pg_context text; v_credit_context jsonb;"
+        },
+        {
+          "before": "  perform public._ctms_assert_invoice_mutable_draft_v1(p_invoice_id,'INVOICE_APPLY_EDITS',true);",
+          "after": "  if exists(select 1 from jsonb_array_elements(case when jsonb_typeof(p_payload->'add_adjustments')='array'\n    then p_payload->'add_adjustments' else '[]'::jsonb end) requested where requested ? 'credited_work_event_id') then\n    get diagnostics v_pg_context=PG_CONTEXT;\n    v_credit_frame:=nullif(current_setting('cloudtms.weekly_source_credit_target_frame',true),'')::jsonb;\n    if v_pg_context !~* 'PL/pgSQL function (public[.])?invoice_apply_edits[(]uuid,jsonb,uuid[)]'\n      or jsonb_typeof(v_credit_frame) is distinct from 'object'\n      or v_credit_frame->>'schema_version' is distinct from 'WEEKLY_SOURCE_CREDIT_TARGET_FRAME_V1'\n      or v_credit_frame->>'invoice_id' is distinct from p_invoice_id::text\n      or v_credit_frame->>'actor_user_id' is distinct from p_actor_user_id::text\n      or v_credit_frame->>'native_backend_pid' is distinct from pg_backend_pid()::text\n      or v_credit_frame->>'native_transaction_id' is distinct from txid_current()::text\n      or v_credit_frame->>'payload_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1(\n        'WEEKLY_SOURCE_CREDIT_TARGET_PAYLOAD_V1',p_payload),'hex')\n      or v_credit_frame->>'frame_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1(\n        'WEEKLY_SOURCE_CREDIT_TARGET_FRAME_V1',v_credit_frame-'frame_sha256'),'hex') then\n      raise exception 'WEEKLY_SOURCE_CREDITED_SHIFT_NATIVE_FRAME_REQUIRED' using errcode='55000'; end if;\n  end if;\n  perform public._ctms_assert_invoice_mutable_draft_v1(p_invoice_id,'INVOICE_APPLY_EDITS',true);"
+        },
+        {
+          "before": "  if v_authority->>'allowed' is distinct from 'true' then",
+          "after": "  if v_credit_frame is not null and v_credit_frame->'adjustment_authority' is distinct from v_authority then\n    raise exception 'WEEKLY_SOURCE_CREDITED_SHIFT_FACTS_CHANGED' using errcode='40001'; end if;\n  if v_authority->>'allowed' is distinct from 'true' then"
+        },
+        {
+          "before": "      if item ? 'credited_work_event_id' then\n        raise exception 'WEEKLY_SOURCE_CREDITED_SHIFT_AUTHORITY_UNAVAILABLE' using errcode='55000'; end if;",
+          "after": "      if item ? 'credited_work_event_id' then\n        if jsonb_typeof(item->'credited_work_event_id') is distinct from 'string'\n          or pg_input_is_valid(item->>'credited_work_event_id','uuid') is distinct from true then\n          raise exception 'WEEKLY_SOURCE_CREDITED_SHIFT_INVALID' using errcode='22023'; end if;\n        select saved into v_credit_context from jsonb_array_elements(v_credit_frame->'native_contexts') saved\n          where (saved->>'work_event_id')::uuid=(item->>'credited_work_event_id')::uuid;\n        if v_credit_context is null or v_credit_context->>'facts_fingerprint' is distinct from encode(\n          private.weekly_source_kept_as_paid_facts_v1((item->>'credited_work_event_id')::uuid,'CREDITED'),'hex') then\n          raise exception 'WEEKLY_SOURCE_CREDITED_SHIFT_FACTS_CHANGED' using errcode='40001'; end if;\n      end if;"
+        },
+        {
+          "before": "        'vat_overridden',item ? 'vat_amount','weekly_source_adjustment_authority',v_authority);",
+          "after": "        'vat_overridden',item ? 'vat_amount','weekly_source_adjustment_authority',v_authority)\n        ||case when item ? 'credited_work_event_id' then jsonb_build_object('credited_work_event_id',(item->>'credited_work_event_id')::uuid) else '{}'::jsonb end;"
+        },
+        {
+          "before": "  if exists(select 1 from jsonb_array_elements(case when jsonb_typeof(p_payload->'add_adjustments')='array'\n    then p_payload->'add_adjustments' else '[]'::jsonb end) requested where requested ? 'credited_work_event_id') then",
+          "after": "  if exists(select 1 from jsonb_array_elements(case when jsonb_typeof(p_payload->'add_adjustments')='array'\n    then p_payload->'add_adjustments' else '[]'::jsonb end) requested where requested ? 'credited_work_event_id')\n    or exists(select 1 from public.invoice_lines removed\n      cross join lateral jsonb_array_elements_text(case when jsonb_typeof(p_payload->'remove_invoice_line_ids')='array'\n        then p_payload->'remove_invoice_line_ids' else '[]'::jsonb end) requested(value)\n      where removed.invoice_id=p_invoice_id and removed.id=case when pg_input_is_valid(requested.value,'uuid')\n        then requested.value::uuid else null end and removed.meta_json ? 'credited_work_event_id') then"
+        },
+        {
+          "before": "        select saved into v_credit_context from jsonb_array_elements(v_credit_frame->'native_contexts') saved\n          where (saved->>'work_event_id')::uuid=(item->>'credited_work_event_id')::uuid;\n        if v_credit_context is null or v_credit_context->>'facts_fingerprint' is distinct from encode(\n          private.weekly_source_kept_as_paid_facts_v1((item->>'credited_work_event_id')::uuid,'CREDITED'),'hex') then\n          raise exception 'WEEKLY_SOURCE_CREDITED_SHIFT_FACTS_CHANGED' using errcode='40001'; end if;",
+          "after": "        select saved into strict v_credit_context from jsonb_array_elements(v_credit_frame->'native_contexts') saved\n          where (saved->>'work_event_id')::uuid=(item->>'credited_work_event_id')::uuid;"
+        },
+        {
+          "before": "  if p_payload ? 'remove_invoice_line_ids' then",
+          "after": "  if v_credit_frame is not null then\n    for v_credit_context in select value from jsonb_array_elements(v_credit_frame->'native_contexts') loop\n      if v_credit_context->>'facts_fingerprint' is distinct from encode(private.weekly_source_kept_as_paid_facts_v1(\n        (v_credit_context->>'work_event_id')::uuid,'CREDITED'),'hex') then\n        raise exception 'WEEKLY_SOURCE_CREDITED_SHIFT_FACTS_CHANGED' using errcode='40001'; end if;\n    end loop;\n  end if;\n  if p_payload ? 'remove_invoice_line_ids' then"
+        }
+      ],
+      "currentFile": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/current/10_complete_adjustments_apply.sqlinc"
+    },
+    {
+      "signature": "private.weekly_source_invoice_adjustment_line_valid_v1(uuid,uuid)",
+      "file": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/11_complete_adjustment_line_valid.sqlinc",
+      "priorFile": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/00_adjustment_owners.sqlinc",
+      "currentStatementSha256": "5a4142c7f9e26861401dab3570a08cd88f31564353c29165dc89d2dfc93baa03",
+      "successorStatementSha256": "f96f300828e3c1ea123c2756cb86aa6ad4acabdaaef16f75cd046ca9607834ca",
+      "hunks": [
+        {
+          "before": "    or line.meta_json ? 'credited_work_event_id' then return false; end if;",
+          "after": "    then return false; end if;"
+        },
+        {
+          "before": "    'vat_overridden','weekly_source_adjustment_authority')) then return false; end if;",
+          "after": "    'vat_overridden','weekly_source_adjustment_authority','credited_work_event_id')) then return false; end if;"
+        },
+        {
+          "before": "  return coalesce(v_actual->>'allowed'='true' and v_actual=v_authority",
+          "after": "  -- A retained issued credit re-proves immutable actual target identity, not\n  -- today's Keep availability. Changed facts cannot erase a genuine credit.\n  if v_meta ? 'credited_work_event_id' and (jsonb_typeof(v_meta->'credited_work_event_id') is distinct from 'string'\n    or pg_input_is_valid(v_meta->>'credited_work_event_id','uuid') is distinct from true\n    or not exists(select 1 from public.weekly_work_events event\n      join public.invoices invoice on invoice.id=p_invoice_id and invoice.client_id=event.client_id\n        and invoice.header_snapshot_json#>>'{meta,source_group_id}'=event.first_source_group_id::text\n      where event.id=(v_meta->>'credited_work_event_id')::uuid\n        and exists(select 1 from public.weekly_source_row_resolutions resolution\n          join public.contracts contract on contract.id=resolution.contract_id\n          where resolution.work_event_id=event.id and resolution.mapping_state='RESOLVED'\n            and resolution.candidate_id=event.candidate_id and resolution.client_id=event.client_id\n            and contract.candidate_id=event.candidate_id and contract.client_id=event.client_id))) then return false; end if;\n  return coalesce(v_actual->>'allowed'='true' and v_actual=v_authority"
+        }
+      ],
+      "currentFile": "docs/healthroster-build/proposals/kept-pay-rekey-current-root-successor-20261016/current/11_complete_adjustment_line_valid.sqlinc"
+    }
+  ],
+  "classifier": {
+    "prior": "supabase/repeatable/14102026_0709_healthroster_current_literal_classification/01_complete_current_literal_classification.sqlinc",
+    "kept": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/98_complete_current_classification.sqlinc",
+    "entry": "supabase/repeatable/17102026_0135_correction_entry_reader/98_complete_current_classification.sqlinc",
+    "keptHunks": [
+      {
+        "before": "    ('weekly_source_self_bill_report_line_bindings', 'STATEFUL_SERVER_OWNED'),",
+        "after": "    ('weekly_source_kept_as_paid_decisions', 'IMMUTABLE_APPEND_ONLY'),\n    ('weekly_source_self_bill_report_line_bindings', 'STATEFUL_SERVER_OWNED'),",
+        "purpose": "The one original immutable decision relation joins the current exact table contract."
+      },
+      {
+        "before": "    ('private.weekly_source_invoice_adjustment_authority_v1(uuid,uuid[])'),",
+        "after": "    ('private.weekly_source_identical_rekey_prior_v1(uuid)'),\n    ('private.weekly_source_invoice_credited_targets_admit_v1(uuid,jsonb,uuid)'),\n    ('private.weekly_source_keep_ack_native_guard_v1()'),\n    ('private.weekly_source_kept_as_paid_context_v1(uuid,uuid)'),\n    ('private.weekly_source_kept_as_paid_facts_v1(uuid,text)'),\n    ('private.weekly_source_kept_as_paid_read_admit_v1(uuid,uuid)'),\n    ('private.weekly_source_invoice_adjustment_authority_v1(uuid,uuid[])'),",
+        "purpose": "Only six new private implementation helpers; service/browser execution remains denied."
+      },
+      {
+        "before": "    ('public.weekly_source_upload_context_v1(jsonb)'),",
+        "after": "    ('public.weekly_source_keep_as_paid_decide_atomic_v1(jsonb)'),\n    ('public.weekly_source_upload_context_v1(jsonb)'),",
+        "purpose": "One deliberately granted service RPC; no direct browser or relation access."
+      },
+      {
+        "before": "v_contract_count<>105",
+        "after": "v_contract_count<>106",
+        "purpose": "Exact current 105 relation contract plus one planned immutable relation."
+      },
+      {
+        "before": "v_distinct_contract_count<>105",
+        "after": "v_distinct_contract_count<>106",
+        "purpose": "Exact current 105 relation contract plus one planned immutable relation."
+      },
+      {
+        "before": "exactly 105 unique relations.",
+        "after": "exactly 106 unique relations.",
+        "purpose": "Exact current 105 relation contract plus one planned immutable relation."
+      }
+    ],
+    "entryHunks": [
+      {
+        "before": "    ('private.weekly_source_kept_as_paid_read_admit_v1(uuid,uuid)'),",
+        "after": "    ('private.weekly_source_kept_as_paid_read_admit_v1(uuid,uuid)'),\n    ('private.timesheet_correction_entry_subject_v1(uuid,uuid)'),\n    ('private.timesheet_correction_entry_v1(uuid,uuid)'),"
+      },
+      {
+        "before": "    ('public.weekly_source_keep_as_paid_decide_atomic_v1(jsonb)'),",
+        "after": "    ('public.weekly_source_keep_as_paid_decide_atomic_v1(jsonb)'),\n    ('public.timesheet_correction_entry_v1(jsonb)'),"
+      }
+    ]
+  },
+  "counts": {
+    "files": 19,
+    "rawOccurrences": 94,
+    "uniquePoints": 93
+  }
+}

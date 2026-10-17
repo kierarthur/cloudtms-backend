@@ -1,0 +1,80 @@
+{
+  "version": "EXACT_HEALTH_OWNER_CLASSIFICATION_TRANSFER_V1",
+  "native": "NOT_RUN",
+  "transfers": [
+    {
+      "file": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/02_complete_upload_context.sqlinc",
+      "signature": "public.weekly_source_upload_context_v1(jsonb)",
+      "priorFile": "supabase/repeatable/13102026_2110_healthroster_report_native_fin_worker/08_complete_upload_context.sqlinc",
+      "key": "[\"public.weekly_source_upload_context_v1(jsonb)\",\"UUID_CARDINALITY_UNCLASSIFIED\",\"if v_row_client_id is null and v_profile.profile_code='NHSP_PREFINAL_RELEASED_V1' then\\n      select case when pg_catalog.count(*)=1 then pg_catalog.min(client.id::text)::uuid end\\n        into v_row_client_id\\n      from public.clients client\\n      where private.weekly_source_upload_client_eligible_v1(\\n          v_upload.id,client.id,v_source_row.work_date)\\n        and pg_catalog.lower(pg_catalog.btrim(client.name))=\\n          pg_catalog.lower(pg_catalog.btrim(coalesce(v_source_client,'')));\"]",
+      "count": 1,
+      "fullOwnerReverse": true,
+      "originalDisposition": "EXACT_FROZEN_HEALTH_STATEMENT",
+      "frozenStatementFiles": [
+        "supabase/repeatable/08102026_1635_weekly_source_released_client_eligibility_v1.sql"
+      ]
+    },
+    {
+      "file": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/02_complete_upload_context.sqlinc",
+      "signature": "public.weekly_source_upload_context_v1(jsonb)",
+      "priorFile": "supabase/repeatable/13102026_2110_healthroster_report_native_fin_worker/08_complete_upload_context.sqlinc",
+      "key": "[\"public.weekly_source_upload_context_v1(jsonb)\",\"UUID_CARDINALITY_UNCLASSIFIED\",\"else\\n         \\n         \\n         \\n         \\n         \\n         \\n         \\n         \\n        select pg_catalog.count(*)::integer,\\n               pg_catalog.min(event.id::text)::uuid\\n          into v_prior_candidate_count,v_prior_work_event_id\\n        from public.weekly_work_events event\\n        where event.first_source_group_id=v_group.id\\n          and event.source_format_profile_id=v_profile.id\\n          and event.identity_kind='SCHEDULE_TUPLE'\\n          and event.candidate_id=v_candidate_id and event.client_id=v_row_client_id\\n          and event.work_date=v_source_row.work_date\\n          and private.weekly_source_work_event_schedule_compatible_v1(\\n                event.id,v_source_row.start_at_local,v_source_row.end_at_local\\n              );\"]",
+      "count": 1,
+      "fullOwnerReverse": true,
+      "originalDisposition": "EXACT_FROZEN_HEALTH_STATEMENT",
+      "frozenStatementFiles": [
+        "supabase/repeatable/08102026_1635_weekly_source_released_client_eligibility_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_upload_context_v1.sql"
+      ]
+    },
+    {
+      "file": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/03_complete_projection_rows.sqlinc",
+      "signature": "public.weekly_source_projection_rows_apply_atomic_v1(uuid,uuid,jsonb)",
+      "priorFile": "supabase/repeatable/13102026_1561_weekly_source_magnit_contract_price_v1.sql",
+      "key": "[\"public.weekly_source_projection_rows_apply_atomic_v1(uuid,uuid,jsonb)\",\"UUID_CARDINALITY_UNCLASSIFIED\",\"select pg_catalog.count(*)::integer,\\n                 pg_catalog.min(work_event.id::text)::uuid\\n            into v_compatible_count,v_compatible_event_id\\n          from public.weekly_work_events work_event\\n          where work_event.first_source_group_id=v_group.id\\n            and work_event.source_format_profile_id=v_upload.source_format_profile_id\\n            and work_event.identity_kind='SCHEDULE_TUPLE'\\n            and work_event.candidate_id=v_candidate_id\\n            and work_event.client_id=v_client_id\\n            and work_event.work_date=v_source_row.work_date\\n            and private.weekly_source_work_event_schedule_compatible_v1(\\n                  work_event.id,v_source_row.start_at_local,v_source_row.end_at_local\\n                );\"]",
+      "count": 1,
+      "fullOwnerReverse": true,
+      "originalDisposition": "EXACT_FROZEN_HEALTH_STATEMENT",
+      "frozenStatementFiles": [
+        "supabase/repeatable/07102026_2215_weekly_source_same_file_recheck_recovery_v1.sql",
+        "supabase/repeatable/15092026_1534_weekly_source_projection_build_v1.sql"
+      ]
+    },
+    {
+      "file": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/09_complete_invoice_apply_edits.sqlinc",
+      "signature": "public.invoice_apply_edits(uuid,jsonb,uuid)",
+      "priorFile": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority/01_complete_invoice_authorities.sqlinc",
+      "key": "[\"public.invoice_apply_edits(uuid,jsonb,uuid)\",\"AGGREGATE_TYPE_UNCLASSIFIED\",\"for v_refupd in select value from jsonb_array_elements(v_reference_updates) value loop\\n    if v_refupd is not null and jsonb_typeof(v_refupd)='object' then\\n      select min(field_name) into v_source_unsupported_field\\n      from jsonb_object_keys(v_refupd) field_name\\n      where not (field_name=any(v_allowed_reference_fields));\"]",
+      "count": 1,
+      "fullOwnerReverse": true,
+      "originalDisposition": "EXACT_FROZEN_HEALTH_STATEMENT",
+      "frozenStatementFiles": [
+        "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_invoice_apply_edits.sql"
+      ]
+    },
+    {
+      "file": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/09_complete_invoice_apply_edits.sqlinc",
+      "signature": "public.invoice_apply_edits(uuid,jsonb,uuid)",
+      "priorFile": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority/01_complete_invoice_authorities.sqlinc",
+      "key": "[\"public.invoice_apply_edits(uuid,jsonb,uuid)\",\"AGGREGATE_TYPE_UNCLASSIFIED\",\"for v_location_update in select value from jsonb_array_elements(v_location_updates) value loop\\n    if v_location_update is not null and jsonb_typeof(v_location_update)='object' then\\n      select min(field_name) into v_source_unsupported_field\\n      from jsonb_object_keys(v_location_update) field_name\\n      where not (field_name=any(v_allowed_location_fields));\"]",
+      "count": 1,
+      "fullOwnerReverse": true,
+      "originalDisposition": "EXACT_FROZEN_HEALTH_STATEMENT",
+      "frozenStatementFiles": [
+        "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_invoice_apply_edits.sql"
+      ]
+    },
+    {
+      "file": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/09_complete_invoice_apply_edits.sqlinc",
+      "signature": "public.invoice_apply_edits(uuid,jsonb,uuid)",
+      "priorFile": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority/01_complete_invoice_authorities.sqlinc",
+      "key": "[\"public.invoice_apply_edits(uuid,jsonb,uuid)\",\"AGGREGATE_TYPE_UNCLASSIFIED\",\"select min(field_name) into v_source_unsupported_field\\n            from jsonb_object_keys(v_source_payload_segment) field_name\\n            where not (field_name=any(v_allowed_reference_segment_fields));\"]",
+      "count": 1,
+      "fullOwnerReverse": true,
+      "originalDisposition": "EXACT_FROZEN_HEALTH_STATEMENT",
+      "frozenStatementFiles": [
+        "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_invoice_apply_edits.sql"
+      ]
+    }
+  ]
+}
