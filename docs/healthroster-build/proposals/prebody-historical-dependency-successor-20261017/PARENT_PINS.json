@@ -1,0 +1,62 @@
+{
+  "parent": "51177b9abcdc9f089e680c9e7e9ef5285f09ff57",
+  "files": [
+    {
+      "file": "scripts/bpay-next-final-definers.mjs",
+      "bytes": 13639,
+      "sha256": "b6a8143f2bae077a4b72857419b4f8fab9f7652181f6ad3bf1fdcfbd4b77bafa"
+    },
+    {
+      "file": "scripts/healthroster-install1-full-rehearsal.mjs",
+      "bytes": 48330,
+      "sha256": "31acd390acf2ef6dbbd062fbb157feea66f9b5d328440414e67b2bfd4a3f78ab"
+    },
+    {
+      "file": "scripts/healthroster-live-test-restoration.mjs",
+      "bytes": 15050,
+      "sha256": "a91c1bf04f868ff372b20fb6beca239a7807fe9cc92c0c2682afffcd79554adc"
+    },
+    {
+      "file": "scripts/healthroster-prebody-dynamic-review.mjs",
+      "bytes": 10139,
+      "sha256": "3504d0e858e1fdefe95edae2c86f14324944a96e1f27dc1a5caf097266898eef"
+    },
+    {
+      "file": "scripts/healthroster-same-separate-type-review.mjs",
+      "bytes": 14107,
+      "sha256": "897df1661b265921f960c107f5189470475866ad8311aec358b15f8841391259"
+    },
+    {
+      "file": "scripts/healthroster-source-read-type-review.mjs",
+      "bytes": 5814,
+      "sha256": "03504c269e29432de19dc82a93c62b221489b42ac6e62c2c95f6e6bedd149d2f"
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/CLASSIFICATION.json",
+      "bytes": 147446,
+      "sha256": "69d2b3aee092e78e36386642a8fbf65df406d5fc9f5d8e6a6d42bccf993895b0"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/CLASSIFICATION.json",
+      "bytes": 902242,
+      "sha256": "f338e3eaf7f3ce2ff027cd2728cc5f16f0724ea4ce7eeea139f5217ee949766d"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/source-current-read-peer-f23-20261017/CLASSIFICATION.json",
+      "bytes": 96582,
+      "sha256": "7aa875bf450b81be3d945182c67398c4134f3cb325ab88ff2aa089ac99f2a399"
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/inputs/PRIOR_REVIEW.json",
+      "bytes": 372396,
+      "sha256": "cae4974a5686868d23acc92a28b455d4cffbce5db15530b08a0640fe6cec19b3"
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/SAME_SEPARATE_PREBODY_DEPENDENCY_FORWARD_20261017.json",
+      "bytes": 3045,
+      "sha256": "6a349f504746da2545af40e7b83144c3e4b8312606761489cb6e396098cde4d9"
+    }
+  ],
+  "sourceOnly": true,
+  "semanticBankBodiesRead": 0
+}
