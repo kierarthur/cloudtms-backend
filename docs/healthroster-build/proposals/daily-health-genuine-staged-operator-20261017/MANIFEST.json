@@ -595,8 +595,8 @@
     },
     {
       "file": "source.mjs",
-      "bytes": 6821,
-      "sha256": "79d1f181cf21d270352382cdc16f20e36569d68857a7bbbb35b2053b76aa79f8"
+      "bytes": 1950,
+      "sha256": "01d4acb9309eb71a315f4cc5fbe315b90bf29f69d62742f0152c6ee28ad937b2"
     },
     {
       "file": "SQL_GRAMMAR_RESULTS.json",
@@ -657,6 +657,11 @@
       "file": "worker.mjs",
       "bytes": 12684,
       "sha256": "ef082cac41ef6f653d044a33b3801d83eb0b1bc1275a6bb9684d06a46b4d9f60"
+    },
+    {
+      "file": "git-image-batch.mjs",
+      "bytes": 9138,
+      "sha256": "4dd8842ca35206870d3a410b43f4358433cb67aee6f50dc586401f4049973e20"
     }
   ],
   "checks": {
@@ -671,5 +676,11 @@
     "nativeApiBrowser": "NOT_RUN",
     "bankPublicSuccess": "NOT_PROVIDED"
   },
-  "coordinator": "Existing root-owned original shared-turn/protected-run/caps. Actual CSE/rehearsal composition must be reviewed fresh; no dispatcher, native holder or copied restoration verdict is supplied."
+  "coordinator": "Existing root-owned original shared-turn/protected-run/caps. Actual CSE/rehearsal composition must be reviewed fresh; no dispatcher, native holder or copied restoration verdict is supplied.",
+  "successor": {
+    "version": "DAILY_GENUINE_BATCH_IMAGE_FORWARD_V1",
+    "parentCommit": "163646cb752fc64d4221ac70b685ecd952afe7b0",
+    "parentManifestSha256": "0a908ee36e34c41457b797a7609676c46373c89d924f66846100c87a2dc47f0d",
+    "unchangedBusinessNativeFreshnessJournalActorControls": true
+  }
 }
