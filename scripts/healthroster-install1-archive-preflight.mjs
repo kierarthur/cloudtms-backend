@@ -14,7 +14,7 @@ const sha=git(['rev-parse','HEAD']);
 if(!/^[a-f0-9]{40}$/.test(sha)||git(['status','--porcelain']))throw Error('ARCHIVE_PREFLIGHT_CLEAN_COMMIT_REQUIRED');
 if(git(['ls-remote','origin','refs/heads/codex/healthroster-install1-14102026']).split(/\s/)[0]!==sha)throw Error('ARCHIVE_PREFLIGHT_PUSHED_COMMIT_REQUIRED');
 if(git(['merge-base',base,sha])!==base||git(['rev-list','--merges',base+'..'+sha]))throw Error('ARCHIVE_PREFLIGHT_LINEAR_ANCESTRY_REQUIRED');
-const temporaryRoot='C:/tmp';
+const temporaryRoot='D:/Development/Legacy-Work/C-tmp';
 fs.mkdirSync(temporaryRoot,{recursive:true});
 const folder=fs.mkdtempSync(path.join(temporaryRoot,'healthroster-install1-preflight-'+sha.slice(0,12)+'-'));
 const tar=path.join(folder,'source.tar'),archive=path.join(folder,'source');

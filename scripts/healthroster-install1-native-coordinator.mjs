@@ -17,7 +17,7 @@ import {createRehearsalStreamObserver} from './healthroster-rehearsal-stream-obs
 import {createRehearsalResourceGuard,createMigetRehearsalResourceReader} from './healthroster-rehearsal-resource-guard.mjs';
 
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
-const workspace='C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub';
+const workspace='D:/Development/GitHub';
 const predecessor='07e66fb2b2742fbe634a41582f2ad3e004eed3b9';
 const contract='7e3c00b70366c2c036cfea419adf32c77df5b65070771591e75168b68f3336d6';
 const psqlPath='C:/Program Files/PostgreSQL/18/bin/psql.exe';
@@ -68,9 +68,9 @@ export async function runNativeInstall1(){
  assertRehearsalSourceBinding(sourceBinding,{review,expectedContractHash:contract});
  const marker='hr_install1_'+crypto.randomBytes(16).toString('hex');
  const stamp=new Date().toISOString().replace(/[-:]/g,'').replace(/\.\d+Z$/,'Z');
- const liveDirectory=fs.mkdtempSync('C:/tmp/healthroster-install1-native-'+stamp+'-');
+ const liveDirectory=fs.mkdtempSync('D:/Development/Legacy-Work/C-tmp/healthroster-install1-native-'+stamp+'-');
  const journal=createReceiptJournal(liveDirectory);
- const turnJournal='C:/tmp/healthroster-install1-turn-journal-20261014';
+ const turnJournal='D:/Development/Legacy-Work/C-tmp/healthroster-install1-turn-journal-20261014';
  fs.mkdirSync(turnJournal,{recursive:true});
  let receiptFile;
  const receipt={status:'PREPARING_NOT_RUN',candidatePin,predecessor,contract,marker,beganAt:new Date().toISOString(),errors:[],publication:null};

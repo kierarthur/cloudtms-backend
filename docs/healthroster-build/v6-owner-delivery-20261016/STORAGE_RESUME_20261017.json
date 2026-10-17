@@ -1,0 +1,61 @@
+{
+  "version": "HEALTH_STORAGE_RESUME_20261017_V1",
+  "status": "STORAGE_RECHECK_PASS_BUILD_RESUMED_NOT_INSTALLED",
+  "sourceCommit": "0509887eab9e75cecfac05315c958c2600826f34",
+  "actualConfiguredCwd": "D:\\Development\\GitHub",
+  "physicalCwd": "D:\\Development\\GitHub",
+  "worktreePhysical": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-install2-14102026",
+  "reviewedRepairs": [
+    {
+      "file": "scripts/healthroster-rehearsal-turn.mjs",
+      "sha256": "2a4078b744545a4b4c15a9842947e222ffae75dcadf9b087f49b3c8a30cd36aa",
+      "scope": "APPROVED_DEVELOPMENT_PATH_LITERAL_ONLY"
+    },
+    {
+      "file": "scripts/healthroster-install1-archive-preflight.mjs",
+      "sha256": "5abc319f4ad2eb255f0117ebd43d211630cd7c4abf074a8fdf7c57d6ad95c55b",
+      "scope": "APPROVED_DEVELOPMENT_PATH_LITERAL_ONLY"
+    },
+    {
+      "file": "scripts/healthroster-install1-native-coordinator.mjs",
+      "sha256": "ac028aa921040ca98b82eeec8f03e9cb06b4d2e23aa345a6295c3cdb5df8a63c",
+      "scope": "APPROVED_DEVELOPMENT_PATH_LITERAL_ONLY"
+    },
+    {
+      "file": "scripts/healthroster-install1-turn-precheck.mjs",
+      "sha256": "6a206b31beb31cb548cc3d1d8ab63aed310060b3017e71ea00461035b5693bea",
+      "scope": "APPROVED_DEVELOPMENT_PATH_LITERAL_ONLY"
+    }
+  ],
+  "checks": {
+    "backedUpBeforeAfterHashes": true,
+    "completePathOnlyReversal": true,
+    "requiredTargetsPhysicallyD": true,
+    "syntaxFiles": 4,
+    "coordinatorTestsPassed": 3,
+    "explicitOwnerEntryRefusal": true,
+    "stagingPreservedBeforeCheckpoint": true,
+    "historicalReferences": 8,
+    "historicalFiles": 6,
+    "historicalScriptsReplayed": false
+  },
+  "implementation": {
+    "install1": "COMPLETE_FEATURES_OFF",
+    "install2": "NOT_INSTALLED_ONE_NORMAL_INSTALL_REMAINING",
+    "lanes": [
+      "KEPT_PAY_TYPED_REACK_CURRENT_ROOT",
+      "NARROW_CORRECTION_ENTRY_SUBJECT",
+      "CONTACT_DISTINCT_PHYSICAL_FRESH_PROOF",
+      "DAILY_NATIVE_COMPOSITION"
+    ],
+    "finalCritics": "NOT_RUN",
+    "nativeReleaseAcceptance": "NOT_RUN"
+  },
+  "safety": {
+    "databaseCallsForStorageRecheck": false,
+    "rehearsalRunForStorageRecheck": false,
+    "signingChanged": false,
+    "originalCDeleted": false,
+    "secretsReadOrPrinted": false
+  }
+}

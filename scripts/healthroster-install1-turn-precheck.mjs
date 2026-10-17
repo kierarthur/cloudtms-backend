@@ -1,7 +1,7 @@
 // One short native ownership precheck, no fingerprint, DDL, fixture or rehearsal.
 import fs from 'node:fs';import path from 'node:path';import {execFileSync} from 'node:child_process';
 import {withSharedRehearsalTurn} from './healthroster-rehearsal-turn.mjs';
-const workspace='C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub';
+const workspace='D:/Development/GitHub';
 const bankRecord=path.join(workspace,'.codex-worktrees/bpay-next-build-backend-20261009/docs/bpay-next/TEST_INSTALLS.md');
 const saved=fs.readFileSync(bankRecord,'utf8');
 if(!saved.includes('First disabled-first install — COMPLETE')||!saved.includes('pg_advisory_unlock returned true')
