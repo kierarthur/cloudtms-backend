@@ -1,0 +1,14 @@
+{
+  "stage": "COMPLETE_HEALTH_SOURCE_WITH_UNPROVIDED_GENUINE_JOINS",
+  "completeHealthPrivateDefinitions": 8,
+  "closedCompleteHelperDefinitions": 5,
+  "heldComposerTemplates": 3,
+  "genuineBankOwnerJoinsUnprovided": 3,
+  "runtimeSqlMayBeEmitted": false,
+  "managedRootAllocation": "HELD_UNTIL_ACTUAL_COMPLETE_JOINED_BODY",
+  "registryIntegration": "HELD_UNTIL_ACTUAL_COMPLETE_JOINED_BODY",
+  "privatePlacementRevisionRootApproval": "REQUIRED_NOT_RECORDED",
+  "nativeHistoricalReceiptPopulationAndPermittedRead": "NOT_PROVED",
+  "fullRuntimeAssembly": "HELD",
+  "native": "NOT_RUN"
+}

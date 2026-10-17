@@ -1,0 +1,40 @@
+{
+  "parser": "v7.20",
+  "postgresqlGrammar": [
+    17,
+    7
+  ],
+  "files": [
+    {
+      "file": "reference/current0910/supabase/repeatable/17102026_0910_nhsp_v6_daily_role_identity/01_complete_context.sqlinc",
+      "statements": 1,
+      "plpgsqlBodies": 1,
+      "grammar": "PASS",
+      "removedPsqlDirectives": [],
+      "nativeBodyCompilation": "NOT_PROVED"
+    },
+    {
+      "file": "reference/current0910/supabase/repeatable/17102026_0910_nhsp_v6_daily_role_identity/99_acl.sqlinc",
+      "statements": 2,
+      "plpgsqlBodies": 0,
+      "grammar": "PASS",
+      "removedPsqlDirectives": [],
+      "nativeBodyCompilation": "NOT_PROVED"
+    },
+    {
+      "file": "reference/current0910/supabase/verification/17102026_0910_daily_role_identity_security.sql",
+      "statements": 3,
+      "plpgsqlBodies": 1,
+      "grammar": "PASS",
+      "removedPsqlDirectives": [
+        "\\set ON_ERROR_STOP on"
+      ],
+      "nativeBodyCompilation": "NOT_PROVED"
+    }
+  ],
+  "composerBodyChanges": 0,
+  "substitutions": [],
+  "templates": "NOT_PARSED_UNPROVIDED_BANK_SLOTS",
+  "native": "NOT_RUN",
+  "dbConnections": 0
+}

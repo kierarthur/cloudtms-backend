@@ -1,0 +1,18 @@
+{
+  "parentCommit": "b776cedf6d2483aff44d6e1bada5e0f7b389112d",
+  "parentPath": "docs/healthroster-build/proposals/v6-daily-health-composer-blocks-20261017/templates/01_review.sql.tmpl",
+  "wholeParent": "reference/report/templates/01_review.sql.tmpl",
+  "beforeSha256": "797a0f324d716b0002883f1272976e1196d06acdf36f6f71d687f551aa95e1a6",
+  "afterSha256": "ea6ee0ffd4b25e7c2843c18b2e6f94fb48a1abf28da6463274ad75c52ed858ef",
+  "hunks": [
+    {
+      "before": "request_hash bytea; prepared jsonb; daily jsonb; physical jsonb; invoice jsonb;",
+      "after": "request_hash bytea; enrollment jsonb; prepared jsonb; daily jsonb; physical jsonb; invoice jsonb;"
+    },
+    {
+      "before": " replay:=private.daily_rate_correction_preview_replay_v1(p_args);\n if replay is not null then return private.daily_rate_correction_public_assert_v1(replay,'PREVIEW');end if;\n -- Lock the actual native context without comparing a stale digest until a\n -- concurrent identical preview has had the chance to finish and replay.\n perform private.daily_rate_correction_health_actor_require_v1(actor,false);\n if current_setting('transaction_isolation') is distinct from 'read committed' then\n  raise exception 'DAILY_RATE_LOCKED_CONTEXT_ISOLATION_REQUIRED' using errcode='55000';end if;\n perform private.daily_rate_correction_context_v1((p_args->>'timesheet_id')::uuid,actor,true);\n replay:=private.daily_rate_correction_preview_replay_v1(p_args);\n if replay is not null then return private.daily_rate_correction_public_assert_v1(replay,'PREVIEW');end if;\n daily:=private.daily_rate_correction_health_basis_v1(p_args,true);\n prepared:=private.daily_rate_correction_health_review_prepare_v1(p_args);\n if prepared->'daily' is distinct from daily then raise exception 'REVIEW_STALE' using errcode='40001';end if;\n",
+      "after": " enrollment:=private.daily_rate_correction_health_review_enroll_v1(p_args);\n if jsonb_typeof(enrollment) is distinct from 'object'\n  or not(enrollment ?& array['version','replayed','preview','prepared'])\n  or enrollment-array['version','replayed','preview','prepared']<>'{}'::jsonb\n  or enrollment->>'version' is distinct from 'DAILY_HEALTH_REVIEW_ENROLL_V1'\n  or jsonb_typeof(enrollment->'replayed') is distinct from 'boolean' then\n  raise exception 'DAILY_HEALTH_REVIEW_ENROLL_INVALID' using errcode='23514';end if;\n if enrollment->'replayed'='true'::jsonb then\n  if enrollment->'prepared' is distinct from 'null'::jsonb then raise exception 'DAILY_HEALTH_REVIEW_ENROLL_INVALID' using errcode='23514';end if;\n  return private.daily_rate_correction_public_assert_v1(enrollment->'preview','PREVIEW');end if;\n if enrollment->'preview' is distinct from 'null'::jsonb or jsonb_typeof(enrollment->'prepared') is distinct from 'object' then\n  raise exception 'DAILY_HEALTH_REVIEW_ENROLL_INVALID' using errcode='23514';end if;\n prepared:=enrollment->'prepared';daily:=prepared->'daily';\n"
+    }
+  ],
+  "fullRawReverse": true
+}

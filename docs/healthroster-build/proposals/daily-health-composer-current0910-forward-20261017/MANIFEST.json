@@ -1,0 +1,370 @@
+{
+  "version": "DAILY_HEALTH_CURRENT0910_COMPLETE_SOURCE_FORWARD_FREEZE_V1",
+  "parentCommit": "bc9f07844759bb3a914d6a48488dd25c2946489c",
+  "parentManifestSha256": "ccd5bf622b2f8f42644004a369c49db7f2c6e3ce8979431ee6c80033e26f2c13",
+  "currentRoot": "bb6252f46597cf15a6450adfb2af27c1e615fb3d",
+  "selectionSha256": "a1cfef7882687083db65d3f99c4ff40915b9651d373cd0dce19d919a9c115ff3",
+  "bindingSha256": "12665d62aafd6b9d472d335bff0e25a1979a5953cf719a3779e8f6ef00f16822",
+  "forwardEditsSha256": "2f707a233fba6aa4f101855f2fa508e6970905c8eda1f32c90a3169e32347e3a",
+  "completeInheritedFiles": 45,
+  "changedSourceMetadata": 6,
+  "healthBodyChanges": 0,
+  "contextSource": "EXACT_COMMITTED0910_OWNER",
+  "old77PinsAndDivergence": "PRESERVED_COMPLETE_BC9F_PARENTS",
+  "sourceTests": 23,
+  "newGrammarInputs": 3,
+  "bankJoins": "THREE_UNPROVIDED",
+  "sharedPlacement": "INVALID_BILLING_COUNTER_MAPPING_REQUIRES_TECHNICAL_SOURCE_CORRECTION",
+  "newOwnerBusinessPermissionRequired": false,
+  "runtimeTargets": [],
+  "runtimeSqlEmitted": false,
+  "native": "NOT_RUN",
+  "databaseConnections": 0,
+  "files": [
+    {
+      "file": "ADDITIVE_REVERSE.sqlinc",
+      "sha256": "84b62bf38324601f871cc3356ee6b0a24bde27a08349c5f1482765fe5f97cc75",
+      "bytes": 675
+    },
+    {
+      "file": "admission/ONE_TIME_ADMISSION.sqlinc",
+      "sha256": "712843c11c753f140413e39796efa930146ae9e7464c3cfbdf0b1f87ceb1d964",
+      "bytes": 797
+    },
+    {
+      "file": "ASSEMBLY_STATE.json",
+      "sha256": "eca50b4edb5b684b8c65666c45b029709ef15a77a3532ee44215395d56939f9c",
+      "bytes": 969
+    },
+    {
+      "file": "capture-current-source.mjs",
+      "sha256": "d4649e3dab6e653e90675a3530db761e3f20232fab0686cad6aa117a2e564631",
+      "bytes": 3989
+    },
+    {
+      "file": "census-source.mjs",
+      "sha256": "bd48c53cc67926e0a16a4935c6f22e7239e070a4366bf95928bfbb8a1a0a8080",
+      "bytes": 2250
+    },
+    {
+      "file": "check-source.mjs",
+      "sha256": "37656ec43debec2278c492eccbd19705e98a8f366c19a53bbe5b15b89fa4c55f",
+      "bytes": 2265
+    },
+    {
+      "file": "CURRENT_SOURCE_BINDING.json",
+      "sha256": "352614111bf2fad55b41d6b23ed786ea3fb9ade285d473542dc1c40a82c785f6",
+      "bytes": 11554
+    },
+    {
+      "file": "CURRENT0910_BINDING.json",
+      "sha256": "12665d62aafd6b9d472d335bff0e25a1979a5953cf719a3779e8f6ef00f16822",
+      "bytes": 85045
+    },
+    {
+      "file": "CURRENT0910_GRAMMAR.json",
+      "sha256": "d096550bf4cf90ff79086d27d67b442247f6297994cf5c664d79a5155f98e95b",
+      "bytes": 1161
+    },
+    {
+      "file": "FORWARD_EDITS.json",
+      "sha256": "2f707a233fba6aa4f101855f2fa508e6970905c8eda1f32c90a3169e32347e3a",
+      "bytes": 108608
+    },
+    {
+      "file": "FORWARD_REVERSE.json",
+      "sha256": "5a6f74dd977570e903427776c53cb18feb29c4ffe3e26117294df7953104f535",
+      "bytes": 2956
+    },
+    {
+      "file": "FORWARD_TEST_RESULTS.json",
+      "sha256": "d2968deb2ddc6d36c5814c81d14605556bbbf3027150e9d24cc98fce011171c3",
+      "bytes": 2911
+    },
+    {
+      "file": "forward.test.mjs",
+      "sha256": "c70f8bb7e442f10e348c923568bc9c3c59a2aea27a941848caa56b1705c3bcac",
+      "bytes": 4851
+    },
+    {
+      "file": "freeze-forward.mjs",
+      "sha256": "c5e10542b5e06ec5829fcf97eb092452e2adfede53691494a4f8adc3ed22b8e8",
+      "bytes": 2615
+    },
+    {
+      "file": "freeze.mjs",
+      "sha256": "2e76767e81ec3b5dd8e53f6fabef7f2083f9a6e280adbd630f105e0fb06cc985",
+      "bytes": 4593
+    },
+    {
+      "file": "GRAMMAR_RESULTS.json",
+      "sha256": "5421a58752205fc7dd14f9bcb9f5a7205f548d2044b6d8d51197935dd0d192f1",
+      "bytes": 1591
+    },
+    {
+      "file": "grammar-current0910.py",
+      "sha256": "3df1c75d791b93d09e4f6f08282e4657d68d96c31517b7a45a3ef4869c365fa3",
+      "bytes": 1592
+    },
+    {
+      "file": "grammar-source.py",
+      "sha256": "360e0c3ba90909698702f84aeaeaf3ee19ba3c8f881c6e12d500cd09502fd809",
+      "bytes": 1270
+    },
+    {
+      "file": "health/00_presentation.sqlinc",
+      "sha256": "a3c7ce4e96fd67395e292752df2274e7464536ce3566b543a23f149de49fafc0",
+      "bytes": 4550
+    },
+    {
+      "file": "health/05_review_enrollment.sqlinc",
+      "sha256": "006dd80653b9156ad1f162b9a2e78bc1e243fa38b5cdc75e123d5bc88119f3e6",
+      "bytes": 2917
+    },
+    {
+      "file": "health/10_revision_apply.sqlinc",
+      "sha256": "58cb6c60005c2e731cd4fe31b26c62aa70a2b4a10bf051ff1ef5e69783a28adf",
+      "bytes": 8104
+    },
+    {
+      "file": "health/99_acl.sqlinc",
+      "sha256": "d0941f0c92c247d86772a0c179f01ad9e2be95e9556556b7618045bdf362d43e",
+      "bytes": 1766
+    },
+    {
+      "file": "MOUNT_REQUIREMENTS.md",
+      "sha256": "a2671713a1fefbe634f368f764472c2c2aab6592bfc5e6f787387cdcd2d62809",
+      "bytes": 3850
+    },
+    {
+      "file": "OWNER_BLOCKS.json",
+      "sha256": "6dcc99a25a5080ca3d35260aa4c589274cd03c5c9164a5535fb90dd4493cf718",
+      "bytes": 4431
+    },
+    {
+      "file": "PLACEMENT_HISTORY_QUALIFICATION.md",
+      "sha256": "8761b3de1afe1076a0eff0d432849b8060e87d014818b6d9e5f7566667d6c31f",
+      "bytes": 4045
+    },
+    {
+      "file": "prepare-forward.mjs",
+      "sha256": "3896eb6929487acb283f4bc753e79c7cc6f6b36706460e3c35c3bae1073e567e",
+      "bytes": 12366
+    },
+    {
+      "file": "prepare.mjs",
+      "sha256": "3b98d6d4346626ff8e899f4b5b898929233a43ba43cf04ec13607a305072cc8a",
+      "bytes": 8567
+    },
+    {
+      "file": "RAW_F23_CENSUS.json",
+      "sha256": "4b95db0cc9e9290ae2930195830aa609c0f3d069f9d333648b15c758c84c2d17",
+      "bytes": 3341
+    },
+    {
+      "file": "README.md",
+      "sha256": "0fa05120518c461928f096e0361cd256bb334545c7ece1ee39a033064c09e7c9",
+      "bytes": 9026
+    },
+    {
+      "file": "reference/bc9f/ASSEMBLY_STATE.json",
+      "sha256": "3ab16bae5cbdf7de9c047874090a82c35934cf32f6e67a961d7c2fc9e3f31bc2",
+      "bytes": 584
+    },
+    {
+      "file": "reference/bc9f/CURRENT_SOURCE_BINDING.json",
+      "sha256": "4d9d2ed7117ddc3b86097846f23643afd841668e95df87ea5bbdca9e5d589ccd",
+      "bytes": 11463
+    },
+    {
+      "file": "reference/bc9f/MANIFEST.json",
+      "sha256": "ccd5bf622b2f8f42644004a369c49db7f2c6e3ce8979431ee6c80033e26f2c13",
+      "bytes": 9613
+    },
+    {
+      "file": "reference/bc9f/PLACEMENT_HISTORY_QUALIFICATION.md",
+      "sha256": "1769460dd99d6a9c14e6c2794b3056d896bc438faa62cab6d75f43a9c39be161",
+      "bytes": 3316
+    },
+    {
+      "file": "reference/bc9f/README.md",
+      "sha256": "610adef09f0e897c10a78c87b73fd53d1cb49609e08dd435dbc0140ec68aa76f",
+      "bytes": 7829
+    },
+    {
+      "file": "reference/bc9f/SOURCE_PROOF.json",
+      "sha256": "2f420e8942a75e37dfce7775aee9755603c1e31307726a1cf0cb2cc6103bb6b8",
+      "bytes": 13590
+    },
+    {
+      "file": "reference/bc9f/SOURCE_SELECTION.json",
+      "sha256": "e7eca4134d32296caab80e63656fb279a0b2f9d79e8d53d4a850ecd6852e91b0",
+      "bytes": 1480
+    },
+    {
+      "file": "reference/current0910/docs/bpay-next/final-definer-closures.json",
+      "sha256": "c10ac5fa3aafa9c2def791badd2b647bea2e980cd88a43af81c9a1cba7e7e00c",
+      "bytes": 1746259
+    },
+    {
+      "file": "reference/current0910/supabase/release/current-release.json",
+      "sha256": "1396346c26872e318231f0815594b2efe206eac4180de7b3c9120f14be24726d",
+      "bytes": 36636
+    },
+    {
+      "file": "reference/current0910/supabase/repeatable/17102026_0910_nhsp_v6_daily_role_identity_v1.sql",
+      "sha256": "869be3d8ff7f6635c9ca81c6805558e1de8d1f1de60c0d21342b0dfbfac39ea0",
+      "bytes": 244
+    },
+    {
+      "file": "reference/current0910/supabase/repeatable/17102026_0910_nhsp_v6_daily_role_identity/01_complete_context.sqlinc",
+      "sha256": "032153eb7425c21c1f7bbe0fe6abd29689fe6ba8fb0d154e8e6476a11d26c7d6",
+      "bytes": 8650
+    },
+    {
+      "file": "reference/current0910/supabase/repeatable/17102026_0910_nhsp_v6_daily_role_identity/99_acl.sqlinc",
+      "sha256": "f0477a93e05e9fa6960d64df4628c17421ce1e80d661067febec3c5fa0e6f3c4",
+      "bytes": 288
+    },
+    {
+      "file": "reference/current0910/supabase/verification/17102026_0910_daily_role_identity_security.sql",
+      "sha256": "888fcbcb73c5222f3756e1428130a67fe7a06f56b544d3a17c92cc46795b9852",
+      "bytes": 2886
+    },
+    {
+      "file": "reference/invoice/invoice_contract_move_billing_read_v1.sqlinc",
+      "sha256": "64eb2b4a35b0fde61ce9e5f76b8786df5f73ee16ddd39a1de6dfc27f2afc5672",
+      "bytes": 3566
+    },
+    {
+      "file": "reference/invoice/invoice_contract_move_inspect_v1.sqlinc",
+      "sha256": "fe9c8afa1a50b91e0464e786bc96133c4fd0148d14fc78ede0572e14b64a8f75",
+      "bytes": 12477
+    },
+    {
+      "file": "reference/invoice/invoice_contract_move_preflight_v1.sqlinc",
+      "sha256": "5b1d159e60c47afddcd75d29429c5c7a4a54d5da1aef546c85fd85d98b409c2f",
+      "bytes": 2071
+    },
+    {
+      "file": "reference/invoice/invoice_contract_move_prepare_v1.sqlinc",
+      "sha256": "4c6ba0028762c4e98302f1bbcfb4316e030825dd1fe1b93955799cc202f6f719",
+      "bytes": 17809
+    },
+    {
+      "file": "reference/invoice/invoice_daily_rate_actual_revision_assert_v1.sqlinc",
+      "sha256": "b18fe2cd908e27cfe8fb52156406b661b3961f1d2bc924781eff01271e60ac82",
+      "bytes": 4163
+    },
+    {
+      "file": "reference/policy/DAILY_RATE_CORRECTION_CONTRACT.md",
+      "sha256": "d55b4c278a77bc576cbacc31812e1b3f2202c578895105f479b3a23e3e7549d1",
+      "bytes": 23611
+    },
+    {
+      "file": "reference/policy/MOVE_STAGE_CONTRACT.md",
+      "sha256": "e8fd1cbff0165343b7460d52a4c73d41d6ee1fc7b4cb6b624f5df3eedf55262f",
+      "bytes": 87319
+    },
+    {
+      "file": "reference/report/templates/01_review.sql.tmpl",
+      "sha256": "797a0f324d716b0002883f1272976e1196d06acdf36f6f71d687f551aa95e1a6",
+      "bytes": 8792
+    },
+    {
+      "file": "reference/root/supabase/migrations/16102026_0159_nhsp_v6_01_physical_source_review_schema.sql",
+      "sha256": "d46481d0cd53880041b126c554d34dccc39854ff3bf31ac98883f85949cc1d82",
+      "bytes": 40625
+    },
+    {
+      "file": "reference/root/supabase/release/migration-lock.json",
+      "sha256": "655bbb55095a64a586fc448e1e654fd843564b55ca584f9f79967cb5c1a8eb14",
+      "bytes": 79294
+    },
+    {
+      "file": "reference/root/supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/01_context.sqlinc",
+      "sha256": "81a4b5a51c6898e728bcfa6c82e7326f7b3e3eaebf23847048473927615d5f3f",
+      "bytes": 15693
+    },
+    {
+      "file": "reference/root/supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/02_admission.sqlinc",
+      "sha256": "8b592b3833650f82159d703b960dab7baaf46d5958e02204a38bce45a407216e",
+      "bytes": 38065
+    },
+    {
+      "file": "reference/root/supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/03_requests.sqlinc",
+      "sha256": "daf9306ef07b5f9a8102ab65be38995e6465e13a433e997265911019eaed1912",
+      "bytes": 4862
+    },
+    {
+      "file": "reference/root/supabase/repeatable/16102026_1342_nhsp_v6_daily_public_services/01_public_services.sqlinc",
+      "sha256": "9d0038a0c0105eb9e44ad43c52364cf1b5ff03d212b44c40bdffc77b411f4b34",
+      "bytes": 18959
+    },
+    {
+      "file": "reference/root/supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/01_complete_helpers.sqlinc",
+      "sha256": "95c35931e723787e4c5258ef704cb1115f0edbd9fd6b34e9ab25c4d0966b355b",
+      "bytes": 15886
+    },
+    {
+      "file": "reference/root77/docs/bpay-next/final-definer-closures.json",
+      "sha256": "d436e0a3512e7c29b85657f257100a5f6bbc44cc44bd4fcffada04a561e3cc39",
+      "bytes": 1745976
+    },
+    {
+      "file": "reference/root77/supabase/release/current-release.json",
+      "sha256": "6f3a4b39d686f440c8488e2d8233b6a00ec4d8e3d67ef080e586ddf28a0156bd",
+      "bytes": 36484
+    },
+    {
+      "file": "SOURCE_PROOF.json",
+      "sha256": "5e34b9d48307492476cacc368bfbebc63433c7bbde277d42e4854f58303b1c90",
+      "bytes": 14073
+    },
+    {
+      "file": "SOURCE_SELECTION.json",
+      "sha256": "a1cfef7882687083db65d3f99c4ff40915b9651d373cd0dce19d919a9c115ff3",
+      "bytes": 1664
+    },
+    {
+      "file": "source.test.mjs",
+      "sha256": "ed6745fd0b357e976206ca2728cc54f76190953e81e4a77c5e9745b40979418d",
+      "bytes": 14320
+    },
+    {
+      "file": "templates/01_review.sql.tmpl",
+      "sha256": "ea6ee0ffd4b25e7c2843c18b2e6f94fb48a1abf28da6463274ad75c52ed858ef",
+      "bytes": 8788
+    },
+    {
+      "file": "templates/02_accept.sql.tmpl",
+      "sha256": "7bae24fa58c854f4e8df0b16e17cef8a04aff52fa88792f316f2daa7f42f21d3",
+      "bytes": 7621
+    },
+    {
+      "file": "templates/03_result.sql.tmpl",
+      "sha256": "325f48bdc55048c42392105d055bc8fe2dcd138f4d4b9ec6a1d1e77c7f42dc1b",
+      "bytes": 3741
+    },
+    {
+      "file": "TEST_RESULTS.json",
+      "sha256": "ecb14e5b04252dc1d30672b12b9b0af9e78cabcbe37526f811721fea9843a8ca",
+      "bytes": 2142
+    },
+    {
+      "file": "verification/mandatory_security.sql",
+      "sha256": "3753fc86b3d12c0a64053410b99078c08bd30db25c8209ce0a79f0bafe80b114",
+      "bytes": 3202
+    },
+    {
+      "file": "verifier-template.sql",
+      "sha256": "c9f7c4ac8a6e8c0d5bf0c20937b7193fc588e99be68bbb466072ccad50cbc7f8",
+      "bytes": 1523
+    },
+    {
+      "file": "verify-forward.mjs",
+      "sha256": "c11804d6a0e5da25db26f07a50978f9d9d939d1fdf654c597d2403ffdcbd66fb",
+      "bytes": 2910
+    }
+  ]
+}

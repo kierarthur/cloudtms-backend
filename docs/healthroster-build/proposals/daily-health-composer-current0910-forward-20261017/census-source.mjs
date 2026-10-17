@@ -1,0 +1,11 @@
+// Calls only the actual source gate's raw census on these Health inputs.
+// No classifier allowance, complete gate, native execution or Banking owner selection.
+import fs from'node:fs';import path from'node:path';import{fileURLToPath,pathToFileURL}from'node:url';import{execFileSync}from'node:child_process';import{createHash}from'node:crypto';import assert from'node:assert/strict';
+const here=path.dirname(fileURLToPath(import.meta.url)),root='D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026',sha=b=>createHash('sha256').update(b).digest('hex');
+assert(!fs.existsSync(here+'/MANIFEST.json'),'Frozen history; use a finite successor for new census evidence');
+const git=(...args)=>execFileSync('git',['-c','gc.auto=0','-c','maintenance.auto=false','-C',root,...args],{maxBuffer:16e6}),commit=git('rev-parse','HEAD').toString().trim(),file='scripts/bpay-next-source-gates.mjs',gate=fs.readFileSync(root+'/'+file);assert(gate.equals(git('show',commit+':'+file)),'Actual gate must be committed byte-equal source');
+const{specialConstructViolations}=await import(pathToFileURL(root+'/'+file).href);
+const files=['health/00_presentation.sqlinc','health/05_review_enrollment.sqlinc','health/10_revision_apply.sqlinc','templates/01_review.sql.tmpl','templates/02_accept.sql.tmpl','templates/03_result.sql.tmpl','health/99_acl.sqlinc','admission/ONE_TIME_ADMISSION.sqlinc','verification/mandatory_security.sql','ADDITIVE_REVERSE.sqlinc'];
+const rows=files.map(f=>{const b=fs.readFileSync(here+'/'+f),held=f.startsWith('templates/');return{file:f,sha256:sha(b),bytes:b.length,heldUnexpandedTemplate:held,rawOnly:true,classified:false,points:specialConstructViolations(b.toString(),f)};});
+const out={stage:'RAW_HEALTH_SOURCE_CENSUS_NOT_F23_ADMISSION',actualGate:{root,commit,file,sha256:sha(gate),savedEqualsCommit:true},inputs:rows,hazardCount:rows.reduce((n,r)=>n+r.points.length,0),joinedBodyTypeProof:'HELD_UNPROVIDED_BANK_SLOTS_AND_FINAL_BODY',allowancesAdded:0,existingClassifiersChanged:0,bankingRuntimeOwnersSelected:0,native:'NOT_RUN'};
+fs.writeFileSync(here+'/RAW_F23_CENSUS.json',JSON.stringify(out,null,2)+'\n');console.log(JSON.stringify({files:rows.length,rawHazards:out.hazardCount,allowancesAdded:0,native:'NOT_RUN'}));
