@@ -1,0 +1,787 @@
+{
+  "version": "DAILY_CONTEXT_SELECTED_DECLARATION_METADATA_V1",
+  "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+  "rootHead": "c6f0e9f124db7d2b9846d97526a1ddf158b11e4a",
+  "migrations": 426,
+  "repeatables": 1096,
+  "functions": [
+    {
+      "signature": "public._ctms_correction_policy_envelope_read_v1(uuid)",
+      "history": [
+        {
+          "signature": "public._ctms_correction_policy_envelope_read_v1(uuid)",
+          "file": "supabase/baseline/22082026_1503_cloudtms_test_routines_00.sql",
+          "releaseRoot": "supabase/baseline/22082026_1503_cloudtms_test_routines_00.sql",
+          "start": 104648,
+          "end": 106826,
+          "statementSha256": "f5d0c5f152cbdff76a3977fa69ff5a976566ab46e2f81e3844a68602fd9d9b54",
+          "bytes": 2178,
+          "fileSha256": "e809ea52ad67dc0abc5607d7605a1871f64481d127eb2976b265acfed4953bbd"
+        },
+        {
+          "signature": "public._ctms_correction_policy_envelope_read_v1(uuid)",
+          "file": "supabase/repeatable/21072026_1235_00_import_correction_policy_helpers.sql",
+          "releaseRoot": "supabase/repeatable/21072026_1235_00_import_correction_policy_helpers.sql",
+          "start": 3850,
+          "end": 6025,
+          "statementSha256": "dda9087bc3281184746fc0d60c8d5fae2b3d659575fa29923862401edc80f7fe",
+          "bytes": 2175,
+          "fileSha256": "8c44d6ce6267996f148084fdb492fd7200b4c0110bfebf952b7e3501c3b874b5"
+        }
+      ],
+      "final": {
+        "signature": "public._ctms_correction_policy_envelope_read_v1(uuid)",
+        "file": "supabase/repeatable/21072026_1235_00_import_correction_policy_helpers.sql",
+        "releaseRoot": "supabase/repeatable/21072026_1235_00_import_correction_policy_helpers.sql",
+        "start": 3850,
+        "end": 6025,
+        "statementSha256": "dda9087bc3281184746fc0d60c8d5fae2b3d659575fa29923862401edc80f7fe",
+        "bytes": 2175,
+        "fileSha256": "8c44d6ce6267996f148084fdb492fd7200b4c0110bfebf952b7e3501c3b874b5"
+      }
+    },
+    {
+      "signature": "public._ctms_correction_policy_leg_read_v1(uuid)",
+      "history": [
+        {
+          "signature": "public._ctms_correction_policy_leg_read_v1(uuid)",
+          "file": "supabase/baseline/22082026_1503_cloudtms_test_routines_00.sql",
+          "releaseRoot": "supabase/baseline/22082026_1503_cloudtms_test_routines_00.sql",
+          "start": 106873,
+          "end": 110606,
+          "statementSha256": "e264acd2158e443a2b51b5dcd166319e1ba1623cb62d5353e62fb36da89ef292",
+          "bytes": 3733,
+          "fileSha256": "e809ea52ad67dc0abc5607d7605a1871f64481d127eb2976b265acfed4953bbd"
+        },
+        {
+          "signature": "public._ctms_correction_policy_leg_read_v1(uuid)",
+          "file": "supabase/repeatable/21072026_1235_00_import_correction_policy_helpers.sql",
+          "releaseRoot": "supabase/repeatable/21072026_1235_00_import_correction_policy_helpers.sql",
+          "start": 6027,
+          "end": 9495,
+          "statementSha256": "68694f6fb4d86539a46b46a053eabdb33fa07a640af685d450f3b279909d721c",
+          "bytes": 3468,
+          "fileSha256": "8c44d6ce6267996f148084fdb492fd7200b4c0110bfebf952b7e3501c3b874b5"
+        }
+      ],
+      "final": {
+        "signature": "public._ctms_correction_policy_leg_read_v1(uuid)",
+        "file": "supabase/repeatable/21072026_1235_00_import_correction_policy_helpers.sql",
+        "releaseRoot": "supabase/repeatable/21072026_1235_00_import_correction_policy_helpers.sql",
+        "start": 6027,
+        "end": 9495,
+        "statementSha256": "68694f6fb4d86539a46b46a053eabdb33fa07a640af685d450f3b279909d721c",
+        "bytes": 3468,
+        "fileSha256": "8c44d6ce6267996f148084fdb492fd7200b4c0110bfebf952b7e3501c3b874b5"
+      }
+    },
+    {
+      "signature": "public._ctms_import_correction_classify_v1(uuid)",
+      "history": [
+        {
+          "signature": "public._ctms_import_correction_classify_v1(uuid)",
+          "file": "supabase/baseline/22082026_1503_cloudtms_test_routines_00.sql",
+          "releaseRoot": "supabase/baseline/22082026_1503_cloudtms_test_routines_00.sql",
+          "start": 123668,
+          "end": 127538,
+          "statementSha256": "c6d76b91d66a62a9e33d11a57dae6a576d5d69edd3e7fa4383c3a8948d0495b9",
+          "bytes": 3870,
+          "fileSha256": "e809ea52ad67dc0abc5607d7605a1871f64481d127eb2976b265acfed4953bbd"
+        },
+        {
+          "signature": "public._ctms_import_correction_classify_v1(uuid)",
+          "file": "supabase/repeatable/21072026_1235_00_import_correction_policy_helpers.sql",
+          "releaseRoot": "supabase/repeatable/21072026_1235_00_import_correction_policy_helpers.sql",
+          "start": 243,
+          "end": 3848,
+          "statementSha256": "42f077a8cee8f6c855ab65ffb22dbc8a9c5b8fe611488b1ed2173722ac8046b2",
+          "bytes": 3605,
+          "fileSha256": "8c44d6ce6267996f148084fdb492fd7200b4c0110bfebf952b7e3501c3b874b5"
+        }
+      ],
+      "final": {
+        "signature": "public._ctms_import_correction_classify_v1(uuid)",
+        "file": "supabase/repeatable/21072026_1235_00_import_correction_policy_helpers.sql",
+        "releaseRoot": "supabase/repeatable/21072026_1235_00_import_correction_policy_helpers.sql",
+        "start": 243,
+        "end": 3848,
+        "statementSha256": "42f077a8cee8f6c855ab65ffb22dbc8a9c5b8fe611488b1ed2173722ac8046b2",
+        "bytes": 3605,
+        "fileSha256": "8c44d6ce6267996f148084fdb492fd7200b4c0110bfebf952b7e3501c3b874b5"
+      }
+    },
+    {
+      "signature": "public._pay_outstanding_components(uuid[],uuid)",
+      "history": [
+        {
+          "signature": "public._pay_outstanding_components(uuid[],uuid)",
+          "file": "supabase/baseline/22082026_1503_cloudtms_test_routines_02.sql",
+          "releaseRoot": "supabase/baseline/22082026_1503_cloudtms_test_routines_02.sql",
+          "start": 106134,
+          "end": 120596,
+          "statementSha256": "9aa9cb425ae888b3748558f4e71ff5c05f36e4d509429bf2a0280d6031a8ad7f",
+          "bytes": 14462,
+          "fileSha256": "a3f2f14b787c72cf837ef0dfff06afeea3647dbe533de2a1e7235d3106b3b862"
+        },
+        {
+          "signature": "public._pay_outstanding_components(uuid[],uuid)",
+          "file": "supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql",
+          "releaseRoot": "supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql",
+          "start": 4186695,
+          "end": 4201157,
+          "statementSha256": "9aa9cb425ae888b3748558f4e71ff5c05f36e4d509429bf2a0280d6031a8ad7f",
+          "bytes": 14462,
+          "fileSha256": "8b3cb3e112ae227a80bf2e661272264c3d6145d0e2ff6ad8d88e8eee2db1553f"
+        },
+        {
+          "signature": "public._pay_outstanding_components(uuid[],uuid)",
+          "file": "supabase/repeatable/26092026_0201_banking_pay_stage2_financial_readers_v1.sql",
+          "releaseRoot": "supabase/repeatable/26092026_0201_banking_pay_stage2_financial_readers_v1.sql",
+          "start": 111359,
+          "end": 125828,
+          "statementSha256": "82d3b581777923e6c0a4e45082cc02fed702b2a57945565739bf9d6f6b89da23",
+          "bytes": 14469,
+          "fileSha256": "fa841f3280c5548edba90ef9ceeb5ba186716d1e31bce91f9e734232d53b7c29"
+        }
+      ],
+      "final": {
+        "signature": "public._pay_outstanding_components(uuid[],uuid)",
+        "file": "supabase/repeatable/26092026_0201_banking_pay_stage2_financial_readers_v1.sql",
+        "releaseRoot": "supabase/repeatable/26092026_0201_banking_pay_stage2_financial_readers_v1.sql",
+        "start": 111359,
+        "end": 125828,
+        "statementSha256": "82d3b581777923e6c0a4e45082cc02fed702b2a57945565739bf9d6f6b89da23",
+        "bytes": 14469,
+        "fileSha256": "fa841f3280c5548edba90ef9ceeb5ba186716d1e31bce91f9e734232d53b7c29"
+      }
+    },
+    {
+      "signature": "public._pay_outstanding_components(uuid[])",
+      "history": [
+        {
+          "signature": "public._pay_outstanding_components(uuid[])",
+          "file": "supabase/baseline/22082026_1503_cloudtms_test_routines_02.sql",
+          "releaseRoot": "supabase/baseline/22082026_1503_cloudtms_test_routines_02.sql",
+          "start": 120637,
+          "end": 121782,
+          "statementSha256": "70227ff371c9b515cc8baa9fce51cd7f1fc59bc63d1431ecaa73da61c472e3c5",
+          "bytes": 1145,
+          "fileSha256": "a3f2f14b787c72cf837ef0dfff06afeea3647dbe533de2a1e7235d3106b3b862"
+        },
+        {
+          "signature": "public._pay_outstanding_components(uuid[])",
+          "file": "supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql",
+          "releaseRoot": "supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql",
+          "start": 4201352,
+          "end": 4202519,
+          "statementSha256": "ddacb15d88e712007f4445252caa0ba9f20b3d10e1838d039c34f0ae8b039668",
+          "bytes": 1167,
+          "fileSha256": "8b3cb3e112ae227a80bf2e661272264c3d6145d0e2ff6ad8d88e8eee2db1553f"
+        }
+      ],
+      "final": {
+        "signature": "public._pay_outstanding_components(uuid[])",
+        "file": "supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql",
+        "releaseRoot": "supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql",
+        "start": 4201352,
+        "end": 4202519,
+        "statementSha256": "ddacb15d88e712007f4445252caa0ba9f20b3d10e1838d039c34f0ae8b039668",
+        "bytes": 1167,
+        "fileSha256": "8b3cb3e112ae227a80bf2e661272264c3d6145d0e2ff6ad8d88e8eee2db1553f"
+      }
+    },
+    {
+      "signature": "private._candidate_normalize_domain_v1(text)",
+      "history": [
+        {
+          "signature": "private._candidate_normalize_domain_v1(text)",
+          "file": "supabase/baseline/22082026_1503_cloudtms_test_routines_14.sql",
+          "releaseRoot": "supabase/baseline/22082026_1503_cloudtms_test_routines_14.sql",
+          "start": 46414,
+          "end": 46678,
+          "statementSha256": "7844e52c3d1040636078d04111ee278be1c56fd4449f6444ce93dbfeb72f2fba",
+          "bytes": 264,
+          "fileSha256": "dc365ebdc858a2ce3303b84391c1ea6ecb6904224069fe737a581483e74c9d00"
+        },
+        {
+          "signature": "private._candidate_normalize_domain_v1(text)",
+          "file": "supabase/repeatable/07082026_2059_candidate_app_private_helpers_v1.sql",
+          "releaseRoot": "supabase/repeatable/07082026_2059_candidate_app_private_helpers_v1.sql",
+          "start": 336,
+          "end": 593,
+          "statementSha256": "e9ac8f0fd4fd2e96d087c5020c35ca697044d1a4870cdc5f1378acedb68a4010",
+          "bytes": 257,
+          "fileSha256": "d929a42a7726a65b2b28c21715e82d1e75ee81497ecc5784bced4938a2c59f3d"
+        }
+      ],
+      "final": {
+        "signature": "private._candidate_normalize_domain_v1(text)",
+        "file": "supabase/repeatable/07082026_2059_candidate_app_private_helpers_v1.sql",
+        "releaseRoot": "supabase/repeatable/07082026_2059_candidate_app_private_helpers_v1.sql",
+        "start": 336,
+        "end": 593,
+        "statementSha256": "e9ac8f0fd4fd2e96d087c5020c35ca697044d1a4870cdc5f1378acedb68a4010",
+        "bytes": 257,
+        "fileSha256": "d929a42a7726a65b2b28c21715e82d1e75ee81497ecc5784bced4938a2c59f3d"
+      }
+    },
+    {
+      "signature": "private._candidate_normalize_email(text)",
+      "history": [
+        {
+          "signature": "private._candidate_normalize_email(text)",
+          "file": "supabase/baseline/22082026_1503_cloudtms_test_routines_14.sql",
+          "releaseRoot": "supabase/baseline/22082026_1503_cloudtms_test_routines_14.sql",
+          "start": 46724,
+          "end": 46956,
+          "statementSha256": "66e878777e9fa030284f5dad923b72c9804e74c7c8c886c4a0ed973b6dc2b2f4",
+          "bytes": 232,
+          "fileSha256": "dc365ebdc858a2ce3303b84391c1ea6ecb6904224069fe737a581483e74c9d00"
+        },
+        {
+          "signature": "private._candidate_normalize_email(text)",
+          "file": "supabase/repeatable/07082026_2059_candidate_app_private_helpers_v1.sql",
+          "releaseRoot": "supabase/repeatable/07082026_2059_candidate_app_private_helpers_v1.sql",
+          "start": 109,
+          "end": 334,
+          "statementSha256": "a0d6fc7b820bede6a22c737c9151d219d49c16c70d66781852ecdb804df52e82",
+          "bytes": 225,
+          "fileSha256": "d929a42a7726a65b2b28c21715e82d1e75ee81497ecc5784bced4938a2c59f3d"
+        }
+      ],
+      "final": {
+        "signature": "private._candidate_normalize_email(text)",
+        "file": "supabase/repeatable/07082026_2059_candidate_app_private_helpers_v1.sql",
+        "releaseRoot": "supabase/repeatable/07082026_2059_candidate_app_private_helpers_v1.sql",
+        "start": 109,
+        "end": 334,
+        "statementSha256": "a0d6fc7b820bede6a22c737c9151d219d49c16c70d66781852ecdb804df52e82",
+        "bytes": 225,
+        "fileSha256": "d929a42a7726a65b2b28c21715e82d1e75ee81497ecc5784bced4938a2c59f3d"
+      }
+    },
+    {
+      "signature": "public.settings_finance_pick(date)",
+      "history": [
+        {
+          "signature": "public.settings_finance_pick(date)",
+          "file": "supabase/baseline/22082026_1503_cloudtms_test_routines_17.sql",
+          "releaseRoot": "supabase/baseline/22082026_1503_cloudtms_test_routines_17.sql",
+          "start": 950062,
+          "end": 951531,
+          "statementSha256": "546af33430b41dd2dc3c47d1919836b2f81e2f526b2bdf8557f6f94eb66f9928",
+          "bytes": 1473,
+          "fileSha256": "64a093996df1633cfe06c99d103316dc12b9f86e20c2d9ab614eed59e7e748d1"
+        },
+        {
+          "signature": "public.settings_finance_pick(date)",
+          "file": "supabase/repeatable/06012026_settings_finwindow_eligibletimesshets_plus_recompute_totals.sqls.sql",
+          "releaseRoot": "supabase/repeatable/06012026_settings_finwindow_eligibletimesshets_plus_recompute_totals.sqls.sql",
+          "start": 673,
+          "end": 2189,
+          "statementSha256": "271b632f9db9f39cfa71230b17c4a8ac9f26a97177303d9f5b8745bc5be9a5ba",
+          "bytes": 1522,
+          "fileSha256": "9d7028abe3c49d6fd7448600efcdff9bca2a36c6d9a8cc79bb781bb52d8aeb39"
+        }
+      ],
+      "final": {
+        "signature": "public.settings_finance_pick(date)",
+        "file": "supabase/repeatable/06012026_settings_finwindow_eligibletimesshets_plus_recompute_totals.sqls.sql",
+        "releaseRoot": "supabase/repeatable/06012026_settings_finwindow_eligibletimesshets_plus_recompute_totals.sqls.sql",
+        "start": 673,
+        "end": 2189,
+        "statementSha256": "271b632f9db9f39cfa71230b17c4a8ac9f26a97177303d9f5b8745bc5be9a5ba",
+        "bytes": 1522,
+        "fileSha256": "9d7028abe3c49d6fd7448600efcdff9bca2a36c6d9a8cc79bb781bb52d8aeb39"
+      }
+    },
+    {
+      "signature": "public.timesheet_pdf_reference_rows(uuid)",
+      "history": [
+        {
+          "signature": "public.timesheet_pdf_reference_rows(uuid)",
+          "file": "supabase/baseline/22082026_1503_cloudtms_test_routines_18.sql",
+          "releaseRoot": "supabase/baseline/22082026_1503_cloudtms_test_routines_18.sql",
+          "start": 375761,
+          "end": 383033,
+          "statementSha256": "346957c362ec6b2e8fe13abb03386398f0db5a529da3d7034095580235d705e1",
+          "bytes": 7272,
+          "fileSha256": "463e227806ed527f1872d72c965b73a667e4d06f3ade18f6c81a7af9544cc43a"
+        },
+        {
+          "signature": "public.timesheet_pdf_reference_rows(uuid)",
+          "file": "supabase/repeatable/28012026_invoice_queuing.sql",
+          "releaseRoot": "supabase/repeatable/28012026_invoice_queuing.sql",
+          "start": 18499,
+          "end": 25775,
+          "statementSha256": "42a8eae9c396da8247cc91f43cfca4de9b088f7d76bb476d08cf95a6285204e5",
+          "bytes": 7276,
+          "fileSha256": "e904669ebd355e7a6e9fcea693862de589a0a40ca65bb900dc19b6bf3886d6fe"
+        }
+      ],
+      "final": {
+        "signature": "public.timesheet_pdf_reference_rows(uuid)",
+        "file": "supabase/repeatable/28012026_invoice_queuing.sql",
+        "releaseRoot": "supabase/repeatable/28012026_invoice_queuing.sql",
+        "start": 18499,
+        "end": 25775,
+        "statementSha256": "42a8eae9c396da8247cc91f43cfca4de9b088f7d76bb476d08cf95a6285204e5",
+        "bytes": 7276,
+        "fileSha256": "e904669ebd355e7a6e9fcea693862de589a0a40ca65bb900dc19b6bf3886d6fe"
+      }
+    },
+    {
+      "signature": "public.timesheet_pdf_reference_sig(uuid)",
+      "history": [
+        {
+          "signature": "public.timesheet_pdf_reference_sig(uuid)",
+          "file": "supabase/baseline/22082026_1503_cloudtms_test_routines_18.sql",
+          "releaseRoot": "supabase/baseline/22082026_1503_cloudtms_test_routines_18.sql",
+          "start": 383072,
+          "end": 383751,
+          "statementSha256": "33f7aa6e0fe5867ccd6529b2e3925f3dcf71dad52f79ef07116c07025c0cd7a8",
+          "bytes": 679,
+          "fileSha256": "463e227806ed527f1872d72c965b73a667e4d06f3ade18f6c81a7af9544cc43a"
+        },
+        {
+          "signature": "public.timesheet_pdf_reference_sig(uuid)",
+          "file": "supabase/repeatable/28012026_invoice_queuing.sql",
+          "releaseRoot": "supabase/repeatable/28012026_invoice_queuing.sql",
+          "start": 25971,
+          "end": 26631,
+          "statementSha256": "c9481d92c82c0a58fb04d842c33100c52c8daee392e86a51d0002634b91b27e2",
+          "bytes": 660,
+          "fileSha256": "e904669ebd355e7a6e9fcea693862de589a0a40ca65bb900dc19b6bf3886d6fe"
+        }
+      ],
+      "final": {
+        "signature": "public.timesheet_pdf_reference_sig(uuid)",
+        "file": "supabase/repeatable/28012026_invoice_queuing.sql",
+        "releaseRoot": "supabase/repeatable/28012026_invoice_queuing.sql",
+        "start": 25971,
+        "end": 26631,
+        "statementSha256": "c9481d92c82c0a58fb04d842c33100c52c8daee392e86a51d0002634b91b27e2",
+        "bytes": 660,
+        "fileSha256": "e904669ebd355e7a6e9fcea693862de589a0a40ca65bb900dc19b6bf3886d6fe"
+      }
+    },
+    {
+      "signature": "public.tsfin_load_context_batch(uuid[])",
+      "history": [
+        {
+          "signature": "public.tsfin_load_context_batch(uuid[])",
+          "file": "supabase/baseline/22082026_1503_cloudtms_test_routines_19.sql",
+          "releaseRoot": "supabase/baseline/22082026_1503_cloudtms_test_routines_19.sql",
+          "start": 170568,
+          "end": 187009,
+          "statementSha256": "1e47582121641fa66b002f2324293f2dcb6c8ebfd72f28dcf1f07cecda7e2781",
+          "bytes": 16457,
+          "fileSha256": "114fe1b3f66d44d45a7328e242f859bb1cc561203fd506e596cc9b45f5e8609d"
+        },
+        {
+          "signature": "public.tsfin_load_context_batch(uuid[])",
+          "file": "supabase/repeatable/21072026_1235_36_tsfin_load_context_batch.sql",
+          "releaseRoot": "supabase/repeatable/21072026_1235_36_tsfin_load_context_batch.sql",
+          "start": 222,
+          "end": 14057,
+          "statementSha256": "3781fa6733119ea219fd0e6478cadf4da5504f359cfd2248c34b33badc4f0e81",
+          "bytes": 13851,
+          "fileSha256": "a42094b5b39c2a1d858c6c995951c7f9a1e82092d4949a38b9a58401f834e1d9"
+        }
+      ],
+      "final": {
+        "signature": "public.tsfin_load_context_batch(uuid[])",
+        "file": "supabase/repeatable/21072026_1235_36_tsfin_load_context_batch.sql",
+        "releaseRoot": "supabase/repeatable/21072026_1235_36_tsfin_load_context_batch.sql",
+        "start": 222,
+        "end": 14057,
+        "statementSha256": "3781fa6733119ea219fd0e6478cadf4da5504f359cfd2248c34b33badc4f0e81",
+        "bytes": 13851,
+        "fileSha256": "a42094b5b39c2a1d858c6c995951c7f9a1e82092d4949a38b9a58401f834e1d9"
+      }
+    },
+    {
+      "signature": "private._contract_settings_effective_core_v1(uuid,uuid,date,text,uuid)",
+      "history": [
+        {
+          "signature": "private._contract_settings_effective_core_v1(uuid,uuid,date,text,uuid)",
+          "file": "supabase/migrations/03092026_1640_contract_settings_authority_snapshot.sql",
+          "releaseRoot": "supabase/migrations/03092026_1640_contract_settings_authority_snapshot.sql",
+          "start": 4681,
+          "end": 5412,
+          "statementSha256": "a913e5afa74b2ad873b4c052aaec69fc415fadc93d2d69cbfc1dea5de64a22d5",
+          "bytes": 731,
+          "fileSha256": "b4c610103e8eeca9f4a080707b8b31ec6d53054ca8f7f20c5b695b214bdb7b30"
+        },
+        {
+          "signature": "private._contract_settings_effective_core_v1(uuid,uuid,date,text,uuid)",
+          "file": "supabase/repeatable/03092026_1641_contract_settings_effective_authority_v1.sql",
+          "releaseRoot": "supabase/repeatable/03092026_1641_contract_settings_effective_authority_v1.sql",
+          "start": 1889,
+          "end": 22403,
+          "statementSha256": "6beeda952c206189a1c1210aaa32e52e0e3ad7a53b872d990aab512142aaf018",
+          "bytes": 20514,
+          "fileSha256": "1b0409fd7196096b2a94ff2312ad639a95c9f7770ffd04fe3c58c308564b2e18"
+        },
+        {
+          "signature": "private._contract_settings_effective_core_v1(uuid,uuid,date,text,uuid)",
+          "file": "supabase/repeatable/03092026_1641_contract_settings_effective_authority_v1.sql",
+          "releaseRoot": "supabase/repeatable/07092026_0611_candidate_invoice_current_authority_closure_v1.sql",
+          "start": 1889,
+          "end": 22403,
+          "statementSha256": "6beeda952c206189a1c1210aaa32e52e0e3ad7a53b872d990aab512142aaf018",
+          "bytes": 20514,
+          "fileSha256": "1b0409fd7196096b2a94ff2312ad639a95c9f7770ffd04fe3c58c308564b2e18"
+        },
+        {
+          "signature": "private._contract_settings_effective_core_v1(uuid,uuid,date,text,uuid)",
+          "file": "supabase/repeatable/03092026_1641_contract_settings_effective_authority_v1.sql",
+          "releaseRoot": "supabase/repeatable/08092026_1615_invoice_correction_stream_parity_v1.sql",
+          "start": 1889,
+          "end": 22403,
+          "statementSha256": "6beeda952c206189a1c1210aaa32e52e0e3ad7a53b872d990aab512142aaf018",
+          "bytes": 20514,
+          "fileSha256": "1b0409fd7196096b2a94ff2312ad639a95c9f7770ffd04fe3c58c308564b2e18"
+        },
+        {
+          "signature": "private._contract_settings_effective_core_v1(uuid,uuid,date,text,uuid)",
+          "file": "supabase/repeatable/06102026_1214_self_bill_candidate_expense_separation_v1.sql",
+          "releaseRoot": "supabase/repeatable/06102026_1214_self_bill_candidate_expense_separation_v1.sql",
+          "start": 336,
+          "end": 21075,
+          "statementSha256": "185c859b497c3457e08cbb6ff95468bde375234a4527fe8753659444af35dde1",
+          "bytes": 20739,
+          "fileSha256": "b57dfa67b74854a67563af4c3ec14cd43250ab9c2528eee54de27a2c1370a18e"
+        }
+      ],
+      "final": {
+        "signature": "private._contract_settings_effective_core_v1(uuid,uuid,date,text,uuid)",
+        "file": "supabase/repeatable/06102026_1214_self_bill_candidate_expense_separation_v1.sql",
+        "releaseRoot": "supabase/repeatable/06102026_1214_self_bill_candidate_expense_separation_v1.sql",
+        "start": 336,
+        "end": 21075,
+        "statementSha256": "185c859b497c3457e08cbb6ff95468bde375234a4527fe8753659444af35dde1",
+        "bytes": 20739,
+        "fileSha256": "b57dfa67b74854a67563af4c3ec14cd43250ab9c2528eee54de27a2c1370a18e"
+      }
+    },
+    {
+      "signature": "private._timesheet_settings_authority_frozen_v1(uuid)",
+      "history": [
+        {
+          "signature": "private._timesheet_settings_authority_frozen_v1(uuid)",
+          "file": "supabase/migrations/03092026_1640_contract_settings_authority_snapshot.sql",
+          "releaseRoot": "supabase/migrations/03092026_1640_contract_settings_authority_snapshot.sql",
+          "start": 7046,
+          "end": 8396,
+          "statementSha256": "6b5cd8a4dabbc67a7f5631d2289b055c8121397cdff05e47b44fba988dca53ed",
+          "bytes": 1350,
+          "fileSha256": "b4c610103e8eeca9f4a080707b8b31ec6d53054ca8f7f20c5b695b214bdb7b30"
+        },
+        {
+          "signature": "private._timesheet_settings_authority_frozen_v1(uuid)",
+          "file": "supabase/repeatable/03092026_1641_contract_settings_effective_authority_v1.sql",
+          "releaseRoot": "supabase/repeatable/03092026_1641_contract_settings_effective_authority_v1.sql",
+          "start": 349,
+          "end": 1674,
+          "statementSha256": "9b3115ec709f8235fe7b3c8179ff18c88810412ff6fe653b50607734cc4128a2",
+          "bytes": 1325,
+          "fileSha256": "1b0409fd7196096b2a94ff2312ad639a95c9f7770ffd04fe3c58c308564b2e18"
+        },
+        {
+          "signature": "private._timesheet_settings_authority_frozen_v1(uuid)",
+          "file": "supabase/repeatable/03092026_1641_contract_settings_effective_authority_v1.sql",
+          "releaseRoot": "supabase/repeatable/07092026_0611_candidate_invoice_current_authority_closure_v1.sql",
+          "start": 349,
+          "end": 1674,
+          "statementSha256": "9b3115ec709f8235fe7b3c8179ff18c88810412ff6fe653b50607734cc4128a2",
+          "bytes": 1325,
+          "fileSha256": "1b0409fd7196096b2a94ff2312ad639a95c9f7770ffd04fe3c58c308564b2e18"
+        },
+        {
+          "signature": "private._timesheet_settings_authority_frozen_v1(uuid)",
+          "file": "supabase/repeatable/03092026_1641_contract_settings_effective_authority_v1.sql",
+          "releaseRoot": "supabase/repeatable/08092026_1615_invoice_correction_stream_parity_v1.sql",
+          "start": 349,
+          "end": 1674,
+          "statementSha256": "9b3115ec709f8235fe7b3c8179ff18c88810412ff6fe653b50607734cc4128a2",
+          "bytes": 1325,
+          "fileSha256": "1b0409fd7196096b2a94ff2312ad639a95c9f7770ffd04fe3c58c308564b2e18"
+        }
+      ],
+      "final": {
+        "signature": "private._timesheet_settings_authority_frozen_v1(uuid)",
+        "file": "supabase/repeatable/03092026_1641_contract_settings_effective_authority_v1.sql",
+        "releaseRoot": "supabase/repeatable/08092026_1615_invoice_correction_stream_parity_v1.sql",
+        "start": 349,
+        "end": 1674,
+        "statementSha256": "9b3115ec709f8235fe7b3c8179ff18c88810412ff6fe653b50607734cc4128a2",
+        "bytes": 1325,
+        "fileSha256": "1b0409fd7196096b2a94ff2312ad639a95c9f7770ffd04fe3c58c308564b2e18"
+      }
+    },
+    {
+      "signature": "private._candidate_manager_authoriser_email_array_v2(jsonb)",
+      "history": [
+        {
+          "signature": "private._candidate_manager_authoriser_email_array_v2(jsonb)",
+          "file": "supabase/repeatable/26082026_0043_candidate_manager_authoriser_policy_v2.sql",
+          "releaseRoot": "supabase/repeatable/26082026_0043_candidate_manager_authoriser_policy_v2.sql",
+          "start": 8,
+          "end": 1097,
+          "statementSha256": "b80ea81da356fb33877aca886beab1844758b373e210bc15f403dd6e8f44f064",
+          "bytes": 1089,
+          "fileSha256": "7a3d21d16d027be087925e531c45733a4eb01725b1e9fb6521c60f58093664af"
+        }
+      ],
+      "final": {
+        "signature": "private._candidate_manager_authoriser_email_array_v2(jsonb)",
+        "file": "supabase/repeatable/26082026_0043_candidate_manager_authoriser_policy_v2.sql",
+        "releaseRoot": "supabase/repeatable/26082026_0043_candidate_manager_authoriser_policy_v2.sql",
+        "start": 8,
+        "end": 1097,
+        "statementSha256": "b80ea81da356fb33877aca886beab1844758b373e210bc15f403dd6e8f44f064",
+        "bytes": 1089,
+        "fileSha256": "7a3d21d16d027be087925e531c45733a4eb01725b1e9fb6521c60f58093664af"
+      }
+    },
+    {
+      "signature": "private._candidate_manager_authoriser_domain_array_v2(jsonb)",
+      "history": [
+        {
+          "signature": "private._candidate_manager_authoriser_domain_array_v2(jsonb)",
+          "file": "supabase/repeatable/26082026_0043_candidate_manager_authoriser_policy_v2.sql",
+          "releaseRoot": "supabase/repeatable/26082026_0043_candidate_manager_authoriser_policy_v2.sql",
+          "start": 1099,
+          "end": 2233,
+          "statementSha256": "08a11187357177365c79cc86a2f5c0151b83d39b9ef762bb3207a8e0ceaad5ff",
+          "bytes": 1134,
+          "fileSha256": "7a3d21d16d027be087925e531c45733a4eb01725b1e9fb6521c60f58093664af"
+        }
+      ],
+      "final": {
+        "signature": "private._candidate_manager_authoriser_domain_array_v2(jsonb)",
+        "file": "supabase/repeatable/26082026_0043_candidate_manager_authoriser_policy_v2.sql",
+        "releaseRoot": "supabase/repeatable/26082026_0043_candidate_manager_authoriser_policy_v2.sql",
+        "start": 1099,
+        "end": 2233,
+        "statementSha256": "08a11187357177365c79cc86a2f5c0151b83d39b9ef762bb3207a8e0ceaad5ff",
+        "bytes": 1134,
+        "fileSha256": "7a3d21d16d027be087925e531c45733a4eb01725b1e9fb6521c60f58093664af"
+      }
+    },
+    {
+      "signature": "private._candidate_manager_authoriser_policy_normalize_v2(jsonb,text)",
+      "history": [
+        {
+          "signature": "private._candidate_manager_authoriser_policy_normalize_v2(jsonb,text)",
+          "file": "supabase/repeatable/26082026_0043_candidate_manager_authoriser_policy_v2.sql",
+          "releaseRoot": "supabase/repeatable/26082026_0043_candidate_manager_authoriser_policy_v2.sql",
+          "start": 2235,
+          "end": 5258,
+          "statementSha256": "deb34fc1fa6e7046075865ca998653407d45728c8596019eae277740458f0a2d",
+          "bytes": 3023,
+          "fileSha256": "7a3d21d16d027be087925e531c45733a4eb01725b1e9fb6521c60f58093664af"
+        }
+      ],
+      "final": {
+        "signature": "private._candidate_manager_authoriser_policy_normalize_v2(jsonb,text)",
+        "file": "supabase/repeatable/26082026_0043_candidate_manager_authoriser_policy_v2.sql",
+        "releaseRoot": "supabase/repeatable/26082026_0043_candidate_manager_authoriser_policy_v2.sql",
+        "start": 2235,
+        "end": 5258,
+        "statementSha256": "deb34fc1fa6e7046075865ca998653407d45728c8596019eae277740458f0a2d",
+        "bytes": 3023,
+        "fileSha256": "7a3d21d16d027be087925e531c45733a4eb01725b1e9fb6521c60f58093664af"
+      }
+    },
+    {
+      "signature": "private._candidate_manager_authoriser_effective_v2(jsonb,jsonb)",
+      "history": [
+        {
+          "signature": "private._candidate_manager_authoriser_effective_v2(jsonb,jsonb)",
+          "file": "supabase/repeatable/26082026_0043_candidate_manager_authoriser_policy_v2.sql",
+          "releaseRoot": "supabase/repeatable/26082026_0043_candidate_manager_authoriser_policy_v2.sql",
+          "start": 5536,
+          "end": 8109,
+          "statementSha256": "169a40464d705ef10fd89bcb3445654cbff9d03a2f58e1d7e804ffc773f81311",
+          "bytes": 2573,
+          "fileSha256": "7a3d21d16d027be087925e531c45733a4eb01725b1e9fb6521c60f58093664af"
+        }
+      ],
+      "final": {
+        "signature": "private._candidate_manager_authoriser_effective_v2(jsonb,jsonb)",
+        "file": "supabase/repeatable/26082026_0043_candidate_manager_authoriser_policy_v2.sql",
+        "releaseRoot": "supabase/repeatable/26082026_0043_candidate_manager_authoriser_policy_v2.sql",
+        "start": 5536,
+        "end": 8109,
+        "statementSha256": "169a40464d705ef10fd89bcb3445654cbff9d03a2f58e1d7e804ffc773f81311",
+        "bytes": 2573,
+        "fileSha256": "7a3d21d16d027be087925e531c45733a4eb01725b1e9fb6521c60f58093664af"
+      }
+    },
+    {
+      "signature": "public.contract_settings_effective_get_v1(uuid,uuid,date,text,uuid)",
+      "history": [
+        {
+          "signature": "public.contract_settings_effective_get_v1(uuid,uuid,date,text,uuid)",
+          "file": "supabase/repeatable/03092026_1641_contract_settings_effective_authority_v1.sql",
+          "releaseRoot": "supabase/repeatable/03092026_1641_contract_settings_effective_authority_v1.sql",
+          "start": 22652,
+          "end": 23118,
+          "statementSha256": "e98cd5cf004b1946e8192ed1d6f689a7fcf06640dcb643f4260c962733f2f8e6",
+          "bytes": 466,
+          "fileSha256": "1b0409fd7196096b2a94ff2312ad639a95c9f7770ffd04fe3c58c308564b2e18"
+        },
+        {
+          "signature": "public.contract_settings_effective_get_v1(uuid,uuid,date,text,uuid)",
+          "file": "supabase/repeatable/03092026_1641_contract_settings_effective_authority_v1.sql",
+          "releaseRoot": "supabase/repeatable/07092026_0611_candidate_invoice_current_authority_closure_v1.sql",
+          "start": 22652,
+          "end": 23118,
+          "statementSha256": "e98cd5cf004b1946e8192ed1d6f689a7fcf06640dcb643f4260c962733f2f8e6",
+          "bytes": 466,
+          "fileSha256": "1b0409fd7196096b2a94ff2312ad639a95c9f7770ffd04fe3c58c308564b2e18"
+        },
+        {
+          "signature": "public.contract_settings_effective_get_v1(uuid,uuid,date,text,uuid)",
+          "file": "supabase/repeatable/03092026_1641_contract_settings_effective_authority_v1.sql",
+          "releaseRoot": "supabase/repeatable/08092026_1615_invoice_correction_stream_parity_v1.sql",
+          "start": 22652,
+          "end": 23118,
+          "statementSha256": "e98cd5cf004b1946e8192ed1d6f689a7fcf06640dcb643f4260c962733f2f8e6",
+          "bytes": 466,
+          "fileSha256": "1b0409fd7196096b2a94ff2312ad639a95c9f7770ffd04fe3c58c308564b2e18"
+        }
+      ],
+      "final": {
+        "signature": "public.contract_settings_effective_get_v1(uuid,uuid,date,text,uuid)",
+        "file": "supabase/repeatable/03092026_1641_contract_settings_effective_authority_v1.sql",
+        "releaseRoot": "supabase/repeatable/08092026_1615_invoice_correction_stream_parity_v1.sql",
+        "start": 22652,
+        "end": 23118,
+        "statementSha256": "e98cd5cf004b1946e8192ed1d6f689a7fcf06640dcb643f4260c962733f2f8e6",
+        "bytes": 466,
+        "fileSha256": "1b0409fd7196096b2a94ff2312ad639a95c9f7770ffd04fe3c58c308564b2e18"
+      }
+    }
+  ],
+  "views": [
+    {
+      "name": "public.v_ts_invoice_precheck",
+      "history": [
+        {
+          "name": "public.v_ts_invoice_precheck",
+          "file": "supabase/baseline/22082026_1504_cloudtms_test_views_and_triggers.sql",
+          "releaseRoot": "supabase/baseline/22082026_1504_cloudtms_test_views_and_triggers.sql",
+          "start": 57478,
+          "end": 75050,
+          "statementSha256": "0bdc54888b03a571bfeed99f26d778b3a0aee929357cbec9e8ece746617942bf",
+          "bytes": 17572,
+          "fileSha256": "7e026b6196bc8bddf9e7aea51e4039c8d8e09e0941c67ace4966de25cbb5faba"
+        },
+        {
+          "name": "public.v_ts_invoice_precheck",
+          "file": "supabase/repeatable/08012026_v_ts_invoice_precheck.sql",
+          "releaseRoot": "supabase/repeatable/08012026_v_ts_invoice_precheck.sql",
+          "start": 2443,
+          "end": 19395,
+          "statementSha256": "000f1f5c4467c6090975596b8eb13f3cf97087855b770006134537c215c590e4",
+          "bytes": 16960,
+          "fileSha256": "c72f34948114acb8a8e7e9f2abeefef08df31d4cad9cb1471df6728856fdb445"
+        }
+      ],
+      "final": {
+        "name": "public.v_ts_invoice_precheck",
+        "file": "supabase/repeatable/08012026_v_ts_invoice_precheck.sql",
+        "releaseRoot": "supabase/repeatable/08012026_v_ts_invoice_precheck.sql",
+        "start": 2443,
+        "end": 19395,
+        "statementSha256": "000f1f5c4467c6090975596b8eb13f3cf97087855b770006134537c215c590e4",
+        "bytes": 16960,
+        "fileSha256": "c72f34948114acb8a8e7e9f2abeefef08df31d4cad9cb1471df6728856fdb445"
+      }
+    },
+    {
+      "name": "public.v_timesheets_summary_base",
+      "history": [
+        {
+          "name": "public.v_timesheets_summary_base",
+          "file": "supabase/baseline/22082026_1504_cloudtms_test_views_and_triggers.sql",
+          "releaseRoot": "supabase/baseline/22082026_1504_cloudtms_test_views_and_triggers.sql",
+          "start": 84586,
+          "end": 152848,
+          "statementSha256": "266b2a6d68741e05ce2eb7abf5ca42c7f65b52d0f277ef6d69ac9bc29380a8d0",
+          "bytes": 68262,
+          "fileSha256": "7e026b6196bc8bddf9e7aea51e4039c8d8e09e0941c67ace4966de25cbb5faba"
+        },
+        {
+          "name": "public.v_timesheets_summary_base",
+          "file": "supabase/repeatable/19122025_add_ready_to_pay_to_timesheets_summary_views.sql",
+          "releaseRoot": "supabase/repeatable/19122025_add_ready_to_pay_to_timesheets_summary_views.sql",
+          "start": 3383,
+          "end": 57909,
+          "statementSha256": "606ed766b6e1fefedf0d83671abce5b1d22f5ebb9ce9e1ee55a81a472eef14ce",
+          "bytes": 54552,
+          "fileSha256": "ca7da5c696cc976ffa04b6ccb2ad0ba6956fc2de7712a7a6a5eea7c4499f2fcc"
+        },
+        {
+          "name": "public.v_timesheets_summary_base",
+          "file": "supabase/repeatable/19122025_add_ready_to_pay_to_timesheets_summary_views.sql",
+          "releaseRoot": "supabase/repeatable/19122025_add_ready_to_pay_to_timesheets_summary_views.sql",
+          "start": 79623,
+          "end": 135836,
+          "statementSha256": "e442edf2bc2eeb48a68b9e8e2eebec623861d849d9255347bd53fca74a5357c2",
+          "bytes": 56239,
+          "fileSha256": "ca7da5c696cc976ffa04b6ccb2ad0ba6956fc2de7712a7a6a5eea7c4499f2fcc"
+        }
+      ],
+      "final": {
+        "name": "public.v_timesheets_summary_base",
+        "file": "supabase/repeatable/19122025_add_ready_to_pay_to_timesheets_summary_views.sql",
+        "releaseRoot": "supabase/repeatable/19122025_add_ready_to_pay_to_timesheets_summary_views.sql",
+        "start": 79623,
+        "end": 135836,
+        "statementSha256": "e442edf2bc2eeb48a68b9e8e2eebec623861d849d9255347bd53fca74a5357c2",
+        "bytes": 56239,
+        "fileSha256": "ca7da5c696cc976ffa04b6ccb2ad0ba6956fc2de7712a7a6a5eea7c4499f2fcc"
+      }
+    },
+    {
+      "name": "public.v_timesheets_summary",
+      "history": [
+        {
+          "name": "public.v_timesheets_summary",
+          "file": "supabase/baseline/22082026_1504_cloudtms_test_views_and_triggers.sql",
+          "releaseRoot": "supabase/baseline/22082026_1504_cloudtms_test_views_and_triggers.sql",
+          "start": 152945,
+          "end": 157926,
+          "statementSha256": "d3984418507b14da5f8779f2d48ff97ab73a2d747064fc193f1795cf02609fb2",
+          "bytes": 4981,
+          "fileSha256": "7e026b6196bc8bddf9e7aea51e4039c8d8e09e0941c67ace4966de25cbb5faba"
+        },
+        {
+          "name": "public.v_timesheets_summary",
+          "file": "supabase/repeatable/19122025_add_ready_to_pay_to_timesheets_summary_views.sql",
+          "releaseRoot": "supabase/repeatable/19122025_add_ready_to_pay_to_timesheets_summary_views.sql",
+          "start": 58083,
+          "end": 63283,
+          "statementSha256": "e8338e05e11a3456ee657769f73309e9232997f924ba6c51e6b5979677ffbd36",
+          "bytes": 5204,
+          "fileSha256": "ca7da5c696cc976ffa04b6ccb2ad0ba6956fc2de7712a7a6a5eea7c4499f2fcc"
+        }
+      ],
+      "final": {
+        "name": "public.v_timesheets_summary",
+        "file": "supabase/repeatable/19122025_add_ready_to_pay_to_timesheets_summary_views.sql",
+        "releaseRoot": "supabase/repeatable/19122025_add_ready_to_pay_to_timesheets_summary_views.sql",
+        "start": 58083,
+        "end": 63283,
+        "statementSha256": "e8338e05e11a3456ee657769f73309e9232997f924ba6c51e6b5979677ffbd36",
+        "bytes": 5204,
+        "fileSha256": "ca7da5c696cc976ffa04b6ccb2ad0ba6956fc2de7712a7a6a5eea7c4499f2fcc"
+      }
+    }
+  ],
+  "bankBodySelection": []
+}

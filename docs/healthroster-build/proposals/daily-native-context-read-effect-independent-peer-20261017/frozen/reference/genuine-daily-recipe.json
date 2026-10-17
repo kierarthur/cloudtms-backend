@@ -1,0 +1,253 @@
+{
+  "version": "DAILY_HEALTH_GENUINE_FIXTURE_DRAFT_V1",
+  "status": "MANIFEST_ONLY_NOT_CREATED",
+  "sourceCommit": "fc302f15103102a87903bada1b61ad68dfd0cc05",
+  "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+  "sourcePins": [
+    {
+      "file": "broker/src/index.js",
+      "bytes": 8936781,
+      "sha256": "1385684e3983f734b7570499edf6672b1cfe790542a5b468bed0b53a6f6cb76a"
+    },
+    {
+      "file": "broker/src/daily-rate-correction.js",
+      "bytes": 14101,
+      "sha256": "ed0d0c9c9f52f281adf4f124d0ae6877caf3933fdbeaec4dc27e368da325dc84"
+    },
+    {
+      "file": "broker/src/daily-canonical-authority.js",
+      "bytes": 18725,
+      "sha256": "baa0df9bc653d0c4159a3401a903154444e17cfc3ea0c7b3bd30c5bdfae91942"
+    },
+    {
+      "file": "broker/src/daily-schedule-authority.js",
+      "bytes": 14306,
+      "sha256": "1623f5294d7da3860731ac6eee91f8fe6aed1f3fc27f01ab42eb1ea4c7fbeb2e"
+    },
+    {
+      "file": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/01_context.sqlinc",
+      "bytes": 15693,
+      "sha256": "81a4b5a51c6898e728bcfa6c82e7326f7b3e3eaebf23847048473927615d5f3f"
+    },
+    {
+      "file": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/02_admission.sqlinc",
+      "bytes": 38065,
+      "sha256": "8b592b3833650f82159d703b960dab7baaf46d5958e02204a38bce45a407216e"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/01_complete_helpers.sqlinc",
+      "bytes": 15886,
+      "sha256": "95c35931e723787e4c5258ef704cb1115f0edbd9fd6b34e9ab25c4d0966b355b"
+    },
+    {
+      "file": "supabase/repeatable/22092026_1226_client_initial_settings_baseline_v1.sql",
+      "bytes": 29493,
+      "sha256": "e69f1da1a1640a09a1383a69337b64faf11ce7124e574031f4c8afb2c45fefff"
+    },
+    {
+      "file": "supabase/release/current-contract.json",
+      "bytes": 7865503,
+      "sha256": "da0e0870442c151534c04d108757a0d76a812879aafae71f01486c7077ce674a"
+    },
+    {
+      "file": "docs/bpay-next/final-definer-closures.json",
+      "bytes": 1737277,
+      "sha256": "9c89151b35ac193d94c69fbd4b63527d3df78e1d37c8b0734934a562f361bd92"
+    }
+  ],
+  "ownerMetadata": [
+    {
+      "signature": "public.client_create_with_settings_v1(uuid,jsonb,uuid,jsonb,timestamp with time zone)",
+      "finalRoot": "supabase/repeatable/28092026_1234_stage2_hosted_final_authority_reassert_v1.sql",
+      "finalPhysical": "supabase/repeatable/22092026_1226_client_initial_settings_baseline_v1.sql",
+      "bodyInspected": false
+    },
+    {
+      "signature": "public.timesheet_authorise_generic_atomic(uuid,uuid,uuid,timestamp with time zone,text)",
+      "finalRoot": "supabase/repeatable/11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql",
+      "bodyInspected": false
+    }
+  ],
+  "authority": "Existing SEND5 D9 TEST setup; root must append exact staged manifest and review before mutation",
+  "plannedClientId": "f717d043-0000-4000-8000-000000000010",
+  "plannedCandidateId": "f717d043-0000-4000-8000-000000000030",
+  "preExistingActorId": null,
+  "nativeGeneratedIds": {
+    "client_settings_id": null,
+    "rate_default_id": null,
+    "timesheet_id": null,
+    "financial_id": null,
+    "booking_id": null
+  },
+  "freshVacancyReceipt": null,
+  "actualInstalledSourceReceipt": null,
+  "canonicalSetupBaselineReceipt": null,
+  "workerPreparationReceipt": null,
+  "stages": [
+    {
+      "id": "S0",
+      "action": "READ_ONLY_BIND_AND_MANIFEST",
+      "requires": [
+        "fresh agency_test identity/customer-null/LEGACY:1/release-idle",
+        "current real active Admin and WP-PP actor; do not revoke a real user for a race",
+        "both IDs, unique name/key, candidate/client aliases and derived booking scope vacant",
+        "native owner/schema/ACL/trigger availability; source hashes alone are insufficient",
+        "root exact TEST_SETUP_MANIFEST append committed"
+      ],
+      "mutations": 0
+    },
+    {
+      "id": "S1",
+      "method": "POST",
+      "path": "/api/clients",
+      "body": {
+        "id": "f717d043-0000-4000-8000-000000000010",
+        "name": "DAILY_HEALTH_BASIS_20261017_CLIENT",
+        "vat_chargeable": false,
+        "payment_terms_days": 30,
+        "mileage_charge_rate": 0,
+        "primary_invoice_email": null,
+        "ts_queries_email": null,
+        "contact_email": null,
+        "client_settings": {
+          "effective_from": "2026-10-01",
+          "timezone_id": "Europe/London",
+          "default_submission_mode": "MANUAL",
+          "no_timesheet_required": true,
+          "requires_hr": false,
+          "hr_validation_required": false,
+          "autoprocess_hr": false,
+          "is_nhsp": false,
+          "self_bill_no_invoices_sent": true,
+          "daily_calc_of_invoices": false,
+          "auto_invoice_default": false,
+          "hr_attach_to_invoice": false,
+          "ts_attach_to_invoice": false,
+          "ts_reference_required": false,
+          "pay_reference_required": false,
+          "invoice_reference_required": false,
+          "reference_number_required_to_issue_invoice": false,
+          "opt_in_email": false,
+          "opt_in_sms": false,
+          "opt_in_whatsapp": false,
+          "healthroster_import_auto_authorise": false,
+          "nhsp_import_auto_authorise": false
+        }
+      },
+      "owner": "createClientWithSettingsAtomic -> public.client_create_with_settings_v1",
+      "after": "one exact Client and genuine initial effective settings row/native authority; bind native settings ID before next stage"
+    },
+    {
+      "id": "S2",
+      "method": "POST",
+      "path": "/api/candidates",
+      "body": {
+        "id": "f717d043-0000-4000-8000-000000000030",
+        "key_norm": "daily-health-basis-20261017-candidate",
+        "display_name": "DAILY_HEALTH_BASIS_20261017_CANDIDATE",
+        "active": true,
+        "roles": [
+          "RN"
+        ],
+        "pay_method": "PAYE",
+        "umbrella_id": null,
+        "email": null,
+        "account_holder": null,
+        "bank_name": null,
+        "sort_code": null,
+        "account_number": null,
+        "remittance_receive_enabled": false,
+        "remittance_overrides_enabled": false
+      },
+      "owner": "handleCreateCandidate; native candidate INSERT and scoped identity assignment",
+      "after": "one native Candidate, real minted reference, no app user/login/invitation/bank account; unique key matches zero existing Timesheets"
+    },
+    {
+      "id": "S3",
+      "method": "POST",
+      "path": "/api/rates/client-defaults",
+      "body": {
+        "client_id": "f717d043-0000-4000-8000-000000000010",
+        "role": "RN",
+        "band": "Band 6",
+        "date_from": "2026-10-01",
+        "date_to": "2026-10-31",
+        "charge_day": 30,
+        "paye_day": 20,
+        "umb_day": 25,
+        "charge_night": 30,
+        "paye_night": 20,
+        "umb_night": 25,
+        "charge_sat": 30,
+        "paye_sat": 20,
+        "umb_sat": 25,
+        "charge_sun": 30,
+        "paye_sun": 20,
+        "umb_sun": 25,
+        "charge_bh": 30,
+        "paye_bh": 20,
+        "umb_bh": 25
+      },
+      "owner": "handleUpsertClientRate; actual unified native dated selector store",
+      "after": "one enabled Client default covering work date, zero candidate overrides; bind actual rate ID; no overlapping or existing window is truncated"
+    },
+    {
+      "id": "S4",
+      "method": "POST",
+      "path": "/api/timesheets/create-daily-manual",
+      "body": {
+        "candidate_id": "f717d043-0000-4000-8000-000000000030",
+        "client_id": "f717d043-0000-4000-8000-000000000010",
+        "role": "RN",
+        "band": "Band 6",
+        "hospital": "DAILY_HEALTH_BASIS_20261017_CLIENT",
+        "ward": "DAILY_HEALTH_BASIS_20261017",
+        "shift_label": "DAILY_HEALTH_BASIS_20261017_SHIFT",
+        "schedule_json": {
+          "date": "2026-10-15",
+          "start": "08:00",
+          "end": "14:00",
+          "break_minutes": 0
+        }
+      },
+      "owner": "handleTimesheetCreateManualDaily -> saveAndRecalculateCanonicalDaily -> enqueue_ts_financials_priority/runTsfinWorkerOnce",
+      "after": "capture native-generated Timesheet/booking/current TSFIN IDs and exact readback before next mutation; original source row must remain DAILY/HOURS/no Contract/version1/current/not adjustment"
+    },
+    {
+      "id": "S5",
+      "method": "POST",
+      "path": "/api/timesheets/{ACTUAL_NATIVE_TIMESHEET_ID}/authorise",
+      "body": null,
+      "owner": "handleTimesheetAuthoriseGeneric -> existing public.timesheet_authorise_generic_atomic",
+      "requires": "bind latest actual physical Timesheet ID and current row signature via genuine native read; append exact body/ID in manifest BEFORE this request",
+      "after": "native current SELF_REPORTED TSFIN and physical Timesheet both authorised; same actual version/candidate/client; frozen settings authority present; retain all ordinary native admission/hooks"
+    },
+    {
+      "id": "S6",
+      "action": "READ_NATIVE_CONTEXT_AND_REAL_WORKER_PREPARATION",
+      "owner": "public.timesheet_daily_rate_correction_context_v1 plus actual tsfin_resolve_rates_batch and exact dispatchDailyRateCorrectionRequest calculator",
+      "requires": "actual mounted/installed owner availability or independently reviewed rollback closure; do not assume source-only definitions exist in TEST",
+      "after": "actual context/native rate rows and actual Worker-produced trusted PREVIEW args, no substituted snapshot, no fabricated public Preview success"
+    },
+    {
+      "id": "S7",
+      "action": "ROOT_OWNED_UNLOCKED_BASIS_AND_INCOMPLETE_REVIEW_TRIAL",
+      "requires": "reviewed closed input adapter, full canonical setup baseline, genuine context/snapshot from S6, shared turn/real marker/original complete observations and WeakMap restoration",
+      "after": "p_lock=false Health basis may be tested; partial review must fail genuine deferred commit guard; every temporary metadata row rolls back; no public composer or Bank result claimed"
+    }
+  ],
+  "holds": [
+    "Native generated IDs/signatures/actor/source availability/vacancy are unbound; no executable mutation input is produced",
+    "Existing create source stores job_title_norm lowercase; real Worker normalizes financial role uppercase; current Health0858 verbatim comparison is a source mismatch candidate retained for separate forward review; actual native readback NOT_PROVED",
+    "Independent Worker/PostgREST requests cannot see uncommitted rollback setup. Root must use D9 committed exact setup baseline, or separately review a genuinely same-session producer transport; nested rollback is insufficient",
+    "Public Daily composers and genuine Bank joins remain unprovided; a capture-only real Worker boundary must refuse absent Preview rather than return nominal success",
+    "No rate change is needed for initial genuine basis/guard proof; this does not prove monetary difference or Accept. Later selector changes/races need exact separate setup and real commit visibility",
+    "Locked basis remains dependent on existing Banking F17 NEXT readiness. No control flip or new owner permission question",
+    "Real API role runtime, dated-selector/actor races and RR/serializable trials remain separate; do not revoke real operator permissions"
+  ],
+  "businessRowsCreated": 0,
+  "native": "NOT_RUN",
+  "snapshotInvented": false,
+  "bankingBodiesInspected": false
+}

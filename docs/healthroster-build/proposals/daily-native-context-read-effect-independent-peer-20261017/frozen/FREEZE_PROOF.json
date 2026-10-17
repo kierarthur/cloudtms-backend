@@ -1,0 +1,11 @@
+{
+  "version": "DAILY_CONTEXT_READ_EFFECT_RAW_FREEZE_PROOF_V1",
+  "selectedOwners": 18,
+  "savedIndexHeadRawStatementBodyHashesEqual": true,
+  "currentRootHead": "c276aa49eb4db86ff42e184011a09bf2b59f253e",
+  "externalCommittedRecords": 4,
+  "rootWrites": 0,
+  "nativeInvocation": "NOT_RUN",
+  "bankBodiesInspected": 0,
+  "documentaryContractFresh": false
+}

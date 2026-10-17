@@ -1,0 +1,808 @@
+{
+  "version": "DAILY_NATIVE_CONTEXT_READ_EFFECT_SOURCE_PLAN_V1",
+  "healthGeneralOwners": 18,
+  "sourceFragments": 283,
+  "edges": [
+    {
+      "owner": "public._ctms_correction_policy_envelope_read_v1(uuid)",
+      "call": "btrim",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "public._ctms_correction_policy_envelope_read_v1(uuid)",
+      "call": "convert_to",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "public._ctms_correction_policy_envelope_read_v1(uuid)",
+      "call": "encode",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "public._ctms_correction_policy_envelope_read_v1(uuid)",
+      "call": "extensions.digest",
+      "classification": "EXACT_PGCRYPTO_IMPLEMENTATION_AND_RESOLUTION_REQUIRED"
+    },
+    {
+      "owner": "public._ctms_correction_policy_envelope_read_v1(uuid)",
+      "call": "jsonb_build_object",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "public._ctms_correction_policy_envelope_read_v1(uuid)",
+      "call": "jsonb_typeof",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "public._ctms_correction_policy_envelope_read_v1(uuid)",
+      "call": "public._ctms_import_correction_classify_v1",
+      "classification": "REVIEWED_HEALTH_GENERAL_SOURCE_NATIVE_BINDING_REQUIRED"
+    },
+    {
+      "owner": "public._ctms_correction_policy_leg_read_v1(uuid)",
+      "call": "btrim",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "public._ctms_correction_policy_leg_read_v1(uuid)",
+      "call": "convert_to",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "public._ctms_correction_policy_leg_read_v1(uuid)",
+      "call": "encode",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "public._ctms_correction_policy_leg_read_v1(uuid)",
+      "call": "extensions.digest",
+      "classification": "EXACT_PGCRYPTO_IMPLEMENTATION_AND_RESOLUTION_REQUIRED"
+    },
+    {
+      "owner": "public._ctms_correction_policy_leg_read_v1(uuid)",
+      "call": "jsonb_build_object",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "public._ctms_correction_policy_leg_read_v1(uuid)",
+      "call": "jsonb_typeof",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "public._ctms_correction_policy_leg_read_v1(uuid)",
+      "call": "public._ctms_correction_policy_envelope_read_v1",
+      "classification": "REVIEWED_HEALTH_GENERAL_SOURCE_NATIVE_BINDING_REQUIRED"
+    },
+    {
+      "owner": "public._ctms_correction_policy_leg_read_v1(uuid)",
+      "call": "upper",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "public._ctms_import_correction_classify_v1(uuid)",
+      "call": "btrim",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "public._ctms_import_correction_classify_v1(uuid)",
+      "call": "convert_to",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "public._ctms_import_correction_classify_v1(uuid)",
+      "call": "encode",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "public._ctms_import_correction_classify_v1(uuid)",
+      "call": "extensions.digest",
+      "classification": "EXACT_PGCRYPTO_IMPLEMENTATION_AND_RESOLUTION_REQUIRED"
+    },
+    {
+      "owner": "public._ctms_import_correction_classify_v1(uuid)",
+      "call": "jsonb_build_object",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "public._ctms_import_correction_classify_v1(uuid)",
+      "call": "jsonb_typeof",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "public._ctms_import_correction_classify_v1(uuid)",
+      "call": "pg_catalog.timezone",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "public._ctms_import_correction_classify_v1(uuid)",
+      "call": "statement_timestamp",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "public._ctms_import_correction_classify_v1(uuid)",
+      "call": "upper",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "private._candidate_normalize_domain_v1(text)",
+      "call": "btrim",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "private._candidate_normalize_domain_v1(text)",
+      "call": "lower",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "private._candidate_normalize_domain_v1(text)",
+      "call": "regexp_replace",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "private._candidate_normalize_email(text)",
+      "call": "btrim",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "private._candidate_normalize_email(text)",
+      "call": "lower",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "public.settings_finance_pick(date)",
+      "call": "now",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "public.settings_finance_pick(date)",
+      "call": "pg_catalog.timezone",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "public.timesheet_pdf_reference_rows(uuid)",
+      "call": "btrim",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "public.timesheet_pdf_reference_rows(uuid)",
+      "call": "jsonb_array_elements",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "public.timesheet_pdf_reference_rows(uuid)",
+      "call": "jsonb_typeof",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "public.timesheet_pdf_reference_rows(uuid)",
+      "call": "pg_catalog.timezone",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "public.timesheet_pdf_reference_rows(uuid)",
+      "call": "to_jsonb",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "public.timesheet_pdf_reference_rows(uuid)",
+      "call": "upper",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "public.timesheet_pdf_reference_sig(uuid)",
+      "call": "encode",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "public.timesheet_pdf_reference_sig(uuid)",
+      "call": "extensions.digest",
+      "classification": "EXACT_PGCRYPTO_IMPLEMENTATION_AND_RESOLUTION_REQUIRED"
+    },
+    {
+      "owner": "public.timesheet_pdf_reference_sig(uuid)",
+      "call": "public.timesheet_pdf_reference_rows",
+      "classification": "REVIEWED_HEALTH_GENERAL_SOURCE_NATIVE_BINDING_REQUIRED"
+    },
+    {
+      "owner": "public.timesheet_pdf_reference_sig(uuid)",
+      "call": "string_agg",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "public.tsfin_load_context_batch(uuid[])",
+      "call": "jsonb_build_array",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "public.tsfin_load_context_batch(uuid[])",
+      "call": "jsonb_build_object",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "public.tsfin_load_context_batch(uuid[])",
+      "call": "now",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "public.tsfin_load_context_batch(uuid[])",
+      "call": "pg_catalog.timezone",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "public.tsfin_load_context_batch(uuid[])",
+      "call": "private._contract_settings_effective_core_v1",
+      "classification": "REVIEWED_HEALTH_GENERAL_SOURCE_NATIVE_BINDING_REQUIRED"
+    },
+    {
+      "owner": "public.tsfin_load_context_batch(uuid[])",
+      "call": "public._ctms_correction_policy_envelope_read_v1",
+      "classification": "REVIEWED_HEALTH_GENERAL_SOURCE_NATIVE_BINDING_REQUIRED"
+    },
+    {
+      "owner": "public.tsfin_load_context_batch(uuid[])",
+      "call": "public._ctms_correction_policy_leg_read_v1",
+      "classification": "REVIEWED_HEALTH_GENERAL_SOURCE_NATIVE_BINDING_REQUIRED"
+    },
+    {
+      "owner": "public.tsfin_load_context_batch(uuid[])",
+      "call": "to_jsonb",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "public.tsfin_load_context_batch(uuid[])",
+      "call": "unnest",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "public.tsfin_load_context_batch(uuid[])",
+      "call": "upper",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "private._contract_settings_effective_core_v1(uuid,uuid,date,text,uuid)",
+      "call": "btrim",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "private._contract_settings_effective_core_v1(uuid,uuid,date,text,uuid)",
+      "call": "convert_to",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "private._contract_settings_effective_core_v1(uuid,uuid,date,text,uuid)",
+      "call": "digest",
+      "classification": "EXACT_PGCRYPTO_IMPLEMENTATION_AND_RESOLUTION_REQUIRED"
+    },
+    {
+      "owner": "private._contract_settings_effective_core_v1(uuid,uuid,date,text,uuid)",
+      "call": "encode",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "private._contract_settings_effective_core_v1(uuid,uuid,date,text,uuid)",
+      "call": "jsonb_agg",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "private._contract_settings_effective_core_v1(uuid,uuid,date,text,uuid)",
+      "call": "jsonb_array_elements_text",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "private._contract_settings_effective_core_v1(uuid,uuid,date,text,uuid)",
+      "call": "jsonb_build_object",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "private._contract_settings_effective_core_v1(uuid,uuid,date,text,uuid)",
+      "call": "jsonb_typeof",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "private._contract_settings_effective_core_v1(uuid,uuid,date,text,uuid)",
+      "call": "private._candidate_manager_authoriser_effective_v2",
+      "classification": "REVIEWED_HEALTH_GENERAL_SOURCE_NATIVE_BINDING_REQUIRED"
+    },
+    {
+      "owner": "private._contract_settings_effective_core_v1(uuid,uuid,date,text,uuid)",
+      "call": "private._timesheet_settings_authority_frozen_v1",
+      "classification": "REVIEWED_HEALTH_GENERAL_SOURCE_NATIVE_BINDING_REQUIRED"
+    },
+    {
+      "owner": "private._contract_settings_effective_core_v1(uuid,uuid,date,text,uuid)",
+      "call": "public.settings_finance_pick",
+      "classification": "REVIEWED_HEALTH_GENERAL_SOURCE_NATIVE_BINDING_REQUIRED"
+    },
+    {
+      "owner": "private._contract_settings_effective_core_v1(uuid,uuid,date,text,uuid)",
+      "call": "statement_timestamp",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "private._contract_settings_effective_core_v1(uuid,uuid,date,text,uuid)",
+      "call": "to_jsonb",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "private._contract_settings_effective_core_v1(uuid,uuid,date,text,uuid)",
+      "call": "upper",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "private._timesheet_settings_authority_frozen_v1(uuid)",
+      "call": "convert_to",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "private._timesheet_settings_authority_frozen_v1(uuid)",
+      "call": "digest",
+      "classification": "EXACT_PGCRYPTO_IMPLEMENTATION_AND_RESOLUTION_REQUIRED"
+    },
+    {
+      "owner": "private._timesheet_settings_authority_frozen_v1(uuid)",
+      "call": "encode",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "private._candidate_manager_authoriser_email_array_v2(jsonb)",
+      "call": "pg_catalog.char_length",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "private._candidate_manager_authoriser_email_array_v2(jsonb)",
+      "call": "pg_catalog.count",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "private._candidate_manager_authoriser_email_array_v2(jsonb)",
+      "call": "pg_catalog.jsonb_agg",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "private._candidate_manager_authoriser_email_array_v2(jsonb)",
+      "call": "pg_catalog.jsonb_array_elements_text",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "private._candidate_manager_authoriser_email_array_v2(jsonb)",
+      "call": "pg_catalog.jsonb_typeof",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "private._candidate_manager_authoriser_email_array_v2(jsonb)",
+      "call": "private._candidate_normalize_email",
+      "classification": "REVIEWED_HEALTH_GENERAL_SOURCE_NATIVE_BINDING_REQUIRED"
+    },
+    {
+      "owner": "private._candidate_manager_authoriser_domain_array_v2(jsonb)",
+      "call": "pg_catalog.char_length",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "private._candidate_manager_authoriser_domain_array_v2(jsonb)",
+      "call": "pg_catalog.count",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "private._candidate_manager_authoriser_domain_array_v2(jsonb)",
+      "call": "pg_catalog.jsonb_agg",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "private._candidate_manager_authoriser_domain_array_v2(jsonb)",
+      "call": "pg_catalog.jsonb_array_elements_text",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "private._candidate_manager_authoriser_domain_array_v2(jsonb)",
+      "call": "pg_catalog.jsonb_typeof",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "private._candidate_manager_authoriser_domain_array_v2(jsonb)",
+      "call": "private._candidate_normalize_domain_v1",
+      "classification": "REVIEWED_HEALTH_GENERAL_SOURCE_NATIVE_BINDING_REQUIRED"
+    },
+    {
+      "owner": "private._candidate_manager_authoriser_policy_normalize_v2(jsonb,text)",
+      "call": "pg_catalog.btrim",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "private._candidate_manager_authoriser_policy_normalize_v2(jsonb,text)",
+      "call": "pg_catalog.jsonb_array_length",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "private._candidate_manager_authoriser_policy_normalize_v2(jsonb,text)",
+      "call": "pg_catalog.jsonb_build_object",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "private._candidate_manager_authoriser_policy_normalize_v2(jsonb,text)",
+      "call": "pg_catalog.jsonb_object_keys",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "private._candidate_manager_authoriser_policy_normalize_v2(jsonb,text)",
+      "call": "pg_catalog.jsonb_typeof",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "private._candidate_manager_authoriser_policy_normalize_v2(jsonb,text)",
+      "call": "pg_catalog.upper",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "private._candidate_manager_authoriser_policy_normalize_v2(jsonb,text)",
+      "call": "private._candidate_manager_authoriser_domain_array_v2",
+      "classification": "REVIEWED_HEALTH_GENERAL_SOURCE_NATIVE_BINDING_REQUIRED"
+    },
+    {
+      "owner": "private._candidate_manager_authoriser_policy_normalize_v2(jsonb,text)",
+      "call": "private._candidate_manager_authoriser_email_array_v2",
+      "classification": "REVIEWED_HEALTH_GENERAL_SOURCE_NATIVE_BINDING_REQUIRED"
+    },
+    {
+      "owner": "private._candidate_manager_authoriser_effective_v2(jsonb,jsonb)",
+      "call": "pg_catalog.btrim",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "private._candidate_manager_authoriser_effective_v2(jsonb,jsonb)",
+      "call": "pg_catalog.jsonb_agg",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "private._candidate_manager_authoriser_effective_v2(jsonb,jsonb)",
+      "call": "pg_catalog.jsonb_array_elements_text",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "private._candidate_manager_authoriser_effective_v2(jsonb,jsonb)",
+      "call": "pg_catalog.jsonb_build_object",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "private._candidate_manager_authoriser_effective_v2(jsonb,jsonb)",
+      "call": "pg_catalog.jsonb_typeof",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "private._candidate_manager_authoriser_effective_v2(jsonb,jsonb)",
+      "call": "pg_catalog.upper",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "private._candidate_manager_authoriser_effective_v2(jsonb,jsonb)",
+      "call": "private._candidate_manager_authoriser_policy_normalize_v2",
+      "classification": "REVIEWED_HEALTH_GENERAL_SOURCE_NATIVE_BINDING_REQUIRED"
+    },
+    {
+      "owner": "public.contract_settings_effective_get_v1(uuid,uuid,date,text,uuid)",
+      "call": "private._contract_settings_effective_core_v1",
+      "classification": "REVIEWED_HEALTH_GENERAL_SOURCE_NATIVE_BINDING_REQUIRED"
+    },
+    {
+      "owner": "public.v_timesheets_summary_base",
+      "call": "array_length",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "public.v_timesheets_summary_base",
+      "call": "array_remove",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "public.v_timesheets_summary_base",
+      "call": "btrim",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "public.v_timesheets_summary_base",
+      "call": "concat_ws",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "public.v_timesheets_summary_base",
+      "call": "count",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "public.v_timesheets_summary_base",
+      "call": "jsonb_array_elements",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "public.v_timesheets_summary_base",
+      "call": "jsonb_array_elements_text",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "public.v_timesheets_summary_base",
+      "call": "jsonb_array_length",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "public.v_timesheets_summary_base",
+      "call": "jsonb_each_text",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "public.v_timesheets_summary_base",
+      "call": "jsonb_typeof",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "public.v_timesheets_summary_base",
+      "call": "left",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "public.v_timesheets_summary_base",
+      "call": "length",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "public.v_timesheets_summary_base",
+      "call": "max",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "public.v_timesheets_summary_base",
+      "call": "pg_catalog.timezone",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "public.v_timesheets_summary_base",
+      "call": "private._contract_settings_effective_core_v1",
+      "classification": "REVIEWED_HEALTH_GENERAL_SOURCE_NATIVE_BINDING_REQUIRED"
+    },
+    {
+      "owner": "public.v_timesheets_summary_base",
+      "call": "public._pay_outstanding_components",
+      "classification": "FINANCE_OWNER_EFFECT_CLOSURE_REQUIRED_METADATA_ONLY"
+    },
+    {
+      "owner": "public.v_timesheets_summary_base",
+      "call": "public.timesheet_pdf_reference_sig",
+      "classification": "REVIEWED_HEALTH_GENERAL_SOURCE_NATIVE_BINDING_REQUIRED"
+    },
+    {
+      "owner": "public.v_timesheets_summary_base",
+      "call": "round",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "public.v_timesheets_summary_base",
+      "call": "split_part",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "public.v_timesheets_summary_base",
+      "call": "sum",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "public.v_timesheets_summary_base",
+      "call": "upper",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    },
+    {
+      "owner": "public.v_timesheets_summary",
+      "call": "upper",
+      "classification": "PG_CATALOG_IMPLEMENTATION_TYPE_AGGREGATE_OPERATOR_METADATA_REQUIRED"
+    }
+  ],
+  "builtinNames": [
+    "array_length",
+    "array_remove",
+    "btrim",
+    "char_length",
+    "concat_ws",
+    "convert_to",
+    "count",
+    "encode",
+    "jsonb_agg",
+    "jsonb_array_elements",
+    "jsonb_array_elements_text",
+    "jsonb_array_length",
+    "jsonb_build_array",
+    "jsonb_build_object",
+    "jsonb_each_text",
+    "jsonb_object_keys",
+    "jsonb_typeof",
+    "left",
+    "length",
+    "lower",
+    "max",
+    "now",
+    "regexp_replace",
+    "round",
+    "split_part",
+    "statement_timestamp",
+    "string_agg",
+    "sum",
+    "timezone",
+    "to_jsonb",
+    "unnest",
+    "upper"
+  ],
+  "extensionCalls": [
+    "digest",
+    "extensions.digest"
+  ],
+  "intendedRelations": [
+    "public.candidates",
+    "public.client_hospitals",
+    "public.client_settings",
+    "public.clients",
+    "public.contract_weeks",
+    "public.contracts",
+    "public.invoices",
+    "public.nhsp_shifts",
+    "public.pay_batch_candidates",
+    "public.pay_batch_items",
+    "public.pay_batches",
+    "public.settings_defaults",
+    "public.settings_finance_windows",
+    "public.timesheet_evidence",
+    "public.timesheet_validations",
+    "public.timesheets",
+    "public.timesheets_financials",
+    "public.ts_pay_adjustments",
+    "public.umbrellas",
+    "public.v_timesheets_summary",
+    "public.v_timesheets_summary_base",
+    "public.v_ts_invoice_precheck"
+  ],
+  "casts": [
+    "contract_week_status_enum",
+    "date",
+    "jsonb",
+    "pg_catalog.bool",
+    "pg_catalog.int4",
+    "pg_catalog.numeric",
+    "pg_catalog.timestamptz",
+    "public.invoice_status_enum",
+    "public.timesheet_scope_enum",
+    "submission_mode_enum",
+    "text",
+    "timesheet_fin_basis_enum",
+    "timesheet_qr_status_enum",
+    "timesheet_scope_enum",
+    "timesheet_status_enum",
+    "timestamptz",
+    "ts_fin_processing_status_enum",
+    "uuid",
+    "validation_status_enum"
+  ],
+  "operators": [
+    [
+      "AEXPR_DISTINCT",
+      "="
+    ],
+    [
+      "AEXPR_IN",
+      "<>"
+    ],
+    [
+      "AEXPR_IN",
+      "="
+    ],
+    [
+      "AEXPR_LIKE",
+      "~~"
+    ],
+    [
+      "AEXPR_NOT_DISTINCT",
+      "="
+    ],
+    [
+      "AEXPR_NULLIF",
+      "="
+    ],
+    [
+      "AEXPR_OP",
+      "!~"
+    ],
+    [
+      "AEXPR_OP",
+      "#>"
+    ],
+    [
+      "AEXPR_OP",
+      "#>>"
+    ],
+    [
+      "AEXPR_OP",
+      "&&"
+    ],
+    [
+      "AEXPR_OP",
+      "+"
+    ],
+    [
+      "AEXPR_OP",
+      "-"
+    ],
+    [
+      "AEXPR_OP",
+      "->"
+    ],
+    [
+      "AEXPR_OP",
+      "->>"
+    ],
+    [
+      "AEXPR_OP",
+      "<"
+    ],
+    [
+      "AEXPR_OP",
+      "<="
+    ],
+    [
+      "AEXPR_OP",
+      "<>"
+    ],
+    [
+      "AEXPR_OP",
+      "="
+    ],
+    [
+      "AEXPR_OP",
+      ">"
+    ],
+    [
+      "AEXPR_OP",
+      ">="
+    ],
+    [
+      "AEXPR_OP",
+      "?"
+    ],
+    [
+      "AEXPR_OP",
+      "@>"
+    ],
+    [
+      "AEXPR_OP",
+      "||"
+    ],
+    [
+      "AEXPR_OP",
+      "~"
+    ],
+    [
+      "AEXPR_OP",
+      "~*"
+    ],
+    [
+      "AEXPR_OP_ALL",
+      "<>"
+    ],
+    [
+      "AEXPR_OP_ANY",
+      "="
+    ]
+  ],
+  "financeBoundaries": {
+    "routineName": "public._pay_outstanding_components",
+    "sourceCallArity": 1,
+    "sourceArgument": "ARRAY[pt.timesheet_id]",
+    "candidateSignatures": [
+      "public._pay_outstanding_components(uuid[])",
+      "public._pay_outstanding_components(uuid[],uuid)"
+    ],
+    "view": "public.v_ts_invoice_precheck",
+    "bodiesInspected": false,
+    "semanticQualification": "NOT_PROVIDED_IN_THIS_LANE"
+  },
+  "status": "HEALTH_GENERAL_SOURCE_CLASSIFIED_NATIVE_AND_FINANCE_CLOSURE_HELD",
+  "publicWrapper": "public.contract_settings_effective_get_v1 is an additional native-observed possible view edge; current managed summary source directly calls private core. Bind actual view version, never silently equate these.",
+  "readAdmission": "Existing active Office read admission remains separate and independent of operation creator; this loader takes no actor and grants no Office permission.",
+  "nativeInvocation": "NOT_RUN",
+  "nativePurity": "NOT_PROVED",
+  "runtimeTargets": []
+}

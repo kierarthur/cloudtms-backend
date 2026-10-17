@@ -1,0 +1,519 @@
+{
+  "version": "DAILY_CONTEXT_READ_EFFECT_INDEPENDENT_PEER_V1",
+  "candidateCommit": "28457faeab3269ab65dbd2df92f6b04ee074cb41",
+  "candidateManifestSha256": "0977b1340702d8a1ec0a752be064801fee2af368b138a8a4b2381d793e252487",
+  "disposition": "ACCEPT_BOUNDED_SOURCE_PLAN_WITH_REUSABLE_CLASSIFIER_LIMITATIONS",
+  "parser": {
+    "pglast": "v7.20",
+    "postgresql": [
+      17,
+      7
+    ],
+    "sqlFragments": 283,
+    "selectedOwners": 18,
+    "callSites": 315
+  },
+  "originalReplay": {
+    "programmes": 3,
+    "counterexamples": 20,
+    "allFrozenJsonEqual": true
+  },
+  "owners": [
+    {
+      "identity": "public._ctms_correction_policy_envelope_read_v1(uuid)",
+      "sqlFragments": 13,
+      "lexicalRelations": [
+        "public.timesheets",
+        "public.timesheets_financials"
+      ],
+      "callSites": 8,
+      "statementSha256": "dda9087bc3281184746fc0d60c8d5fae2b3d659575fa29923862401edc80f7fe"
+    },
+    {
+      "identity": "public._ctms_correction_policy_leg_read_v1(uuid)",
+      "sqlFragments": 20,
+      "lexicalRelations": [
+        "public.timesheets"
+      ],
+      "callSites": 20,
+      "statementSha256": "68694f6fb4d86539a46b46a053eabdb33fa07a640af685d450f3b279909d721c"
+    },
+    {
+      "identity": "public._ctms_import_correction_classify_v1(uuid)",
+      "sqlFragments": 1,
+      "lexicalRelations": [
+        "public.client_settings",
+        "public.contracts",
+        "public.timesheets",
+        "public.timesheets_financials"
+      ],
+      "callSites": 12,
+      "statementSha256": "42f077a8cee8f6c855ab65ffb22dbc8a9c5b8fe611488b1ed2173722ac8046b2"
+    },
+    {
+      "identity": "private._candidate_normalize_domain_v1(text)",
+      "sqlFragments": 1,
+      "lexicalRelations": [],
+      "callSites": 3,
+      "statementSha256": "e9ac8f0fd4fd2e96d087c5020c35ca697044d1a4870cdc5f1378acedb68a4010"
+    },
+    {
+      "identity": "private._candidate_normalize_email(text)",
+      "sqlFragments": 1,
+      "lexicalRelations": [],
+      "callSites": 2,
+      "statementSha256": "a0d6fc7b820bede6a22c737c9151d219d49c16c70d66781852ecdb804df52e82"
+    },
+    {
+      "identity": "public.settings_finance_pick(date)",
+      "sqlFragments": 1,
+      "lexicalRelations": [
+        "public.settings_finance_windows"
+      ],
+      "callSites": 2,
+      "statementSha256": "271b632f9db9f39cfa71230b17c4a8ac9f26a97177303d9f5b8745bc5be9a5ba"
+    },
+    {
+      "identity": "public.timesheet_pdf_reference_rows(uuid)",
+      "sqlFragments": 70,
+      "lexicalRelations": [
+        "public.timesheets",
+        "public.timesheets_financials"
+      ],
+      "callSites": 29,
+      "statementSha256": "42a8eae9c396da8247cc91f43cfca4de9b088f7d76bb476d08cf95a6285204e5"
+    },
+    {
+      "identity": "public.timesheet_pdf_reference_sig(uuid)",
+      "sqlFragments": 5,
+      "lexicalRelations": [],
+      "callSites": 4,
+      "statementSha256": "c9481d92c82c0a58fb04d842c33100c52c8daee392e86a51d0002634b91b27e2"
+    },
+    {
+      "identity": "public.tsfin_load_context_batch(uuid[])",
+      "sqlFragments": 1,
+      "lexicalRelations": [
+        "public.candidates",
+        "public.client_hospitals",
+        "public.timesheets",
+        "public.timesheets_financials",
+        "public.umbrellas",
+        "public.v_timesheets_summary"
+      ],
+      "callSites": 24,
+      "statementSha256": "3781fa6733119ea219fd0e6478cadf4da5504f359cfd2248c34b33badc4f0e81"
+    },
+    {
+      "identity": "private._contract_settings_effective_core_v1(uuid,uuid,date,text,uuid)",
+      "sqlFragments": 85,
+      "lexicalRelations": [
+        "public.client_settings",
+        "public.clients",
+        "public.contracts",
+        "public.settings_defaults",
+        "public.timesheets",
+        "public.timesheets_financials"
+      ],
+      "callSites": 28,
+      "statementSha256": "185c859b497c3457e08cbb6ff95468bde375234a4527fe8753659444af35dde1"
+    },
+    {
+      "identity": "private._timesheet_settings_authority_frozen_v1(uuid)",
+      "sqlFragments": 9,
+      "lexicalRelations": [
+        "public.timesheets"
+      ],
+      "callSites": 3,
+      "statementSha256": "9b3115ec709f8235fe7b3c8179ff18c88810412ff6fe653b50607734cc4128a2"
+    },
+    {
+      "identity": "private._candidate_manager_authoriser_email_array_v2(jsonb)",
+      "sqlFragments": 8,
+      "lexicalRelations": [],
+      "callSites": 7,
+      "statementSha256": "b80ea81da356fb33877aca886beab1844758b373e210bc15f403dd6e8f44f064"
+    },
+    {
+      "identity": "private._candidate_manager_authoriser_domain_array_v2(jsonb)",
+      "sqlFragments": 8,
+      "lexicalRelations": [],
+      "callSites": 7,
+      "statementSha256": "08a11187357177365c79cc86a2f5c0151b83d39b9ef762bb3207a8e0ceaad5ff"
+    },
+    {
+      "identity": "private._candidate_manager_authoriser_policy_normalize_v2(jsonb,text)",
+      "sqlFragments": 34,
+      "lexicalRelations": [],
+      "callSites": 17,
+      "statementSha256": "deb34fc1fa6e7046075865ca998653407d45728c8596019eae277740458f0a2d"
+    },
+    {
+      "identity": "private._candidate_manager_authoriser_effective_v2(jsonb,jsonb)",
+      "sqlFragments": 23,
+      "lexicalRelations": [],
+      "callSites": 12,
+      "statementSha256": "169a40464d705ef10fd89bcb3445654cbff9d03a2f58e1d7e804ffc773f81311"
+    },
+    {
+      "identity": "public.contract_settings_effective_get_v1(uuid,uuid,date,text,uuid)",
+      "sqlFragments": 1,
+      "lexicalRelations": [],
+      "callSites": 1,
+      "statementSha256": "e98cd5cf004b1946e8192ed1d6f689a7fcf06640dcb643f4260c962733f2f8e6"
+    },
+    {
+      "identity": "public.v_timesheets_summary_base",
+      "sqlFragments": 1,
+      "lexicalRelations": [
+        "public.candidates",
+        "public.clients",
+        "public.contract_weeks",
+        "public.contracts",
+        "public.invoices",
+        "public.nhsp_shifts",
+        "public.pay_batch_candidates",
+        "public.pay_batch_items",
+        "public.pay_batches",
+        "public.timesheet_evidence",
+        "public.timesheet_validations",
+        "public.timesheets",
+        "public.timesheets_financials",
+        "public.ts_pay_adjustments",
+        "public.umbrellas",
+        "public.v_ts_invoice_precheck"
+      ],
+      "callSites": 134,
+      "statementSha256": "e442edf2bc2eeb48a68b9e8e2eebec623861d849d9255347bd53fca74a5357c2"
+    },
+    {
+      "identity": "public.v_timesheets_summary",
+      "sqlFragments": 1,
+      "lexicalRelations": [
+        "public.contract_weeks",
+        "public.invoices",
+        "public.timesheets",
+        "public.v_timesheets_summary_base"
+      ],
+      "callSites": 2,
+      "statementSha256": "e8338e05e11a3456ee657769f73309e9232997f924ba6c51e6b5979677ffbd36"
+    }
+  ],
+  "selectedFunctionSourceArities": {
+    "public._ctms_correction_policy_envelope_read_v1": [
+      1,
+      1
+    ],
+    "public._ctms_correction_policy_leg_read_v1": [
+      1,
+      1
+    ],
+    "public._ctms_import_correction_classify_v1": [
+      1,
+      1
+    ],
+    "private._candidate_normalize_domain_v1": [
+      1,
+      1
+    ],
+    "private._candidate_normalize_email": [
+      1,
+      1
+    ],
+    "public.settings_finance_pick": [
+      0,
+      1
+    ],
+    "public.timesheet_pdf_reference_rows": [
+      1,
+      1
+    ],
+    "public.timesheet_pdf_reference_sig": [
+      1,
+      1
+    ],
+    "public.tsfin_load_context_batch": [
+      1,
+      1
+    ],
+    "private._contract_settings_effective_core_v1": [
+      4,
+      5
+    ],
+    "private._timesheet_settings_authority_frozen_v1": [
+      1,
+      1
+    ],
+    "private._candidate_manager_authoriser_email_array_v2": [
+      1,
+      1
+    ],
+    "private._candidate_manager_authoriser_domain_array_v2": [
+      1,
+      1
+    ],
+    "private._candidate_manager_authoriser_policy_normalize_v2": [
+      1,
+      2
+    ],
+    "private._candidate_manager_authoriser_effective_v2": [
+      1,
+      2
+    ],
+    "public.contract_settings_effective_get_v1": [
+      4,
+      5
+    ]
+  },
+  "selectedFunctionInputNames": {
+    "public._ctms_correction_policy_envelope_read_v1": [
+      "p_timesheet_id"
+    ],
+    "public._ctms_correction_policy_leg_read_v1": [
+      "p_timesheet_id"
+    ],
+    "public._ctms_import_correction_classify_v1": [
+      "p_timesheet_id"
+    ],
+    "private._candidate_normalize_domain_v1": [
+      "p_domain"
+    ],
+    "private._candidate_normalize_email": [
+      "p_email"
+    ],
+    "public.settings_finance_pick": [
+      "p_date"
+    ],
+    "public.timesheet_pdf_reference_rows": [
+      "p_timesheet_id"
+    ],
+    "public.timesheet_pdf_reference_sig": [
+      "p_timesheet_id"
+    ],
+    "public.tsfin_load_context_batch": [
+      "p_timesheet_ids"
+    ],
+    "private._contract_settings_effective_core_v1": [
+      "p_client_id",
+      "p_contract_id",
+      "p_relevant_date",
+      "p_workflow",
+      "p_timesheet_id"
+    ],
+    "private._timesheet_settings_authority_frozen_v1": [
+      "p_timesheet_id"
+    ],
+    "private._candidate_manager_authoriser_email_array_v2": [
+      "p_value"
+    ],
+    "private._candidate_manager_authoriser_domain_array_v2": [
+      "p_value"
+    ],
+    "private._candidate_manager_authoriser_policy_normalize_v2": [
+      "p_policy",
+      "p_scope"
+    ],
+    "private._candidate_manager_authoriser_effective_v2": [
+      "p_client_policy",
+      "p_contract_policy"
+    ],
+    "public.contract_settings_effective_get_v1": [
+      "p_client_id",
+      "p_contract_id",
+      "p_relevant_date",
+      "p_workflow",
+      "p_timesheet_id"
+    ]
+  },
+  "actualFinanceCall": {
+    "owner": "public.v_timesheets_summary_base",
+    "name": "public._pay_outstanding_components",
+    "arity": 1,
+    "argument": "ARRAY[pt.timesheet_id]",
+    "resolution": "SOURCE_ONLY_ACTUAL_STORED_VIEW_AND_OVERLOAD_METADATA_REQUIRED"
+  },
+  "independentCases": [
+    {
+      "case": "18 actual fragment-scoped relation sets equal author census",
+      "status": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "case": "actual selected helper call arities respect complete default argument declarations",
+      "status": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "case": "actual finance call is exactly one ARRAY[pt.timesheet_id], not hardcoded output evidence",
+      "status": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "case": "same SELECT real CTE is not a heap",
+      "status": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "case": "qualified heap is not hidden by equal CTE name",
+      "status": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "case": "later CTE name does not shadow earlier nonrecursive definition",
+      "status": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "case": "nested CTE name does not escape into outer range",
+      "status": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "case": "recursive WITH self name is scoped",
+      "status": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "case": "nested CTE shadows an outer visible CTE only within its query",
+      "status": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "case": "independent SQL fragments cannot inherit another fragment CTE name",
+      "status": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "case": "nested DELETE remains an effect",
+      "status": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "case": "SELECT FOR SHARE remains a lock",
+      "status": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "case": "SELECT INTO remains a new relation",
+      "status": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "case": "set_config remains a session effect",
+      "status": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "case": "sequence mutation remains held",
+      "status": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "case": "unreviewed shadow digest remains held",
+      "status": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "case": "second finance argument cannot inherit one-argument proof",
+      "status": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "case": "different finance array column cannot inherit fixture binding",
+      "status": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "case": "whole caller array cannot replace exact per-row argument",
+      "status": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "case": "extra array member cannot broaden exact row scope",
+      "status": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "case": "named argument cannot replace exact captured expression",
+      "status": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "case": "empty typed array cannot inherit fixture source binding",
+      "status": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "case": "selected helper name does not admit an unreviewed second argument",
+      "status": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "case": "actual top loader client identity reads hospital mapping and has no clients relation",
+      "status": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "case": "summary has both actual finance reader and invoice-precheck view boundary",
+      "status": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "case": "PDF routines default volatility is not inherited from STABLE parent",
+      "status": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "case": "public context loader has no actor parameter and grants no actor admission",
+      "status": "PASS",
+      "native": "NOT_RUN"
+    }
+  ],
+  "independentTests": 27,
+  "reusableGuardLimitations": [
+    {
+      "counterexample": "CTE name leakage between PL SQL fragments",
+      "syntheticSql": [
+        "WITH unreviewed_relation AS (SELECT 1) SELECT * FROM unreviewed_relation",
+        "SELECT * FROM unreviewed_relation"
+      ],
+      "candidateClassifiedAndHeld": true,
+      "nativePurity": "NOT_PROVED",
+      "actualFrozenInputAffected": false
+    },
+    {
+      "counterexample": "nested CTE name leakage into outer range",
+      "syntheticSql": [
+        "SELECT * FROM unreviewed_relation WHERE EXISTS (WITH unreviewed_relation AS (SELECT 1) SELECT * FROM unreviewed_relation)"
+      ],
+      "candidateClassifiedAndHeld": true,
+      "nativePurity": "NOT_PROVED",
+      "actualFrozenInputAffected": false
+    },
+    {
+      "counterexample": "finance second argument admitted by name-only classifier",
+      "syntheticSql": [
+        "SELECT * FROM public._pay_outstanding_components(ARRAY[pt.timesheet_id],NULL::uuid)"
+      ],
+      "candidateClassifiedAndHeld": true,
+      "nativePurity": "NOT_PROVED",
+      "actualFrozenInputAffected": false
+    },
+    {
+      "counterexample": "selected helper extra argument admitted by name-only classifier",
+      "syntheticSql": [
+        "SELECT private._candidate_normalize_email('x','unexpected')"
+      ],
+      "candidateClassifiedAndHeld": true,
+      "nativePurity": "NOT_PROVED",
+      "actualFrozenInputAffected": false
+    }
+  ],
+  "native": "NOT_RUN",
+  "nativeReadEffect": "NOT_PROVED",
+  "actualStoredViewEquivalence": "NOT_PROVED",
+  "financeOwnerClosure": "REQUIRED_NOT_PROVIDED_IN_THIS_LANE",
+  "bankBodiesRead": 0,
+  "runtimeTargets": [],
+  "rootWrites": 0
+}

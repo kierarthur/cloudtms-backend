@@ -1,0 +1,328 @@
+{
+  "version": "DAILY_NATIVE_SUMMARY_FINANCE_BOUNDARY_METADATA_V1",
+  "authenticated": true,
+  "readOnly": true,
+  "database": "agency_test",
+  "sourceOrFunctionBodyRead": false,
+  "functionsInvoked": false,
+  "routineSearch": {
+    "authenticated": true,
+    "read_only": true,
+    "database": "agency_test",
+    "total": 2,
+    "limit": 50,
+    "offset": 0,
+    "functions": [
+      {
+        "schema_name": "public",
+        "function_name": "_pay_outstanding_components",
+        "identity_arguments": "p_timesheet_ids uuid[]",
+        "result_type": "TABLE(timesheet_id uuid, key_type text, key_value text, truth_ex_vat numeric, baseline_ex_vat numeric, reserved_ex_vat numeric, outstanding_ex_vat numeric, truth_inc_vat numeric, baseline_inc_vat numeric, reserved_inc_vat numeric, outstanding_inc_vat numeric, reservation_overrun_detected boolean)",
+        "language": "sql",
+        "kind": "function",
+        "security_definer": true,
+        "volatility": "stable"
+      },
+      {
+        "schema_name": "public",
+        "function_name": "_pay_outstanding_components",
+        "identity_arguments": "p_timesheet_ids uuid[], p_exclude_pay_batch_id uuid",
+        "result_type": "TABLE(timesheet_id uuid, key_type text, key_value text, truth_ex_vat numeric, baseline_ex_vat numeric, reserved_ex_vat numeric, outstanding_ex_vat numeric, truth_inc_vat numeric, baseline_inc_vat numeric, reserved_inc_vat numeric, outstanding_inc_vat numeric, reservation_overrun_detected boolean)",
+        "language": "sql",
+        "kind": "function",
+        "security_definer": true,
+        "volatility": "stable"
+      }
+    ]
+  },
+  "routineAcl": {
+    "authenticated": true,
+    "read_only": true,
+    "database": "agency_test",
+    "live_access_allowed": false,
+    "secrets_returned": false,
+    "metadata_contract": "CLOUDTMS_ROUTINE_METADATA_V1",
+    "requested_routine_count": 2,
+    "requested_role_count": 4,
+    "total": 2,
+    "limit": 50,
+    "offset": 0,
+    "returned": 2,
+    "eof": true,
+    "next_offset": null,
+    "truncated": false,
+    "business_rows_returned": 0,
+    "caller_supplied_sql_accepted": false,
+    "effective_execute_source": "pg_catalog.has_function_privilege(role_oid, routine_oid, EXECUTE)",
+    "effective_schema_usage_source": "pg_catalog.has_schema_privilege(role_oid, schema_oid, USAGE)",
+    "roles": [
+      {
+        "role": "dee50tht",
+        "role_present": true,
+        "can_login": true,
+        "superuser": false,
+        "inherits_by_default": true,
+        "bypass_rls": false
+      },
+      {
+        "role": "service_role",
+        "role_present": true,
+        "can_login": false,
+        "superuser": false,
+        "inherits_by_default": false,
+        "bypass_rls": false
+      },
+      {
+        "role": "anon",
+        "role_present": true,
+        "can_login": false,
+        "superuser": false,
+        "inherits_by_default": false,
+        "bypass_rls": false
+      },
+      {
+        "role": "authenticated",
+        "role_present": true,
+        "can_login": false,
+        "superuser": false,
+        "inherits_by_default": false,
+        "bypass_rls": false
+      }
+    ],
+    "effective_membership_paths": [
+      {
+        "requested_role": "anon",
+        "inherited_role": "anon",
+        "depth": 0,
+        "path": "{anon}",
+        "admin_option": null,
+        "inherit_option": null,
+        "set_option": null
+      },
+      {
+        "requested_role": "authenticated",
+        "inherited_role": "authenticated",
+        "depth": 0,
+        "path": "{authenticated}",
+        "admin_option": null,
+        "inherit_option": null,
+        "set_option": null
+      },
+      {
+        "requested_role": "dee50tht",
+        "inherited_role": "dee50tht",
+        "depth": 0,
+        "path": "{dee50tht}",
+        "admin_option": null,
+        "inherit_option": null,
+        "set_option": null
+      },
+      {
+        "requested_role": "service_role",
+        "inherited_role": "service_role",
+        "depth": 0,
+        "path": "{service_role}",
+        "admin_option": null,
+        "inherit_option": null,
+        "set_option": null
+      }
+    ],
+    "items": [
+      {
+        "requested_ordinal": 0,
+        "schema": "public",
+        "name": "_pay_outstanding_components",
+        "identity_arguments": "p_timesheet_ids uuid[]",
+        "present": true,
+        "routine_oid": "325806",
+        "kind": "function",
+        "owner": "dee50tht",
+        "language": "sql",
+        "security_definer": true,
+        "volatility": "stable",
+        "result_type": "TABLE(timesheet_id uuid, key_type text, key_value text, truth_ex_vat numeric, baseline_ex_vat numeric, reserved_ex_vat numeric, outstanding_ex_vat numeric, truth_inc_vat numeric, baseline_inc_vat numeric, reserved_inc_vat numeric, outstanding_inc_vat numeric, reservation_overrun_detected boolean)",
+        "acl_uses_postgresql_default": false,
+        "direct_or_default_execute_acl": [
+          {
+            "routine_oid": "325806",
+            "grantee": "dee50tht",
+            "grantor": "dee50tht",
+            "privilege_type": "EXECUTE",
+            "is_grantable": false,
+            "derived_from_postgresql_default_acl": false
+          },
+          {
+            "routine_oid": "325806",
+            "grantee": "service_role",
+            "grantor": "dee50tht",
+            "privilege_type": "EXECUTE",
+            "is_grantable": false,
+            "derived_from_postgresql_default_acl": false
+          }
+        ],
+        "effective_roles": [
+          {
+            "routine_oid": "325806",
+            "role": "dee50tht",
+            "role_present": true,
+            "effective_execute": true,
+            "effective_schema_usage": true,
+            "effective_callable": true
+          },
+          {
+            "routine_oid": "325806",
+            "role": "service_role",
+            "role_present": true,
+            "effective_execute": true,
+            "effective_schema_usage": true,
+            "effective_callable": true
+          },
+          {
+            "routine_oid": "325806",
+            "role": "anon",
+            "role_present": true,
+            "effective_execute": false,
+            "effective_schema_usage": true,
+            "effective_callable": false
+          },
+          {
+            "routine_oid": "325806",
+            "role": "authenticated",
+            "role_present": true,
+            "effective_execute": false,
+            "effective_schema_usage": true,
+            "effective_callable": false
+          }
+        ]
+      },
+      {
+        "requested_ordinal": 1,
+        "schema": "public",
+        "name": "_pay_outstanding_components",
+        "identity_arguments": "p_timesheet_ids uuid[], p_exclude_pay_batch_id uuid",
+        "present": true,
+        "routine_oid": "325807",
+        "kind": "function",
+        "owner": "dee50tht",
+        "language": "sql",
+        "security_definer": true,
+        "volatility": "stable",
+        "result_type": "TABLE(timesheet_id uuid, key_type text, key_value text, truth_ex_vat numeric, baseline_ex_vat numeric, reserved_ex_vat numeric, outstanding_ex_vat numeric, truth_inc_vat numeric, baseline_inc_vat numeric, reserved_inc_vat numeric, outstanding_inc_vat numeric, reservation_overrun_detected boolean)",
+        "acl_uses_postgresql_default": false,
+        "direct_or_default_execute_acl": [
+          {
+            "routine_oid": "325807",
+            "grantee": "dee50tht",
+            "grantor": "dee50tht",
+            "privilege_type": "EXECUTE",
+            "is_grantable": false,
+            "derived_from_postgresql_default_acl": false
+          },
+          {
+            "routine_oid": "325807",
+            "grantee": "service_role",
+            "grantor": "dee50tht",
+            "privilege_type": "EXECUTE",
+            "is_grantable": false,
+            "derived_from_postgresql_default_acl": false
+          }
+        ],
+        "effective_roles": [
+          {
+            "routine_oid": "325807",
+            "role": "dee50tht",
+            "role_present": true,
+            "effective_execute": true,
+            "effective_schema_usage": true,
+            "effective_callable": true
+          },
+          {
+            "routine_oid": "325807",
+            "role": "service_role",
+            "role_present": true,
+            "effective_execute": true,
+            "effective_schema_usage": true,
+            "effective_callable": true
+          },
+          {
+            "routine_oid": "325807",
+            "role": "anon",
+            "role_present": true,
+            "effective_execute": false,
+            "effective_schema_usage": true,
+            "effective_callable": false
+          },
+          {
+            "routine_oid": "325807",
+            "role": "authenticated",
+            "role_present": true,
+            "effective_execute": false,
+            "effective_schema_usage": true,
+            "effective_callable": false
+          }
+        ]
+      }
+    ]
+  },
+  "viewDependencies": {
+    "view": "public.v_timesheets_summary_base",
+    "pages": 3,
+    "total": 233,
+    "eof": true,
+    "functionEdges": [
+      {
+        "dependent": {
+          "name": null,
+          "type": "rule",
+          "schema": null,
+          "identity": "\"_RETURN\" on public.v_timesheets_summary_base",
+          "subobject_id": 0
+        },
+        "referenced": {
+          "name": null,
+          "type": "function",
+          "schema": "public",
+          "identity": "public._pay_outstanding_components(pg_catalog.uuid[])",
+          "subobject_id": 0
+        },
+        "dependency_type": "normal"
+      },
+      {
+        "dependent": {
+          "name": null,
+          "type": "rule",
+          "schema": null,
+          "identity": "\"_RETURN\" on public.v_timesheets_summary_base",
+          "subobject_id": 0
+        },
+        "referenced": {
+          "name": null,
+          "type": "function",
+          "schema": "public",
+          "identity": "public.timesheet_pdf_reference_sig(pg_catalog.uuid)",
+          "subobject_id": 0
+        },
+        "dependency_type": "normal"
+      },
+      {
+        "dependent": {
+          "name": null,
+          "type": "rule",
+          "schema": null,
+          "identity": "\"_RETURN\" on public.v_timesheets_summary_base",
+          "subobject_id": 0
+        },
+        "referenced": {
+          "name": null,
+          "type": "function",
+          "schema": "public",
+          "identity": "public.contract_settings_effective_get_v1(pg_catalog.uuid,pg_catalog.uuid,pg_catalog.date,pg_catalog.text,pg_catalog.uuid)",
+          "subobject_id": 0
+        },
+        "dependency_type": "normal"
+      }
+    ]
+  },
+  "argumentDefaults": "NOT_RETURNED_BY_FIXED_TOOLS_NOT_INFERRED",
+  "qualification": "Actual stored view dependency binds the one-argument uuid[] finance routine; no finance-body, runtime-effect, public-result or purity qualification"
+}

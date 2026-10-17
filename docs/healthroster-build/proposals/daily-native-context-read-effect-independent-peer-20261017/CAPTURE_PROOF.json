@@ -1,0 +1,551 @@
+{
+  "candidateCommit": "28457faeab3269ab65dbd2df92f6b04ee074cb41",
+  "candidatePrefix": "docs/healthroster-build/proposals/daily-native-context-read-effect-closure-20261017",
+  "candidateManifestSha256": "0977b1340702d8a1ec0a752be064801fee2af368b138a8a4b2381d793e252487",
+  "candidateFiles": 41,
+  "files": [
+    {
+      "file": "AST_CENSUS.json",
+      "bytes": 1074864,
+      "sha256": "59a22552beecf0751f45f87b41dbbb41496382b959d4a35c5d57394886b95ed9",
+      "moneySavedGitExact": true,
+      "rootUncommittedCopyRawExact": true
+    },
+    {
+      "file": "ast-census.py",
+      "bytes": 4188,
+      "sha256": "3bd891eebac6252c43af3821835a071d4523e0bca3c66085627d2f05de86000c",
+      "moneySavedGitExact": true,
+      "rootUncommittedCopyRawExact": true
+    },
+    {
+      "file": "capture-metadata.mjs",
+      "bytes": 2104,
+      "sha256": "b322ddcb0ec4bc5c956147ddb561fb7beee478017bfde78617cff55c9f365a5d",
+      "moneySavedGitExact": true,
+      "rootUncommittedCopyRawExact": true
+    },
+    {
+      "file": "capture.mjs",
+      "bytes": 1949,
+      "sha256": "9d42328342d7c9d7aa7bf070cbcf7ab0a4c4f618f739bfd745250d89cb795e3a",
+      "moneySavedGitExact": true,
+      "rootUncommittedCopyRawExact": true
+    },
+    {
+      "file": "CLIENT_RESOLUTION.md",
+      "bytes": 2079,
+      "sha256": "b60d8406d9d39bc10eda87292213b373e8a0860540ae82828be55c072dc54d6e",
+      "moneySavedGitExact": true,
+      "rootUncommittedCopyRawExact": true
+    },
+    {
+      "file": "DECLARATION_INDEX.json",
+      "bytes": 39132,
+      "sha256": "379cbc1d628a0214e97a2d400b4d8fa2b43594321c574fdcf67c50ac16cc39fb",
+      "moneySavedGitExact": true,
+      "rootUncommittedCopyRawExact": true
+    },
+    {
+      "file": "DOCUMENTARY_CONTRACT_METADATA.json",
+      "bytes": 429739,
+      "sha256": "ad1faf621f8ddb24f6b4c2d86e8d25ca2873c28d57a1fb9fe7b5edd14c824317",
+      "moneySavedGitExact": true,
+      "rootUncommittedCopyRawExact": true
+    },
+    {
+      "file": "EFFECT_CLOSURE.json",
+      "bytes": 29670,
+      "sha256": "8d0b9bb209a54e1601b632f5f589953467dbbe63b36700d47ecbd0e0e663fdab",
+      "moneySavedGitExact": true,
+      "rootUncommittedCopyRawExact": true
+    },
+    {
+      "file": "effect-plan.py",
+      "bytes": 6376,
+      "sha256": "f1cee6f0eb7e79f06ac59fe102e84944a8c7cf7c4b4e1a94d95c11e9a960fb55",
+      "moneySavedGitExact": true,
+      "rootUncommittedCopyRawExact": true
+    },
+    {
+      "file": "EXTERNAL_EVIDENCE_PINS.json",
+      "bytes": 1855,
+      "sha256": "34ee67b9a09a0853a758549af337f2e2cfdb58ff0b3ea55f036507741a7c646f",
+      "moneySavedGitExact": true,
+      "rootUncommittedCopyRawExact": true
+    },
+    {
+      "file": "FREEZE_PROOF.json",
+      "bytes": 357,
+      "sha256": "4935668e5e6c24462a0402c3d7371d3cc64bb2bd8bcdd6e9b45b05180c58dfc9",
+      "moneySavedGitExact": true,
+      "rootUncommittedCopyRawExact": true
+    },
+    {
+      "file": "freeze.mjs",
+      "bytes": 3641,
+      "sha256": "2e856cf5a3fdb1cf864e14b3161f50f6c9f347fc08b7ef79a981b3b7c0ee0f85",
+      "moneySavedGitExact": true,
+      "rootUncommittedCopyRawExact": true
+    },
+    {
+      "file": "PLAN.md",
+      "bytes": 16283,
+      "sha256": "45e01b9bade7630a6ed8744d0a6bc1588762ebae734442059408ca905c5210e2",
+      "moneySavedGitExact": true,
+      "rootUncommittedCopyRawExact": true
+    },
+    {
+      "file": "README.md",
+      "bytes": 1108,
+      "sha256": "9fac9af37d2e54226c27902f948dbacfd588edeccf61dd27948785cb1892a35a",
+      "moneySavedGitExact": true,
+      "rootUncommittedCopyRawExact": true
+    },
+    {
+      "file": "reference/current-native-finance-boundary-observation.json",
+      "bytes": 10894,
+      "sha256": "29ef333fbf553cddc76aca0d4b17497a10dc76401a110167b5eb3b5cedfa4683",
+      "moneySavedGitExact": true,
+      "rootUncommittedCopyRawExact": true
+    },
+    {
+      "file": "reference/current-native-top-context-observation.json",
+      "bytes": 14564,
+      "sha256": "631192d73fbe65e23b9cf98cbe133882b0c7043a82e3625fefdeb62353522f66",
+      "moneySavedGitExact": true,
+      "rootUncommittedCopyRawExact": true
+    },
+    {
+      "file": "reference/genuine-daily-recipe.json",
+      "bytes": 11525,
+      "sha256": "f910e657771b8530f10c3a73527fede7c837dfd90f11945ed023e188f27a658c",
+      "moneySavedGitExact": true,
+      "rootUncommittedCopyRawExact": true
+    },
+    {
+      "file": "reference/physical-s5-scope.json",
+      "bytes": 3756,
+      "sha256": "6a79abcb49a8c5140c6ac13fddf024342e75d89de3b2b087509f2e233b68586d",
+      "moneySavedGitExact": true,
+      "rootUncommittedCopyRawExact": true
+    },
+    {
+      "file": "reference/private__candidate_manager_authoriser_domain_array_v2.sql",
+      "bytes": 1134,
+      "sha256": "08a11187357177365c79cc86a2f5c0151b83d39b9ef762bb3207a8e0ceaad5ff",
+      "moneySavedGitExact": true,
+      "rootUncommittedCopyRawExact": true
+    },
+    {
+      "file": "reference/private__candidate_manager_authoriser_effective_v2.sql",
+      "bytes": 2573,
+      "sha256": "169a40464d705ef10fd89bcb3445654cbff9d03a2f58e1d7e804ffc773f81311",
+      "moneySavedGitExact": true,
+      "rootUncommittedCopyRawExact": true
+    },
+    {
+      "file": "reference/private__candidate_manager_authoriser_email_array_v2.sql",
+      "bytes": 1089,
+      "sha256": "b80ea81da356fb33877aca886beab1844758b373e210bc15f403dd6e8f44f064",
+      "moneySavedGitExact": true,
+      "rootUncommittedCopyRawExact": true
+    },
+    {
+      "file": "reference/private__candidate_manager_authoriser_policy_normalize_v2.sql",
+      "bytes": 3023,
+      "sha256": "deb34fc1fa6e7046075865ca998653407d45728c8596019eae277740458f0a2d",
+      "moneySavedGitExact": true,
+      "rootUncommittedCopyRawExact": true
+    },
+    {
+      "file": "reference/private__candidate_normalize_domain_v1.sql",
+      "bytes": 257,
+      "sha256": "e9ac8f0fd4fd2e96d087c5020c35ca697044d1a4870cdc5f1378acedb68a4010",
+      "moneySavedGitExact": true,
+      "rootUncommittedCopyRawExact": true
+    },
+    {
+      "file": "reference/private__candidate_normalize_email.sql",
+      "bytes": 225,
+      "sha256": "a0d6fc7b820bede6a22c737c9151d219d49c16c70d66781852ecdb804df52e82",
+      "moneySavedGitExact": true,
+      "rootUncommittedCopyRawExact": true
+    },
+    {
+      "file": "reference/private__contract_settings_effective_core_v1.sql",
+      "bytes": 20739,
+      "sha256": "185c859b497c3457e08cbb6ff95468bde375234a4527fe8753659444af35dde1",
+      "moneySavedGitExact": true,
+      "rootUncommittedCopyRawExact": true
+    },
+    {
+      "file": "reference/private__timesheet_settings_authority_frozen_v1.sql",
+      "bytes": 1325,
+      "sha256": "9b3115ec709f8235fe7b3c8179ff18c88810412ff6fe653b50607734cc4128a2",
+      "moneySavedGitExact": true,
+      "rootUncommittedCopyRawExact": true
+    },
+    {
+      "file": "reference/public__ctms_correction_policy_envelope_read_v1.sql",
+      "bytes": 2175,
+      "sha256": "dda9087bc3281184746fc0d60c8d5fae2b3d659575fa29923862401edc80f7fe",
+      "moneySavedGitExact": true,
+      "rootUncommittedCopyRawExact": true
+    },
+    {
+      "file": "reference/public__ctms_correction_policy_leg_read_v1.sql",
+      "bytes": 3468,
+      "sha256": "68694f6fb4d86539a46b46a053eabdb33fa07a640af685d450f3b279909d721c",
+      "moneySavedGitExact": true,
+      "rootUncommittedCopyRawExact": true
+    },
+    {
+      "file": "reference/public__ctms_import_correction_classify_v1.sql",
+      "bytes": 3605,
+      "sha256": "42f077a8cee8f6c855ab65ffb22dbc8a9c5b8fe611488b1ed2173722ac8046b2",
+      "moneySavedGitExact": true,
+      "rootUncommittedCopyRawExact": true
+    },
+    {
+      "file": "reference/public_contract_settings_effective_get_v1.sql",
+      "bytes": 466,
+      "sha256": "e98cd5cf004b1946e8192ed1d6f689a7fcf06640dcb643f4260c962733f2f8e6",
+      "moneySavedGitExact": true,
+      "rootUncommittedCopyRawExact": true
+    },
+    {
+      "file": "reference/public_settings_finance_pick.sql",
+      "bytes": 1522,
+      "sha256": "271b632f9db9f39cfa71230b17c4a8ac9f26a97177303d9f5b8745bc5be9a5ba",
+      "moneySavedGitExact": true,
+      "rootUncommittedCopyRawExact": true
+    },
+    {
+      "file": "reference/public_timesheet_pdf_reference_rows.sql",
+      "bytes": 7276,
+      "sha256": "42a8eae9c396da8247cc91f43cfca4de9b088f7d76bb476d08cf95a6285204e5",
+      "moneySavedGitExact": true,
+      "rootUncommittedCopyRawExact": true
+    },
+    {
+      "file": "reference/public_timesheet_pdf_reference_sig.sql",
+      "bytes": 660,
+      "sha256": "c9481d92c82c0a58fb04d842c33100c52c8daee392e86a51d0002634b91b27e2",
+      "moneySavedGitExact": true,
+      "rootUncommittedCopyRawExact": true
+    },
+    {
+      "file": "reference/public_tsfin_load_context_batch.sql",
+      "bytes": 13851,
+      "sha256": "3781fa6733119ea219fd0e6478cadf4da5504f359cfd2248c34b33badc4f0e81",
+      "moneySavedGitExact": true,
+      "rootUncommittedCopyRawExact": true
+    },
+    {
+      "file": "reference/public_v_timesheets_summary_base.sql",
+      "bytes": 56239,
+      "sha256": "e442edf2bc2eeb48a68b9e8e2eebec623861d849d9255347bd53fca74a5357c2",
+      "moneySavedGitExact": true,
+      "rootUncommittedCopyRawExact": true
+    },
+    {
+      "file": "reference/public_v_timesheets_summary.sql",
+      "bytes": 5204,
+      "sha256": "e8338e05e11a3456ee657769f73309e9232997f924ba6c51e6b5979677ffbd36",
+      "moneySavedGitExact": true,
+      "rootUncommittedCopyRawExact": true
+    },
+    {
+      "file": "SOURCE_SELECTION.json",
+      "bytes": 14733,
+      "sha256": "31451971724fab5de1f4604c87c3f90d959d5ebd1c912eed2807d29be19b5734",
+      "moneySavedGitExact": true,
+      "rootUncommittedCopyRawExact": true
+    },
+    {
+      "file": "source-index.mjs",
+      "bytes": 4477,
+      "sha256": "6bdd8c77308adfb68c76a75f3cb26419a3b8dec3e8e5839d86dcdf943a369409",
+      "moneySavedGitExact": true,
+      "rootUncommittedCopyRawExact": true
+    },
+    {
+      "file": "TEST_RESULTS.json",
+      "bytes": 2642,
+      "sha256": "a70663f67b6cac5cd2e7277d369ab4379b22fb5bdc5268d3fc5fceac8e6a89b5",
+      "moneySavedGitExact": true,
+      "rootUncommittedCopyRawExact": true
+    },
+    {
+      "file": "test-effect-plan.py",
+      "bytes": 3409,
+      "sha256": "2970119c8a73bcd35edfd1fe6bc0f0987d9fb143a9ba81b631a6ad4b247e23c5",
+      "moneySavedGitExact": true,
+      "rootUncommittedCopyRawExact": true
+    },
+    {
+      "file": "MANIFEST.json",
+      "bytes": 7374,
+      "sha256": "0977b1340702d8a1ec0a752be064801fee2af368b138a8a4b2381d793e252487",
+      "moneySavedGitExact": true,
+      "rootUncommittedCopyRawExact": true
+    }
+  ],
+  "selectedOwners": [
+    {
+      "identity": "public._ctms_correction_policy_envelope_read_v1(uuid)",
+      "source": "supabase/repeatable/21072026_1235_00_import_correction_policy_helpers.sql",
+      "statementSha256": "dda9087bc3281184746fc0d60c8d5fae2b3d659575fa29923862401edc80f7fe",
+      "sourceParentSha256": "8c44d6ce6267996f148084fdb492fd7200b4c0110bfebf952b7e3501c3b874b5",
+      "rawOffsets": [
+        3850,
+        6025
+      ],
+      "bytes": 2175,
+      "completeRawParentRangeEqual": true
+    },
+    {
+      "identity": "public._ctms_correction_policy_leg_read_v1(uuid)",
+      "source": "supabase/repeatable/21072026_1235_00_import_correction_policy_helpers.sql",
+      "statementSha256": "68694f6fb4d86539a46b46a053eabdb33fa07a640af685d450f3b279909d721c",
+      "sourceParentSha256": "8c44d6ce6267996f148084fdb492fd7200b4c0110bfebf952b7e3501c3b874b5",
+      "rawOffsets": [
+        6027,
+        9495
+      ],
+      "bytes": 3468,
+      "completeRawParentRangeEqual": true
+    },
+    {
+      "identity": "public._ctms_import_correction_classify_v1(uuid)",
+      "source": "supabase/repeatable/21072026_1235_00_import_correction_policy_helpers.sql",
+      "statementSha256": "42f077a8cee8f6c855ab65ffb22dbc8a9c5b8fe611488b1ed2173722ac8046b2",
+      "sourceParentSha256": "8c44d6ce6267996f148084fdb492fd7200b4c0110bfebf952b7e3501c3b874b5",
+      "rawOffsets": [
+        243,
+        3848
+      ],
+      "bytes": 3605,
+      "completeRawParentRangeEqual": true
+    },
+    {
+      "identity": "private._candidate_normalize_domain_v1(text)",
+      "source": "supabase/repeatable/07082026_2059_candidate_app_private_helpers_v1.sql",
+      "statementSha256": "e9ac8f0fd4fd2e96d087c5020c35ca697044d1a4870cdc5f1378acedb68a4010",
+      "sourceParentSha256": "d929a42a7726a65b2b28c21715e82d1e75ee81497ecc5784bced4938a2c59f3d",
+      "rawOffsets": [
+        336,
+        593
+      ],
+      "bytes": 257,
+      "completeRawParentRangeEqual": true
+    },
+    {
+      "identity": "private._candidate_normalize_email(text)",
+      "source": "supabase/repeatable/07082026_2059_candidate_app_private_helpers_v1.sql",
+      "statementSha256": "a0d6fc7b820bede6a22c737c9151d219d49c16c70d66781852ecdb804df52e82",
+      "sourceParentSha256": "d929a42a7726a65b2b28c21715e82d1e75ee81497ecc5784bced4938a2c59f3d",
+      "rawOffsets": [
+        109,
+        334
+      ],
+      "bytes": 225,
+      "completeRawParentRangeEqual": true
+    },
+    {
+      "identity": "public.settings_finance_pick(date)",
+      "source": "supabase/repeatable/06012026_settings_finwindow_eligibletimesshets_plus_recompute_totals.sqls.sql",
+      "statementSha256": "271b632f9db9f39cfa71230b17c4a8ac9f26a97177303d9f5b8745bc5be9a5ba",
+      "sourceParentSha256": "9d7028abe3c49d6fd7448600efcdff9bca2a36c6d9a8cc79bb781bb52d8aeb39",
+      "rawOffsets": [
+        673,
+        2189
+      ],
+      "bytes": 1522,
+      "completeRawParentRangeEqual": true
+    },
+    {
+      "identity": "public.timesheet_pdf_reference_rows(uuid)",
+      "source": "supabase/repeatable/28012026_invoice_queuing.sql",
+      "statementSha256": "42a8eae9c396da8247cc91f43cfca4de9b088f7d76bb476d08cf95a6285204e5",
+      "sourceParentSha256": "e904669ebd355e7a6e9fcea693862de589a0a40ca65bb900dc19b6bf3886d6fe",
+      "rawOffsets": [
+        18499,
+        25775
+      ],
+      "bytes": 7276,
+      "completeRawParentRangeEqual": true
+    },
+    {
+      "identity": "public.timesheet_pdf_reference_sig(uuid)",
+      "source": "supabase/repeatable/28012026_invoice_queuing.sql",
+      "statementSha256": "c9481d92c82c0a58fb04d842c33100c52c8daee392e86a51d0002634b91b27e2",
+      "sourceParentSha256": "e904669ebd355e7a6e9fcea693862de589a0a40ca65bb900dc19b6bf3886d6fe",
+      "rawOffsets": [
+        25971,
+        26631
+      ],
+      "bytes": 660,
+      "completeRawParentRangeEqual": true
+    },
+    {
+      "identity": "public.tsfin_load_context_batch(uuid[])",
+      "source": "supabase/repeatable/21072026_1235_36_tsfin_load_context_batch.sql",
+      "statementSha256": "3781fa6733119ea219fd0e6478cadf4da5504f359cfd2248c34b33badc4f0e81",
+      "sourceParentSha256": "a42094b5b39c2a1d858c6c995951c7f9a1e82092d4949a38b9a58401f834e1d9",
+      "rawOffsets": [
+        222,
+        14057
+      ],
+      "bytes": 13851,
+      "completeRawParentRangeEqual": true
+    },
+    {
+      "identity": "private._contract_settings_effective_core_v1(uuid,uuid,date,text,uuid)",
+      "source": "supabase/repeatable/06102026_1214_self_bill_candidate_expense_separation_v1.sql",
+      "statementSha256": "185c859b497c3457e08cbb6ff95468bde375234a4527fe8753659444af35dde1",
+      "sourceParentSha256": "b57dfa67b74854a67563af4c3ec14cd43250ab9c2528eee54de27a2c1370a18e",
+      "rawOffsets": [
+        336,
+        21075
+      ],
+      "bytes": 20739,
+      "completeRawParentRangeEqual": true
+    },
+    {
+      "identity": "private._timesheet_settings_authority_frozen_v1(uuid)",
+      "source": "supabase/repeatable/03092026_1641_contract_settings_effective_authority_v1.sql",
+      "statementSha256": "9b3115ec709f8235fe7b3c8179ff18c88810412ff6fe653b50607734cc4128a2",
+      "sourceParentSha256": "1b0409fd7196096b2a94ff2312ad639a95c9f7770ffd04fe3c58c308564b2e18",
+      "rawOffsets": [
+        349,
+        1674
+      ],
+      "bytes": 1325,
+      "completeRawParentRangeEqual": true
+    },
+    {
+      "identity": "private._candidate_manager_authoriser_email_array_v2(jsonb)",
+      "source": "supabase/repeatable/26082026_0043_candidate_manager_authoriser_policy_v2.sql",
+      "statementSha256": "b80ea81da356fb33877aca886beab1844758b373e210bc15f403dd6e8f44f064",
+      "sourceParentSha256": "7a3d21d16d027be087925e531c45733a4eb01725b1e9fb6521c60f58093664af",
+      "rawOffsets": [
+        8,
+        1097
+      ],
+      "bytes": 1089,
+      "completeRawParentRangeEqual": true
+    },
+    {
+      "identity": "private._candidate_manager_authoriser_domain_array_v2(jsonb)",
+      "source": "supabase/repeatable/26082026_0043_candidate_manager_authoriser_policy_v2.sql",
+      "statementSha256": "08a11187357177365c79cc86a2f5c0151b83d39b9ef762bb3207a8e0ceaad5ff",
+      "sourceParentSha256": "7a3d21d16d027be087925e531c45733a4eb01725b1e9fb6521c60f58093664af",
+      "rawOffsets": [
+        1099,
+        2233
+      ],
+      "bytes": 1134,
+      "completeRawParentRangeEqual": true
+    },
+    {
+      "identity": "private._candidate_manager_authoriser_policy_normalize_v2(jsonb,text)",
+      "source": "supabase/repeatable/26082026_0043_candidate_manager_authoriser_policy_v2.sql",
+      "statementSha256": "deb34fc1fa6e7046075865ca998653407d45728c8596019eae277740458f0a2d",
+      "sourceParentSha256": "7a3d21d16d027be087925e531c45733a4eb01725b1e9fb6521c60f58093664af",
+      "rawOffsets": [
+        2235,
+        5258
+      ],
+      "bytes": 3023,
+      "completeRawParentRangeEqual": true
+    },
+    {
+      "identity": "private._candidate_manager_authoriser_effective_v2(jsonb,jsonb)",
+      "source": "supabase/repeatable/26082026_0043_candidate_manager_authoriser_policy_v2.sql",
+      "statementSha256": "169a40464d705ef10fd89bcb3445654cbff9d03a2f58e1d7e804ffc773f81311",
+      "sourceParentSha256": "7a3d21d16d027be087925e531c45733a4eb01725b1e9fb6521c60f58093664af",
+      "rawOffsets": [
+        5536,
+        8109
+      ],
+      "bytes": 2573,
+      "completeRawParentRangeEqual": true
+    },
+    {
+      "identity": "public.contract_settings_effective_get_v1(uuid,uuid,date,text,uuid)",
+      "source": "supabase/repeatable/03092026_1641_contract_settings_effective_authority_v1.sql",
+      "statementSha256": "e98cd5cf004b1946e8192ed1d6f689a7fcf06640dcb643f4260c962733f2f8e6",
+      "sourceParentSha256": "1b0409fd7196096b2a94ff2312ad639a95c9f7770ffd04fe3c58c308564b2e18",
+      "rawOffsets": [
+        22652,
+        23118
+      ],
+      "bytes": 466,
+      "completeRawParentRangeEqual": true
+    },
+    {
+      "identity": "public.v_timesheets_summary_base",
+      "source": "supabase/repeatable/19122025_add_ready_to_pay_to_timesheets_summary_views.sql",
+      "statementSha256": "e442edf2bc2eeb48a68b9e8e2eebec623861d849d9255347bd53fca74a5357c2",
+      "sourceParentSha256": "ca7da5c696cc976ffa04b6ccb2ad0ba6956fc2de7712a7a6a5eea7c4499f2fcc",
+      "rawOffsets": [
+        79623,
+        135836
+      ],
+      "bytes": 56239,
+      "completeRawParentRangeEqual": true
+    },
+    {
+      "identity": "public.v_timesheets_summary",
+      "source": "supabase/repeatable/19122025_add_ready_to_pay_to_timesheets_summary_views.sql",
+      "statementSha256": "e8338e05e11a3456ee657769f73309e9232997f924ba6c51e6b5979677ffbd36",
+      "sourceParentSha256": "ca7da5c696cc976ffa04b6ccb2ad0ba6956fc2de7712a7a6a5eea7c4499f2fcc",
+      "rawOffsets": [
+        58083,
+        63283
+      ],
+      "bytes": 5204,
+      "completeRawParentRangeEqual": true
+    }
+  ],
+  "externalPins": [
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+      "commit": "2b0fcee4eeecb9ce3adb61ef3c25d02c0e5a948c",
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_CURRENT_NATIVE_CONTEXT_READONLY_20261017.json",
+      "to": "reference/current-native-top-context-observation.json",
+      "bytes": 14564,
+      "sha256": "631192d73fbe65e23b9cf98cbe133882b0c7043a82e3625fefdeb62353522f66"
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-checklist-native-14102026",
+      "commit": "be55b9a5d56386d58a7708b162bbb07b141f155a",
+      "file": "docs/healthroster-build/proposals/daily-health-s5-lifecycle-read-qualification-20261017/SCOPE_AND_FEASIBILITY.json",
+      "to": "reference/physical-s5-scope.json",
+      "bytes": 3756,
+      "sha256": "6a79abcb49a8c5140c6ac13fddf024342e75d89de3b2b087509f2e233b68586d"
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-checklist-native-14102026",
+      "commit": "ad02698589fa28b1a73af26390fad7cf4c0466f9",
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-fixture-recipe-20261017/RECIPE.json",
+      "to": "reference/genuine-daily-recipe.json",
+      "bytes": 11525,
+      "sha256": "f910e657771b8530f10c3a73527fede7c837dfd90f11945ed023e188f27a658c"
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+      "commit": "c276aa49eb4db86ff42e184011a09bf2b59f253e",
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_NATIVE_SUMMARY_FINANCE_BOUNDARY_METADATA_20261017.json",
+      "to": "reference/current-native-finance-boundary-observation.json",
+      "bytes": 10894,
+      "sha256": "29ef333fbf553cddc76aca0d4b17497a10dc76401a110167b5eb3b5cedfa4683"
+    }
+  ],
+  "rootCurrentCheckpoint": "42802228977b941325f0feb44c11918b0f42190f",
+  "rootWrites": 0,
+  "native": "NOT_RUN",
+  "bankBodiesRead": 0
+}
