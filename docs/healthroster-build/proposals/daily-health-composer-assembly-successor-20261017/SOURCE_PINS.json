@@ -1,0 +1,116 @@
+{
+  "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+  "rootCommit": "240e8f2286ff5259ce273fc7702e6061ca885787",
+  "report": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+  "reportCommit": "b776cedf6d2483aff44d6e1bada5e0f7b389112d",
+  "priorIndependentPeer": "0ee755825c136ab1434f98df003e0683d1326ae2",
+  "roots": [
+    {
+      "file": "supabase/repeatable/16102026_1342_nhsp_v6_daily_public_services/01_public_services.sqlinc",
+      "commit": "240e8f2286ff5259ce273fc7702e6061ca885787",
+      "sha256": "9d0038a0c0105eb9e44ad43c52364cf1b5ff03d212b44c40bdffc77b411f4b34",
+      "bytes": 18959,
+      "savedEqualsCommit": true
+    },
+    {
+      "file": "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/01_complete_helpers.sqlinc",
+      "commit": "240e8f2286ff5259ce273fc7702e6061ca885787",
+      "sha256": "95c35931e723787e4c5258ef704cb1115f0edbd9fd6b34e9ab25c4d0966b355b",
+      "bytes": 15886,
+      "savedEqualsCommit": true
+    },
+    {
+      "file": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/01_context.sqlinc",
+      "commit": "240e8f2286ff5259ce273fc7702e6061ca885787",
+      "sha256": "81a4b5a51c6898e728bcfa6c82e7326f7b3e3eaebf23847048473927615d5f3f",
+      "bytes": 15693,
+      "savedEqualsCommit": true
+    },
+    {
+      "file": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/02_admission.sqlinc",
+      "commit": "240e8f2286ff5259ce273fc7702e6061ca885787",
+      "sha256": "8b592b3833650f82159d703b960dab7baaf46d5958e02204a38bce45a407216e",
+      "bytes": 38065,
+      "savedEqualsCommit": true
+    },
+    {
+      "file": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/03_requests.sqlinc",
+      "commit": "240e8f2286ff5259ce273fc7702e6061ca885787",
+      "sha256": "daf9306ef07b5f9a8102ab65be38995e6465e13a433e997265911019eaed1912",
+      "bytes": 4862,
+      "savedEqualsCommit": true
+    },
+    {
+      "file": "supabase/migrations/16102026_0159_nhsp_v6_01_physical_source_review_schema.sql",
+      "commit": "240e8f2286ff5259ce273fc7702e6061ca885787",
+      "sha256": "d46481d0cd53880041b126c554d34dccc39854ff3bf31ac98883f85949cc1d82",
+      "bytes": 40625,
+      "savedEqualsCommit": true
+    },
+    {
+      "file": "supabase/release/migration-lock.json",
+      "commit": "240e8f2286ff5259ce273fc7702e6061ca885787",
+      "sha256": "655bbb55095a64a586fc448e1e654fd843564b55ca584f9f79967cb5c1a8eb14",
+      "bytes": 79294,
+      "savedEqualsCommit": false,
+      "provenance": "Committed original lock history only; concurrent root Source READ append is separate",
+      "observedSavedSha256": "6b0b4a3d518a3d80a2dff6ab9a17dfe347efb6c073574c4cf5014581ada2f250"
+    }
+  ],
+  "parents": [
+    {
+      "file": "docs/healthroster-build/proposals/v6-daily-health-composer-blocks-20261017/templates/01_review.sql.tmpl",
+      "commit": "b776cedf6d2483aff44d6e1bada5e0f7b389112d",
+      "sha256": "797a0f324d716b0002883f1272976e1196d06acdf36f6f71d687f551aa95e1a6",
+      "bytes": 8792,
+      "savedEqualsCommit": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/v6-daily-health-composer-blocks-20261017/templates/02_accept.sql.tmpl",
+      "commit": "b776cedf6d2483aff44d6e1bada5e0f7b389112d",
+      "sha256": "7bae24fa58c854f4e8df0b16e17cef8a04aff52fa88792f316f2daa7f42f21d3",
+      "bytes": 7621,
+      "savedEqualsCommit": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/v6-daily-health-composer-blocks-20261017/templates/03_result.sql.tmpl",
+      "commit": "b776cedf6d2483aff44d6e1bada5e0f7b389112d",
+      "sha256": "325f48bdc55048c42392105d055bc8fe2dcd138f4d4b9ec6a1d1e77c7f42dc1b",
+      "bytes": 3741,
+      "savedEqualsCommit": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/v6-daily-health-composer-blocks-20261017/health/00_presentation.sqlinc",
+      "commit": "b776cedf6d2483aff44d6e1bada5e0f7b389112d",
+      "sha256": "a3c7ce4e96fd67395e292752df2274e7464536ce3566b543a23f149de49fafc0",
+      "bytes": 4550,
+      "savedEqualsCommit": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/v6-daily-health-composer-blocks-20261017/health/10_revision_apply.sqlinc",
+      "commit": "b776cedf6d2483aff44d6e1bada5e0f7b389112d",
+      "sha256": "58cb6c60005c2e731cd4fe31b26c62aa70a2b4a10bf051ff1ef5e69783a28adf",
+      "bytes": 8104,
+      "savedEqualsCommit": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/v6-daily-health-composer-blocks-20261017/OWNER_BLOCKS.json",
+      "commit": "b776cedf6d2483aff44d6e1bada5e0f7b389112d",
+      "sha256": "6dcc99a25a5080ca3d35260aa4c589274cd03c5c9164a5535fb90dd4493cf718",
+      "bytes": 4431,
+      "savedEqualsCommit": true
+    }
+  ],
+  "bankingBodyReads": 0,
+  "sourceOnly": true,
+  "native": "NOT_RUN",
+  "policy": {
+    "path": "D:/Development/Legacy-Work/C-tmp/healthroster-handover/HealthRoster_Builder_Pack_16102026/NHSP_AUTHORISATION_AUDIT_15102026_HANDOFF_V6/WORKING_PREPARATION/DAILY_RATE_CORRECTION_CONTRACT.md",
+    "sha256": "d55b4c278a77bc576cbacc31812e1b3f2202c578895105f479b3a23e3e7549d1",
+    "copy": "reference/policy/DAILY_RATE_CORRECTION_CONTRACT.md"
+  },
+  "roleIdentitySuccessor": {
+    "commit": "1d00a57a1cf292f2a0c6cf8c17898d1e13204d31",
+    "status": "SEPARATE_PEER_ROOT_INTEGRATION_REQUIRED_NATIVE_NOT_PROVED"
+  }
+}

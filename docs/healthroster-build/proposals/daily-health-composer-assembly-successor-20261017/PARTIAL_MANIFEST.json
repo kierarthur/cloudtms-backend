@@ -1,0 +1,167 @@
+{
+  "version": "DAILY_HEALTH_COMPOSER_FIRST_AUTHORED_PARTIAL_V1",
+  "stage": "PARTIAL_AUTHORED_HEALTH_ENROLLMENT",
+  "rootCommit": "240e8f2286ff5259ce273fc7702e6061ca885787",
+  "reportParent": "b776cedf6d2483aff44d6e1bada5e0f7b389112d",
+  "completeAssembly": "IN_PROGRESS",
+  "unprovidedGenuineBankJoins": 3,
+  "runtimeSqlEmitted": false,
+  "native": "NOT_RUN",
+  "files": [
+    {
+      "file": "ASSEMBLY_STATE.json",
+      "bytes": 324,
+      "sha256": "a48e2347cb6f18628db201f28f91fce3018864c0d968d53334dc6bd12d652c4c"
+    },
+    {
+      "file": "FORWARD_REVERSE.json",
+      "bytes": 2956,
+      "sha256": "5a6f74dd977570e903427776c53cb18feb29c4ffe3e26117294df7953104f535"
+    },
+    {
+      "file": "OWNER_BLOCKS.json",
+      "bytes": 4431,
+      "sha256": "6dcc99a25a5080ca3d35260aa4c589274cd03c5c9164a5535fb90dd4493cf718"
+    },
+    {
+      "file": "PARTIAL_GRAMMAR.json",
+      "bytes": 986,
+      "sha256": "8d3e1fac9f23d5281f89dd970f8e1417a5b3b39c96fac0b495e45481aa3d0c9b"
+    },
+    {
+      "file": "PARTIAL_TEST_RESULTS.json",
+      "bytes": 673,
+      "sha256": "1a509d0250a8ac1d245eef00fc453b57c6365f18c9689770b89ad4acf1b12c11"
+    },
+    {
+      "file": "README.md",
+      "bytes": 4696,
+      "sha256": "b724dc4bb8cbb848a1b47a7f6a05803eae69abe92edb2e7c490156c88f6be596"
+    },
+    {
+      "file": "SOURCE_PINS.json",
+      "bytes": 5340,
+      "sha256": "21c1d4dc16389339d0f076ec3fce0b2b9ba47b341eeb8a5cb0ccee12bd8ad075"
+    },
+    {
+      "file": "admission/ONE_TIME_ADMISSION.sqlinc",
+      "bytes": 295,
+      "sha256": "bcda5a2c29f6c7e63bb38f8002341f89c56ce00e60394d17b4bffaf56b3a533b"
+    },
+    {
+      "file": "check-partial.mjs",
+      "bytes": 1592,
+      "sha256": "127cb4938824d34254ae55230f8a2316d0572c20c4c1d9c8984ef635410c738b"
+    },
+    {
+      "file": "grammar-partial.py",
+      "bytes": 993,
+      "sha256": "c55eb6b905f4c1df1eb9ed31808e3731d80e92d0c78a4c5c42cf23bf15f52b90"
+    },
+    {
+      "file": "health/05_review_enrollment.sqlinc",
+      "bytes": 2917,
+      "sha256": "006dd80653b9156ad1f162b9a2e78bc1e243fa38b5cdc75e123d5bc88119f3e6"
+    },
+    {
+      "file": "health/95_enrollment_acl.sqlinc",
+      "bytes": 224,
+      "sha256": "2283ee9f6da2ee5a45487b87b8cba31df6a070757a2220d7453be8e0c8470d97"
+    },
+    {
+      "file": "partial.test.mjs",
+      "bytes": 4622,
+      "sha256": "411417285fe5bb3c3c438a11684d83ff9bca08925ded5e22930f61310fb34f95"
+    },
+    {
+      "file": "prepare-partial.mjs",
+      "bytes": 6575,
+      "sha256": "0182807c632908164ab76061ee1922d05f5bba3bb40e98a62fb4ae742f54ecc6"
+    },
+    {
+      "file": "reference/policy/DAILY_RATE_CORRECTION_CONTRACT.md",
+      "bytes": 23611,
+      "sha256": "d55b4c278a77bc576cbacc31812e1b3f2202c578895105f479b3a23e3e7549d1"
+    },
+    {
+      "file": "reference/report/OWNER_BLOCKS.json",
+      "bytes": 4431,
+      "sha256": "6dcc99a25a5080ca3d35260aa4c589274cd03c5c9164a5535fb90dd4493cf718"
+    },
+    {
+      "file": "reference/report/health/00_presentation.sqlinc",
+      "bytes": 4550,
+      "sha256": "a3c7ce4e96fd67395e292752df2274e7464536ce3566b543a23f149de49fafc0"
+    },
+    {
+      "file": "reference/report/health/10_revision_apply.sqlinc",
+      "bytes": 8104,
+      "sha256": "58cb6c60005c2e731cd4fe31b26c62aa70a2b4a10bf051ff1ef5e69783a28adf"
+    },
+    {
+      "file": "reference/report/templates/01_review.sql.tmpl",
+      "bytes": 8792,
+      "sha256": "797a0f324d716b0002883f1272976e1196d06acdf36f6f71d687f551aa95e1a6"
+    },
+    {
+      "file": "reference/report/templates/02_accept.sql.tmpl",
+      "bytes": 7621,
+      "sha256": "7bae24fa58c854f4e8df0b16e17cef8a04aff52fa88792f316f2daa7f42f21d3"
+    },
+    {
+      "file": "reference/report/templates/03_result.sql.tmpl",
+      "bytes": 3741,
+      "sha256": "325f48bdc55048c42392105d055bc8fe2dcd138f4d4b9ec6a1d1e77c7f42dc1b"
+    },
+    {
+      "file": "reference/root/supabase/migrations/16102026_0159_nhsp_v6_01_physical_source_review_schema.sql",
+      "bytes": 40625,
+      "sha256": "d46481d0cd53880041b126c554d34dccc39854ff3bf31ac98883f85949cc1d82"
+    },
+    {
+      "file": "reference/root/supabase/release/migration-lock.json",
+      "bytes": 79294,
+      "sha256": "655bbb55095a64a586fc448e1e654fd843564b55ca584f9f79967cb5c1a8eb14"
+    },
+    {
+      "file": "reference/root/supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/01_context.sqlinc",
+      "bytes": 15693,
+      "sha256": "81a4b5a51c6898e728bcfa6c82e7326f7b3e3eaebf23847048473927615d5f3f"
+    },
+    {
+      "file": "reference/root/supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/02_admission.sqlinc",
+      "bytes": 38065,
+      "sha256": "8b592b3833650f82159d703b960dab7baaf46d5958e02204a38bce45a407216e"
+    },
+    {
+      "file": "reference/root/supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/03_requests.sqlinc",
+      "bytes": 4862,
+      "sha256": "daf9306ef07b5f9a8102ab65be38995e6465e13a433e997265911019eaed1912"
+    },
+    {
+      "file": "reference/root/supabase/repeatable/16102026_1342_nhsp_v6_daily_public_services/01_public_services.sqlinc",
+      "bytes": 18959,
+      "sha256": "9d0038a0c0105eb9e44ad43c52364cf1b5ff03d212b44c40bdffc77b411f4b34"
+    },
+    {
+      "file": "reference/root/supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/01_complete_helpers.sqlinc",
+      "bytes": 15886,
+      "sha256": "95c35931e723787e4c5258ef704cb1115f0edbd9fd6b34e9ab25c4d0966b355b"
+    },
+    {
+      "file": "seal-partial.mjs",
+      "bytes": 2093,
+      "sha256": "c63d12d50c7932835774b4635ff7147daae08fc99c18e5a08f944dd31926f632"
+    },
+    {
+      "file": "templates/01_review.sql.tmpl",
+      "bytes": 8788,
+      "sha256": "ea6ee0ffd4b25e7c2843c18b2e6f94fb48a1abf28da6463274ad75c52ed858ef"
+    },
+    {
+      "file": "verification/enrollment_security.sql",
+      "bytes": 1262,
+      "sha256": "b0176abcf3609d21e873eb869d2cc04082606e327a682ffcea46db13f7fc83c9"
+    }
+  ]
+}

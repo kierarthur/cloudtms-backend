@@ -1,0 +1,2 @@
+alter function private.daily_rate_correction_health_review_enroll_v1(jsonb) owner to postgres;
+revoke all on function private.daily_rate_correction_health_review_enroll_v1(jsonb) from PUBLIC,anon,authenticated,service_role;

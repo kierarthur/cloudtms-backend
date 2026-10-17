@@ -1,0 +1,11 @@
+{
+  "stage": "PARTIAL_AUTHORED_HEALTH_ENROLLMENT",
+  "newCompleteHelpers": 1,
+  "reviewTemplateForward": true,
+  "unprovidedGenuineBankSlots": 3,
+  "runtimeSqlMayBeEmitted": false,
+  "newManagedRoot": "NOT_ALLOCATED",
+  "registryIntegration": "NOT_AUTHORED_YET",
+  "completeAssembly": "IN_PROGRESS",
+  "native": "NOT_RUN"
+}

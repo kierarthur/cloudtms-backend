@@ -1,0 +1,41 @@
+{
+  "parser": "v7.20",
+  "postgresqlGrammar": [
+    17,
+    7
+  ],
+  "files": [
+    {
+      "file": "health/05_review_enrollment.sqlinc",
+      "statements": 1,
+      "plpgsqlBodies": 1,
+      "grammar": "PASS",
+      "nativeBodyCompilation": "NOT_PROVED"
+    },
+    {
+      "file": "health/95_enrollment_acl.sqlinc",
+      "statements": 2,
+      "plpgsqlBodies": 0,
+      "grammar": "PASS",
+      "nativeBodyCompilation": "NOT_PROVED"
+    },
+    {
+      "file": "admission/ONE_TIME_ADMISSION.sqlinc",
+      "statements": 1,
+      "plpgsqlBodies": 1,
+      "grammar": "PASS",
+      "nativeBodyCompilation": "NOT_PROVED"
+    },
+    {
+      "file": "verification/enrollment_security.sql",
+      "statements": 1,
+      "plpgsqlBodies": 1,
+      "grammar": "PASS",
+      "nativeBodyCompilation": "NOT_PROVED"
+    }
+  ],
+  "heldComposerGrammar": "UNPROVIDED_BANK_SLOT_NOT_PARSED",
+  "substitutions": [],
+  "native": "NOT_RUN",
+  "dbConnections": 0
+}

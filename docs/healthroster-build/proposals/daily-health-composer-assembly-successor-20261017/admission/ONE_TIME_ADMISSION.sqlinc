@@ -1,0 +1,5 @@
+-- ONE_TIME_ADMISSION ONLY. Never included in a rerunnable repeatable.
+do $admit$ begin
+ if to_regprocedure('private.daily_rate_correction_health_review_enroll_v1(jsonb)') is not null then
+  raise exception 'DAILY_HEALTH_REVIEW_ENROLL_NAME_COLLISION' using errcode='55000';end if;
+end; $admit$;
