@@ -1,0 +1,18 @@
+{
+  "version":"CONTACT_CANONICAL_COMPONENT_COST_INDEPENDENT_PEER_V1",
+  "reviewer":"GPT-6.1-sol / xhigh",
+  "disposition":"ACCEPT_BOUNDED_SOURCE_FORWARD",
+  "actionableFindings":[],
+  "authorCommit":"d32bfba471279eec64c0f4e45cc78b29faa1a1b7",
+  "authorManifestSha256":"b88bd5aaf21daedc11eec923998f61a6f99bb6ffd338f07dc0efcb3a2190456d",
+  "selectionSha256":"07466002926f1644ca1b7a9d42a2fc04612e791c71c3c7ee65c00adc13ff43a3",
+  "authorProofSha256":"1a61dddc00099efad039b339c124d1ba22b6999de454c7ce04db3640d0780b74",
+  "parent":"da95a6a8d105442090910faad4d263229654b3df",
+  "selection":{"targets":53,"postimages":7,"changedExisting":5,"new":2,"unchangedParentReferences":46,"wholeRawReversals":5,"literalHunks":11,"actualCurrentOriginalImagesChecked":51,"actualNewVacanciesChecked":2},
+  "components":{"AUDIT":"exact all-row original count and sorted whole-row SHA bag","CATALOGUE":"exact complete exporter and original hash plus real one-row count","BACKGROUND":"both exact complete maps in one server-side materialized object; return two array counts and full-object SHA only"},
+  "replay":{"capturedAuthorFiles":33,"savedIndexHeadEqual":true,"testsPassed":43,"pg17WholeBranchPrefixCases":6,"guardBodiesParsed":2,"negativeAstMutations":14,"originalContactTestUnchanged":true,"reviewerProductSqlGitChanges":0,"testAuthorLocatorAmendments":2,"allCapturedBytesUnchanged":true},
+  "preserved":["original full guard/peer/path/rollback","private psql coordinator byte-identical","both shared owners/all63 pins","complete12 canonical scopes/ledger/catalogue/background maps","original WeakMap qualification","original prefix/plan outputs","source/setup/role/physical guards","45/70/120/180 limits and all byte/close caps"],
+  "meaning":{"componentOnly":true,"fullCanonicalSnapshotRead":false,"restorationQualified":false,"timing":"actual client receipt/await intervals only","failureOrdinal":"UNKNOWN_COMPLETION_MARKERS_ARE_A_LOWER_BOUND","performance":"NOT_MEASURED","cancellationCause":"UNKNOWN","futureCseOrSplit":"NO_CHANGE_AUTHORED_OR_ADMITTED"},
+  "execution":{"native":"NOT_RUN","queriesExecuted":0,"psqlOrExplainExecuted":false,"ipcUsed":false,"apiOrConnectorCalls":0,"privateMapsOrStateReads":0,"rootOrOfficeWrites":0,"bankSemanticBodiesRead":0},
+  "remaining":"root fresh exact parent/vacancy mount+commit and actual source/setup admission before selected bounded component execution; no full retry or restoration verdict"
+}
