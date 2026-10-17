@@ -1,0 +1,44 @@
+{
+  "verdict": "ACCEPT_BOUNDED_SOURCE_FORWARD",
+  "frozenCommit": "8b846bf0dd1057cf4bd1ae1908088571d8771641",
+  "parent": "69dde78cd4d26d863cb7aa1f3aeb53d61bbc088f",
+  "files": 11,
+  "target": "scripts/bpay-next-final-definers.mjs",
+  "wholeRawInverse": {
+    "beforeSha256": "51ab7fd6d5c582ee7f4cab612502c4fc7ac11088cb1a996dd2cf1e6561468d09",
+    "afterSha256": "b6a8143f2bae077a4b72857419b4f8fab9f7652181f6ad3bf1fdcfbd4b77bafa",
+    "hunks": 1
+  },
+  "unchangedCompanions": [
+    {
+      "file": "scripts/cloudtms-db-release-lib.mjs",
+      "sha256": "22b3a5cd4ab5ca93f59f891c03187a6f5214e6f4bb99381e203700c52b413bbf",
+      "bytes": 32174
+    },
+    {
+      "file": "scripts/bpay-next-source-gates.mjs",
+      "sha256": "0ea663b95c457f4f06b403aa4928f42a0993dfecafdc495a6fa1915713d931f8",
+      "bytes": 283554
+    },
+    {
+      "file": "docs/bpay-next/final-definer-closures.json",
+      "sha256": "f357496129f0d1eab1f2a2115a8da788be9c2f4a42f50e4d41baa1c700fc3cc0",
+      "bytes": 1753534
+    }
+  ],
+  "releaseBaseCommit": "a6f7423eb71e6e7cd173e705c2290e5408a1d077",
+  "maxBufferBytes": 8388608,
+  "actualCollectorInputs": 4,
+  "exactCollectorCommandInvocations": 5,
+  "independentCounterexamples": [
+    "partial overflow path-input 0",
+    "partial overflow path-input 1",
+    "partial overflow path-input 2",
+    "partial overflow path-input 4",
+    "nonhex or shortened base",
+    "unrelated ancestry"
+  ],
+  "native": "NOT_RUN",
+  "fullGlobalSourceGate": "NOT_RUN_THIS_PEER",
+  "fixtureWritesByThisReplay": 0
+}
