@@ -660,8 +660,8 @@
     },
     {
       "file": "git-image-batch.mjs",
-      "bytes": 17997,
-      "sha256": "25b77b9234a879fd2ca18bca7d8cf10547ad644a83513ccf050dab171a011426"
+      "bytes": 23257,
+      "sha256": "ae3053a74df75781fdf155c1c94fd3bd55bbd617d59336ed6f414732bdf0eaec"
     }
   ],
   "checks": {

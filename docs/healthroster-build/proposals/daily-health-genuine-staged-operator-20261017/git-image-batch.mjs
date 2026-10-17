@@ -101,6 +101,75 @@ export const registrySuccessor=Object.freeze({
     }
   }
 });
+export const laterReplyRegistryForward=Object.freeze({
+  "file": "docs/bpay-next/final-definer-closures.json",
+  "prior": {
+    "commit": "69dde78cd4d26d863cb7aa1f3aeb53d61bbc088f",
+    "bytes": 1753534,
+    "sha256": "f357496129f0d1eab1f2a2115a8da788be9c2f4a42f50e4d41baa1c700fc3cc0"
+  },
+  "approved": {
+    "commit": "91b0614a47cb734190b4dbd015b3a9141de52fb6",
+    "bytes": 1753835,
+    "sha256": "4e3cf52c02d0d9bc48f679056ab83ee9108c10cc722f97228fbdf1bf129ae155"
+  },
+  "review": {
+    "file": "docs/healthroster-build/v6-owner-delivery-20261016/LATER_REPLY_INT63_ROOT_SOURCE_MOUNT_20261017.json",
+    "commit": "91b0614a47cb734190b4dbd015b3a9141de52fb6",
+    "bytes": 5247,
+    "sha256": "164c709847099671fac3d28a4c72e03262d5faa34826e39216a4f61243111760"
+  },
+  "signature": "public.weekly_source_later_change_decide_atomic_v1(jsonb)",
+  "beforeRow": {
+    "signature": "public.weekly_source_later_change_decide_atomic_v1(jsonb)",
+    "finalRoot": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health_v1.sql",
+    "finalPhysical": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/10_complete_later_change_decide.sqlinc",
+    "allowedPhysical": [
+      "supabase/repeatable/15092026_1534_weekly_source_protected_action_orchestration_v1.sql",
+      "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/10_complete_later_change_decide.sqlinc"
+    ],
+    "predecessors": [
+      "supabase/repeatable/15092026_1534_weekly_source_protected_action_orchestration_v1.sql"
+    ],
+    "finalClosures": [
+      "supabase/repeatable/17102026_0141_weekly_source_later_accept_health_v1.sql"
+    ],
+    "owner": "Health actual Later Accept Source contribution",
+    "healthLaterAcceptReview": "docs/healthroster-build/proposals/source-later-accept-current-successor-20261017/INTEGRATION.md"
+  },
+  "afterRow": {
+    "signature": "public.weekly_source_later_change_decide_atomic_v1(jsonb)",
+    "finalRoot": "supabase/repeatable/17102026_1525_weekly_source_later_change_reply_int63_v1.sql",
+    "finalPhysical": "supabase/repeatable/17102026_1525_weekly_source_later_change_reply_int63_v1.sql",
+    "allowedPhysical": [
+      "supabase/repeatable/15092026_1534_weekly_source_protected_action_orchestration_v1.sql",
+      "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/10_complete_later_change_decide.sqlinc",
+      "supabase/repeatable/17102026_1525_weekly_source_later_change_reply_int63_v1.sql"
+    ],
+    "predecessors": [
+      "supabase/repeatable/15092026_1534_weekly_source_protected_action_orchestration_v1.sql",
+      "supabase/repeatable/17102026_0141_weekly_source_later_accept_health_v1.sql"
+    ],
+    "finalClosures": [
+      "supabase/repeatable/17102026_1525_weekly_source_later_change_reply_int63_v1.sql"
+    ],
+    "owner": "Health actual Later Accept Source contribution",
+    "healthLaterAcceptReview": "docs/healthroster-build/proposals/source-later-accept-current-successor-20261017/INTEGRATION.md",
+    "healthLaterReplyInt63Review": "docs/healthroster-build/v6-owner-delivery-20261016/LATER_REPLY_INT63_ROOT_SOURCE_MOUNT_20261017.json"
+  }
+});
+export function assertLaterRegistryForward(current,approved,prior,review,sha){
+ const b=laterReplyRegistryForward;
+ require(current.length===b.approved.bytes&&sha(current)===b.approved.sha256&&current.equals(approved),'FIXTURE_EXACT_LATER_REGISTRY_REQUIRED');
+ require(prior.length===b.prior.bytes&&sha(prior)===b.prior.sha256,'FIXTURE_PRIOR_REVIEWED_REGISTRY_REQUIRED');
+ require(review.length===b.review.bytes&&sha(review)===b.review.sha256,'FIXTURE_EXACT_LATER_REGISTRY_REVIEW_REQUIRED');
+ const r=JSON.parse(review);require(r.version==='LATER_REPLY_INT63_ROOT_MANAGED_SOURCE_MOUNT_V1'&&r.registry.beforeSha256===b.prior.sha256&&r.registry.afterSha256===b.approved.sha256&&r.registry.other1658ChainsByteEquivalent===true&&JSON.stringify(r.registry.previousSelectedChain)===JSON.stringify(b.beforeRow)&&JSON.stringify(r.registry.currentSelectedChain)===JSON.stringify(b.afterRow),'FIXTURE_REVIEWED_SINGLE_LATER_CHAIN_REQUIRED');
+ const next=JSON.parse(current),rows=next.chains.filter(row=>row.signature===b.signature);
+ require(next.chains.length===1659&&rows.length===1&&JSON.stringify(rows[0])===JSON.stringify(b.afterRow),'FIXTURE_EXACT_LATER_CHAIN_REQUIRED');
+ next.chains[next.chains.indexOf(rows[0])]=b.beforeRow;
+ const restored=Buffer.from(JSON.stringify(next,null,2).replace(/[^\x00-\x7e]/g,c=>String.fromCharCode(92)+'u'+c.charCodeAt(0).toString(16).padStart(4,'0'))+String.fromCharCode(10));
+ require(restored.equals(prior),'FIXTURE_WHOLE_PRIOR_REGISTRY_INVERSE_REQUIRED');return restored;
+}
 export function assertRegistrySuccessor(row,original,current,approved,review,sha){
  const b=registrySuccessor;
  require(row.file===b.file&&row.bytes===b.original.bytes&&row.sha256===b.original.sha256
@@ -163,6 +232,8 @@ export function preflight({here,ROOT,PRIVATE_STATE,check,sha}){
  for(const r of manifest.files)selected(top,relative+'/'+r.file,head);
  for(const r of [...census.inputs,...census.rootDefinitionReceipts])selected(ROOT,r.file,rootHead,census.commit);
  selected(ROOT,registrySuccessor.file,rootHead,registrySuccessor.approved.commit);
+ selected(ROOT,laterReplyRegistryForward.file,rootHead,laterReplyRegistryForward.approved.commit);
+ selected(ROOT,laterReplyRegistryForward.review.file,rootHead,laterReplyRegistryForward.review.commit);
  selected(ROOT,registrySuccessor.review.file,rootHead,registrySuccessor.review.commit);
  selected(ROOT,registrySuccessor.release.file,rootHead,registrySuccessor.release.approved.commit);
  selected(ROOT,registrySuccessor.sourceBuffer.file,rootHead,registrySuccessor.sourceBuffer.approved.commit);
@@ -179,7 +250,10 @@ export function preflight({here,ROOT,PRIVATE_STATE,check,sha}){
    check(census.commit===registrySuccessor.original.commit,'FIXTURE_ORIGINAL_REGISTRY_COMMIT_REQUIRED');
    const review=same(ROOT,registrySuccessor.review.file,rootHead);
    check(review.equals(batches.get(ROOT).get(registrySuccessor.review.commit,registrySuccessor.review.file)),'FIXTURE_CURRENT_REGISTRY_REVIEW_CHANGED');
-   assertRegistrySuccessor(r,original,b,batches.get(ROOT).get(registrySuccessor.approved.commit,r.file),review,sha);
+   const later=laterReplyRegistryForward,laterReview=same(ROOT,later.review.file,rootHead);
+   check(laterReview.equals(batches.get(ROOT).get(later.review.commit,later.review.file)),'FIXTURE_CURRENT_LATER_REVIEW_CHANGED');
+   const priorRegistry=assertLaterRegistryForward(b,batches.get(ROOT).get(later.approved.commit,r.file),batches.get(ROOT).get(registrySuccessor.approved.commit,r.file),laterReview,sha);
+   assertRegistrySuccessor(r,original,priorRegistry,batches.get(ROOT).get(registrySuccessor.approved.commit,r.file),review,sha);
   }else check(b.length===r.bytes&&sha(b)===r.sha256&&b.equals(original),'FIXTURE_SELECTED_CURRENT_SOURCE_CHANGED');
  }
  for(const r of mappingPins.inputs){
