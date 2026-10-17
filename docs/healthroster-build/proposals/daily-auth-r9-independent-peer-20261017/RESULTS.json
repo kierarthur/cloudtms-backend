@@ -1,0 +1,20 @@
+{
+  "verdict": "ACCEPT_BOUNDED_SOURCE_RECIPE",
+  "authorCommit": "0576cc8ac64f295fde418c6b3c94407b28f77fbe",
+  "authorManifestSha256": "5b1d2acc46b5741c74c624888c41b131a3043a3f8fef499d210b1263326b8359",
+  "selectionSha256": "94f87557c086bd15f77bed3d6e942f7eac047c88d0145202ec71677e5bae4aa0",
+  "frozenFiles": 37,
+  "completeCurrentHistoricalParents": 23,
+  "baseCommit": "00548ecadba24f9d088182f427f622a307abddd6",
+  "wholeImageInverses": 9,
+  "actualMountCommitsRequired": 4,
+  "authorControlledTests": 17,
+  "independentControlledTests": 6,
+  "f739BodyBytes": 17997,
+  "f739BodySha256": "25b77b9234a879fd2ca18bca7d8cf10547ad644a83513ccf050dab171a011426",
+  "actualFutureR9": "NOT_PROVIDED",
+  "privateTargetAccess": "NONE",
+  "actualMaterializerOrSourceAdmission": "NOT_RUN",
+  "authBrowserApiIpcNative": "NOT_RUN",
+  "reviewer": "GPT-6.1-sol/xhigh"
+}

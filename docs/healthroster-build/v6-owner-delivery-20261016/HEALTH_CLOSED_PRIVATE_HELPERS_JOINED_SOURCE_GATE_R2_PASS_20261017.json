@@ -1,0 +1,23 @@
+{
+  "version": "HEALTH_CLOSED9_JOINED_SOURCE_GATE_ACTUAL_R2_PASS_V1",
+  "status": "FULL_JOINED_SOURCE_GATE_PASS",
+  "head": "148fc0c36ea82867532368b9578d727713ef993e",
+  "elapsedMs": 210749,
+  "result": {
+    "frozenFiles": 7,
+    "frozenTriggers": 18,
+    "frozenTables": 45,
+    "protectedSignatures": 24,
+    "sqlSources": 2260,
+    "rpcRoots": 79,
+    "routineWorkSignatures": 183,
+    "typedTransportSignatures": 41
+  },
+  "prebodySuccessor": "574c0feefcfc3ff71ed8b5f9c70fb99ff639c007",
+  "historicalProofWaivers": 0,
+  "sqlRuntimeChangedForProofs": false,
+  "nativeFullRehearsal": "NOT_RUN",
+  "generatedContract": "STILL_REQUIRED",
+  "install2": "NOT_INSTALLED",
+  "finalPartBCritics": "NOT_RUN"
+}
