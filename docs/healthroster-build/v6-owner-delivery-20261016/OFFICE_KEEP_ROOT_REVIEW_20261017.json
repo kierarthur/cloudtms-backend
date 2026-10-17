@@ -1,0 +1,59 @@
+{
+  "version": "OFFICE_KEEP_ROOT_INDEPENDENT_SOURCE_REVIEW_V1",
+  "officeSourceCommit": "0840c9b0cf53d4f0152c83f0a34bca96ad3345da",
+  "originalOfficeParent": "6d3d7210ac02fa2d1741f20e52461eaa75158350",
+  "backendContractParent": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+  "authorManifestSha256": "400507f3742dca9928c5238d0f7f93edee17bfafc7756e1cadf7e1713d8d632e",
+  "exactSavedGitInputs": 25,
+  "documentedLineEndingTranslations": [
+    {
+      "file": "js/weekly-source-presentation-v1.js",
+      "savedSha256": "bbc83262df266b7aaca58cdbccf6f81c62aa4b03ec698b2ed0caac4fca0b5dd4",
+      "gitSha256": "153aed979d19a3eddb4e4d3b59d95bfa876bdd6b49da37d34f73470294b6e000",
+      "onlyFullCrLfTranslation": true
+    }
+  ],
+  "wholeParentReversals": 4,
+  "literalHunks": 14,
+  "originalMainAndBibleUnchanged": true,
+  "completeDecoderReproduction": {
+    "status": "PASS",
+    "sha256": "71909ba418326ef938d49f3a7b9d09ec2e56f9877c939e77f838bf0ac979d89c",
+    "byteIdenticalWritesSuppressed": 5,
+    "sourceWrites": 0
+  },
+  "rootTests": {
+    "tests": 170,
+    "pass": 170,
+    "fail": 0,
+    "reporter": "EXPLICIT_TAP"
+  },
+  "rootControlledChromium": {
+    "cases": 5,
+    "externalRequests": 0,
+    "desktopSource": true,
+    "mobileWork390x844": true,
+    "explicitSecondNativeCreditSelection": true,
+    "realTwoTabsWebLocks": true,
+    "lostReplyRevokedAuthorityThenExactReplay": true
+  },
+  "findingsApplied": [
+    "CROSS_TAB_JOURNAL_ACQUISITION",
+    "PRE_REPLAY_AUTH_REFUSAL_RECOVERY",
+    "REACHABLE_EXPLICIT_NATIVE_CREDIT_SELECTION"
+  ],
+  "findingsAppliedCount": 3,
+  "findingsRejectedCount": 0,
+  "remainingActionableSourceFindings": 0,
+  "verdict": "ACCEPT_BOUNDED_SOURCE_ONLY_NATIVE_AND_INSTALLED_JOIN_REQUIRED",
+  "native": "NOT_RUN",
+  "apiToSqlJoin": "NOT_RUN",
+  "fullApplicationModalAcceptance": "NOT_RUN",
+  "release": "NOT_RUN",
+  "finalPartB": "NOT_RUN",
+  "ownedTemporaryFolder": "D:/Development/GitHub/.codex-tmp/kept-office-root-peer-A6gimS",
+  "temporaryFolderEmptyAndRemoved": true,
+  "recursiveDeletion": false,
+  "deletionRefused": false,
+  "bankMessages": 0
+}

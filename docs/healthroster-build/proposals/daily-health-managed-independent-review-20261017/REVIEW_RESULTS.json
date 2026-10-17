@@ -1,0 +1,79 @@
+{
+  "scope": "INDEPENDENT_SOURCE_ONLY",
+  "physicalCommit": "82b14dc385319ebe3d741bb2586c9b6ed172914c",
+  "metadataParent": "acee28f5b4d862bdf7e4425a65566dd2d060be35",
+  "pureCommit": "728a2c32e624fed2db577b7deba70600d27885b1",
+  "passed": 11,
+  "failed": 0,
+  "checks": [
+    "25 frozen Physical evidence files and all seven selected targets equal the actual mounted bytes",
+    "both whole metadata parents reverse exactly to acee28 and every prior registry/mandatory array is preserved",
+    "six whole declarations are byte-identical e938 and original twelve evidence files were copied exactly",
+    "one-time collision guard is separate; rerunnable root installs exact six owner-only ACLs without grants",
+    "independent mandatory catalogue verifier checks exact types/volatility/search paths/owner and direct plus effective ACL",
+    "all ten native owner pages, ten final-owner chains, three policy files and the actual F23 source remain exact",
+    "managed admission appends only its exact migration lock entry and leaves all 423 old entries unchanged",
+    "actual current F23 write/type/special-construct gates accept five new SQL inputs with zero allowances",
+    "exact frozen loader executes actual committed inventory/final-owner tools read-only with matching captured receipt",
+    "pure proof frozen source, five exact declarations and unchanged native assertion program retain their pins",
+    "pure builder returns only the exact five-definition 8029-byte closure and refuses foreign roots"
+  ],
+  "actualCommittedLoader": {
+    "version": "DAILY_HEALTH_SUPPORT_ACTUAL_SOURCE_LOADER_V1",
+    "checkpoint": "acee28f5b4d862bdf7e4425a65566dd2d060be35",
+    "actualCommittedInventory": true,
+    "uppercaseMigrationsIncluded": true,
+    "before": {
+      "migrations": 423,
+      "repeatables": 1090
+    },
+    "candidate": {
+      "migrations": 424,
+      "repeatables": 1091
+    },
+    "scriptPins": [
+      {
+        "path": "scripts/cloudtms-db-release-lib.mjs",
+        "sha256": "22b3a5cd4ab5ca93f59f891c03187a6f5214e6f4bb99381e203700c52b413bbf"
+      },
+      {
+        "path": "scripts/cloudtms-managed-release-sql.mjs",
+        "sha256": "ff391fccf7f690d4d476e935870d740667e4dfd92b972bfd5d7d80b1b3bb912b"
+      },
+      {
+        "path": "scripts/bpay-next-final-definers.mjs",
+        "sha256": "51ab7fd6d5c582ee7f4cab612502c4fc7ac11088cb1a996dd2cf1e6561468d09"
+      }
+    ],
+    "closedRoots": [
+      "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support_v1.sql"
+    ],
+    "verified": {
+      "signatures": 3001,
+      "registered": 1607,
+      "roots": 1091,
+      "pendingRoots": [
+        "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support_v1.sql"
+      ]
+    },
+    "native": "NOT_RUN",
+    "opaqueOwnershipScanOnly": true,
+    "bankBodySemanticInspection": false,
+    "dbConnections": 0,
+    "rootWrites": 0
+  },
+  "pure": {
+    "sqlSha256": "779aff554ca8bce78a7e21520a41574beba211503ab1c79d492eccb6b5ad8ab6",
+    "sqlBytes": 8029,
+    "definitionCount": 5,
+    "positiveUnicodeVectors": 6,
+    "malformedStoredReasonRefusals": 8,
+    "businessFixtureRows": 0,
+    "native": "REQUIRED_NOT_RUN",
+    "restoration": "REQUIRED_NOT_RUN"
+  },
+  "foreignWrites": 0,
+  "databaseConnections": 0,
+  "native": "NOT_RUN",
+  "release": "NOT_RUN"
+}

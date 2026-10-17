@@ -1,0 +1,28 @@
+{
+  "version": "DAILY_HEALTH_SUPPORT_CURRENT_OFFLINE_CHECKS_V1",
+  "currentRoot": {
+    "cwd": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-install2-14102026",
+    "args": [
+      "scripts/cloudtms-db-release.mjs",
+      "check"
+    ],
+    "exitCode": 0,
+    "stdout": "Database source integrity passed: 423 migrations, 1090 repeatables.\n",
+    "stderr": ""
+  },
+  "originalHelpers": {
+    "cwd": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026",
+    "args": [
+      "--test",
+      "--test-reporter=tap",
+      "docs/healthroster-build/proposals/daily-health-composition-20261017/source-boundary.test.mjs",
+      "docs/healthroster-build/proposals/daily-health-composition-20261017/reason-roundtrip.test.mjs"
+    ],
+    "exitCode": 0,
+    "stdout": "TAP version 13\n# Subtest: native Worker vectors preserve all1969 Unicode characters beyond stored1969 length\nok 1 - native Worker vectors preserve all1969 Unicode characters beyond stored1969 length\n  ---\n  duration_ms: 2.6787\n  type: 'test'\n  ...\n# Subtest: empty, Unicode-trimmed and prefix-containing legitimate Details round-trip exactly\nok 2 - empty, Unicode-trimmed and prefix-containing legitimate Details round-trip exactly\n  ---\n  duration_ms: 0.1796\n  type: 'test'\n  ...\n# Subtest: malformed stored canonical strings and overlong notes refuse without adding a prefix\nok 3 - malformed stored canonical strings and overlong notes refuse without adding a prefix\n  ---\n  duration_ms: 0.1944\n  type: 'test'\n  ...\n# PASS: current pinned native sources/final owners;6 internal Health bodies/full reverse; existing0955 Daily ABI/deferred guard; reason roundtrip/current-role read/native-lock boundaries\n# Subtest: complete Health support implements actual bounded metadata with no public success or business writes\nok 4 - complete Health support implements actual bounded metadata with no public success or business writes\n  ---\n  duration_ms: 1.4308\n  type: 'test'\n  ...\n# Subtest: source guard rejects removing the post-wait actor recheck\nok 5 - source guard rejects removing the post-wait actor recheck\n  ---\n  duration_ms: 0.9077\n  type: 'test'\n  ...\n# Subtest: source guard rejects treating a mutex as refreshing an old snapshot\nok 6 - source guard rejects treating a mutex as refreshing an old snapshot\n  ---\n  duration_ms: 0.2811\n  type: 'test'\n  ...\n# Subtest: source guard rejects acquiring shared metadata before native Invoice locks\nok 7 - source guard rejects acquiring shared metadata before native Invoice locks\n  ---\n  duration_ms: 0.3047\n  type: 'test'\n  ...\n# Subtest: source guard rejects a fake public finish or early financial write\nok 8 - source guard rejects a fake public finish or early financial write\n  ---\n  duration_ms: 0.3375\n  type: 'test'\n  ...\n# Subtest: source guard rejects a partial sealed-review substitute\nok 9 - source guard rejects a partial sealed-review substitute\n  ---\n  duration_ms: 0.2729\n  type: 'test'\n  ...\n# Subtest: source guard rejects feeding the canonical stored reason back as raw Details\nok 10 - source guard rejects feeding the canonical stored reason back as raw Details\n  ---\n  duration_ms: 0.2239\n  type: 'test'\n  ...\n# Subtest: source guard rejects adding mutation Admin admission to current active GET reader\nok 11 - source guard rejects adding mutation Admin admission to current active GET reader\n  ---\n  duration_ms: 0.4042\n  type: 'test'\n  ...\n# Subtest: source guard rejects leaking raw native financial receipt or identifiers before Bank join\nok 12 - source guard rejects leaking raw native financial receipt or identifiers before Bank join\n  ---\n  duration_ms: 0.4198\n  type: 'test'\n  ...\n1..12\n# tests 12\n# suites 0\n# pass 12\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 199.7826\n",
+    "stderr": ""
+  },
+  "native": "NOT_RUN",
+  "dbConnections": 0,
+  "rootWrites": 0
+}

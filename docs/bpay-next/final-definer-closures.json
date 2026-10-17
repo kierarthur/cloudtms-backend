@@ -27660,6 +27660,90 @@
       ],
       "owner": "Health current Keep read consumer",
       "healthKeepCurrentReadReview": "docs/healthroster-build/proposals/kept-current-public-read-successor-20261017/INTEGRATION.md"
+    },
+    {
+      "signature": "private.daily_rate_correction_health_reason_note_v1(text)",
+      "finalRoot": "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support_v1.sql",
+      "finalPhysical": "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/01_complete_helpers.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/01_complete_helpers.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support_v1.sql"
+      ],
+      "owner": "HEALTH Daily support; exact e938 private helper body",
+      "healthDailySupportReview": "docs/healthroster-build/proposals/daily-health-support-managed-root-20261017/README.md"
+    },
+    {
+      "signature": "private.daily_rate_correction_health_actor_require_v1(uuid,boolean)",
+      "finalRoot": "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support_v1.sql",
+      "finalPhysical": "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/01_complete_helpers.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/01_complete_helpers.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support_v1.sql"
+      ],
+      "owner": "HEALTH Daily support; exact e938 private helper body",
+      "healthDailySupportReview": "docs/healthroster-build/proposals/daily-health-support-managed-root-20261017/README.md"
+    },
+    {
+      "signature": "private.daily_rate_correction_health_basis_v1(jsonb,boolean)",
+      "finalRoot": "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support_v1.sql",
+      "finalPhysical": "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/01_complete_helpers.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/01_complete_helpers.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support_v1.sql"
+      ],
+      "owner": "HEALTH Daily support; exact e938 private helper body",
+      "healthDailySupportReview": "docs/healthroster-build/proposals/daily-health-support-managed-root-20261017/README.md"
+    },
+    {
+      "signature": "private.daily_rate_correction_health_review_prepare_v1(jsonb)",
+      "finalRoot": "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support_v1.sql",
+      "finalPhysical": "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/01_complete_helpers.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/01_complete_helpers.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support_v1.sql"
+      ],
+      "owner": "HEALTH Daily support; exact e938 private helper body",
+      "healthDailySupportReview": "docs/healthroster-build/proposals/daily-health-support-managed-root-20261017/README.md"
+    },
+    {
+      "signature": "private.daily_rate_correction_health_accept_basis_v1(jsonb)",
+      "finalRoot": "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support_v1.sql",
+      "finalPhysical": "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/01_complete_helpers.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/01_complete_helpers.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support_v1.sql"
+      ],
+      "owner": "HEALTH Daily support; exact e938 private helper body",
+      "healthDailySupportReview": "docs/healthroster-build/proposals/daily-health-support-managed-root-20261017/README.md"
+    },
+    {
+      "signature": "private.daily_rate_correction_health_result_basis_v1(uuid,uuid)",
+      "finalRoot": "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support_v1.sql",
+      "finalPhysical": "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/01_complete_helpers.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/01_complete_helpers.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support_v1.sql"
+      ],
+      "owner": "HEALTH Daily support; exact e938 private helper body",
+      "healthDailySupportReview": "docs/healthroster-build/proposals/daily-health-support-managed-root-20261017/README.md"
     }
   ],
   "editorChains": [

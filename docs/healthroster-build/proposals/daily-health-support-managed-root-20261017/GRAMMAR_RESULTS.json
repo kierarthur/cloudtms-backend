@@ -1,0 +1,50 @@
+{
+  "parser": "v7.20",
+  "postgresqlGrammar": [
+    17,
+    7
+  ],
+  "programs": [
+    {
+      "file": "supabase/migrations/17102026_0248_daily_health_support_admission.sql",
+      "statements": 1,
+      "parsedBodies": 1,
+      "grammar": "PASS",
+      "nativeBodyCompilation": "NOT_PROVED"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support_v1.sql",
+      "statements": 2,
+      "parsedBodies": 0,
+      "grammar": "PASS",
+      "nativeBodyCompilation": "NOT_PROVED"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/01_complete_helpers.sqlinc",
+      "statements": 6,
+      "parsedBodies": 6,
+      "grammar": "PASS",
+      "nativeBodyCompilation": "NOT_PROVED"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/99_acl.sqlinc",
+      "statements": 12,
+      "parsedBodies": 0,
+      "grammar": "PASS",
+      "nativeBodyCompilation": "NOT_PROVED"
+    },
+    {
+      "file": "supabase/verification/17102026_0248_daily_health_support_security.sql",
+      "statements": 3,
+      "parsedBodies": 1,
+      "grammar": "PASS",
+      "nativeBodyCompilation": "NOT_PROVED"
+    }
+  ],
+  "exactCompleteHelpers": 6,
+  "additiveReverseMatch": true,
+  "noBankSubstitutions": true,
+  "nativeBodyCompilation": "NOT_PROVED",
+  "native": "NOT_RUN",
+  "dbConnections": 0
+}

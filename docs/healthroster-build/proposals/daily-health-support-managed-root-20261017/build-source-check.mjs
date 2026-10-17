@@ -1,0 +1,18 @@
+// Reuse the reviewed, case-insensitive actual release-loader VFS implementation.
+// This generates a separate owned runner, never executes an earlier receipt script.
+import fs from'node:fs';import path from'node:path';import assert from'node:assert/strict';import{fileURLToPath}from'node:url';
+const here=path.dirname(fileURLToPath(import.meta.url)),prior=path.resolve(here,'../later-keep-f23-classification-20261017/verify-complete-release-loader.mjs'),text=fs.readFileSync(prior,'utf8'),start=text.indexOf('function snapshot(commit)'),end=text.indexOf('const originalSnapshot=',start);assert(start>=0&&end>start);
+const header=`// Actual committed release inventory and final-definer source checks only.
+import fs from'node:fs';import path from'node:path';import vm from'node:vm';import crypto from'node:crypto';import assert from'node:assert/strict';import{execFileSync}from'node:child_process';import{fileURLToPath}from'node:url';
+const here=path.dirname(fileURLToPath(import.meta.url)),own=path.resolve(here,'../../../..'),root=path.resolve(own,'../healthroster-install2-14102026'),money=own,registry='docs/bpay-next/final-definer-closures.json';
+for(const p of[own,root])assert(fs.realpathSync(p).replaceAll('\\\\','/').startsWith('D:/Development/GitHub/'));
+const sha=x=>crypto.createHash('sha256').update(x).digest('hex'),git=args=>execFileSync('git',['-c','gc.auto=0','-c','maintenance.auto=false',...args],{cwd:own,windowsHide:true,maxBuffer:128*1024*1024}),blob=(commit,p)=>git(['show',commit+':'+p]);
+const manifest=JSON.parse(fs.readFileSync(here+'/PAYLOAD_MANIFEST.json')),candidate=new Map();for(const f of manifest.files){const b=fs.readFileSync(here+'/'+f.source);assert.equal(sha(b),f.sha256);assert.equal(b.length,f.bytes);candidate.set(f.target,b);}
+`;
+const tail=`
+const baseSnapshot=snapshot(manifest.checkpoint),base=engine(manifest.checkpoint,baseSnapshot),before=base.inventory();assert.equal(before.migrations.length,423);assert.equal(before.repeatables.length,1090);
+for(const p of['supabase/migrations/13072026_1648_MIGRATION.SQL','supabase/migrations/26052026_1525_INDEX_OUTBOX.SQL'])assert(before.migrations.some(x=>x.path===p));
+const next=engine(manifest.checkpoint,baseSnapshot,candidate),inventory=next.inventory();assert.equal(inventory.migrations.length,424);assert.equal(inventory.repeatables.length,1091);const closed=next.closeFinalDefinerSelection({migrations:inventory.migrations.filter(x=>x.path===manifest.oneTimeAdmission),repeatables:inventory.repeatables.filter(x=>x.path===manifest.managedRoot)},inventory),verified=next.verifyFinalDefiners({changed:new Set(),selectedRoots:closed.repeatables.map(x=>x.path),selectedMigrations:closed.migrations.map(x=>x.path)});assert.equal(verified.registered,1607);assert.equal(verified.signatures,3001);assert.equal(verified.roots,1091);
+fs.writeFileSync(here+'/SOURCE_LOADER_RESULTS.json',JSON.stringify({version:'DAILY_HEALTH_SUPPORT_ACTUAL_SOURCE_LOADER_V1',checkpoint:manifest.checkpoint,actualCommittedInventory:true,uppercaseMigrationsIncluded:true,before:{migrations:before.migrations.length,repeatables:before.repeatables.length},candidate:{migrations:inventory.migrations.length,repeatables:inventory.repeatables.length},scriptPins:next.pins,closedRoots:closed.repeatables.map(x=>x.path),verified,native:'NOT_RUN',opaqueOwnershipScanOnly:true,bankBodySemanticInspection:false,dbConnections:0,rootWrites:0},null,2)+'\\n');console.log(JSON.stringify({actualClose:'PASS',actualVerify:'PASS',migrations:424,repeatables:1091,registered:1607,signatures:3001,native:'NOT_RUN'}));
+`;
+fs.writeFileSync(here+'/source-check.mjs',header+text.slice(start,end)+tail);console.log('PASS generated separate source-only loader runner');

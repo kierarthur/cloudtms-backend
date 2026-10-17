@@ -1,0 +1,12 @@
+alter function private.daily_rate_correction_health_reason_note_v1(text) owner to postgres;
+revoke all on function private.daily_rate_correction_health_reason_note_v1(text) from public,anon,authenticated,service_role;
+alter function private.daily_rate_correction_health_actor_require_v1(uuid,boolean) owner to postgres;
+revoke all on function private.daily_rate_correction_health_actor_require_v1(uuid,boolean) from public,anon,authenticated,service_role;
+alter function private.daily_rate_correction_health_basis_v1(jsonb,boolean) owner to postgres;
+revoke all on function private.daily_rate_correction_health_basis_v1(jsonb,boolean) from public,anon,authenticated,service_role;
+alter function private.daily_rate_correction_health_review_prepare_v1(jsonb) owner to postgres;
+revoke all on function private.daily_rate_correction_health_review_prepare_v1(jsonb) from public,anon,authenticated,service_role;
+alter function private.daily_rate_correction_health_accept_basis_v1(jsonb) owner to postgres;
+revoke all on function private.daily_rate_correction_health_accept_basis_v1(jsonb) from public,anon,authenticated,service_role;
+alter function private.daily_rate_correction_health_result_basis_v1(uuid,uuid) owner to postgres;
+revoke all on function private.daily_rate_correction_health_result_basis_v1(uuid,uuid) from public,anon,authenticated,service_role;

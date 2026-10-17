@@ -1,0 +1,44 @@
+{
+  "version": "DAILY_HEALTH_SUPPORT_ACTUAL_SOURCE_LOADER_V1",
+  "checkpoint": "acee28f5b4d862bdf7e4425a65566dd2d060be35",
+  "actualCommittedInventory": true,
+  "uppercaseMigrationsIncluded": true,
+  "before": {
+    "migrations": 423,
+    "repeatables": 1090
+  },
+  "candidate": {
+    "migrations": 424,
+    "repeatables": 1091
+  },
+  "scriptPins": [
+    {
+      "path": "scripts/cloudtms-db-release-lib.mjs",
+      "sha256": "22b3a5cd4ab5ca93f59f891c03187a6f5214e6f4bb99381e203700c52b413bbf"
+    },
+    {
+      "path": "scripts/cloudtms-managed-release-sql.mjs",
+      "sha256": "ff391fccf7f690d4d476e935870d740667e4dfd92b972bfd5d7d80b1b3bb912b"
+    },
+    {
+      "path": "scripts/bpay-next-final-definers.mjs",
+      "sha256": "51ab7fd6d5c582ee7f4cab612502c4fc7ac11088cb1a996dd2cf1e6561468d09"
+    }
+  ],
+  "closedRoots": [
+    "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support_v1.sql"
+  ],
+  "verified": {
+    "signatures": 3001,
+    "registered": 1607,
+    "roots": 1091,
+    "pendingRoots": [
+      "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support_v1.sql"
+    ]
+  },
+  "native": "NOT_RUN",
+  "opaqueOwnershipScanOnly": true,
+  "bankBodySemanticInspection": false,
+  "dbConnections": 0,
+  "rootWrites": 0
+}

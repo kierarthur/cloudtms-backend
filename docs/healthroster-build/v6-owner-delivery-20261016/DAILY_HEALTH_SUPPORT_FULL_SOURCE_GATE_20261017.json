@@ -1,0 +1,19 @@
+{
+  "version": "DAILY_HEALTH_SUPPORT_FULL_SOURCE_GATE_V1",
+  "source": "82b14dc385319ebe3d741bb2586c9b6ed172914c",
+  "rootParent": "728a2c32e624fed2db577b7deba70600d27885b1",
+  "status": "PASS_SOURCE_ONLY",
+  "result": {
+    "frozenFiles": 7,
+    "frozenTriggers": 18,
+    "frozenTables": 45,
+    "protectedSignatures": 24,
+    "sqlSources": 2153,
+    "rpcRoots": 76,
+    "routineWorkSignatures": 183,
+    "typedTransportSignatures": 41
+  },
+  "elapsedMilliseconds": 149060,
+  "native": "NOT_RUN",
+  "release": "NOT_RUN"
+}

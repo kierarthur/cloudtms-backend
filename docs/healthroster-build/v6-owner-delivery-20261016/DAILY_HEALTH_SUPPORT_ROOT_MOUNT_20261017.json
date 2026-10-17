@@ -1,0 +1,59 @@
+{
+  "version": "DAILY_HEALTH_SUPPORT_ROOT_MOUNT_V1",
+  "reviewedSource": "82b14dc385319ebe3d741bb2586c9b6ed172914c",
+  "parentAtReview": "728a2c32e624fed2db577b7deba70600d27885b1",
+  "frozenEvidenceFiles": 25,
+  "originalE938EvidenceFiles": 12,
+  "selectedPayloads": 7,
+  "completePrivateHelpers": 6,
+  "exactE938Bodies": true,
+  "metadataWholeParentReversals": 2,
+  "allPriorRegistryChainsAndMandatoryArraysPreserved": true,
+  "policyFilesVerified": 3,
+  "newRawF23Hazards": 0,
+  "newF23Allowances": 0,
+  "rootRepeatedSourceTests": 11,
+  "actualSourceLoader": {
+    "migrations": 424,
+    "repeatables": 1091,
+    "signatures": 3001,
+    "registered": 1607
+  },
+  "sourceWritesSuppressed": 2,
+  "native": "NOT_RUN",
+  "publicComposersAdded": 0,
+  "bankBodiesAdded": 0,
+  "contract": "NOT_SEALED",
+  "release": "NOT_RUN",
+  "migrationLock": {
+    "allPreviousEntriesUnchanged": 423,
+    "appended": 1
+  },
+  "rootPrecheckCorrection": "Compared each immutable migration entry by path and full JSON value; initial JavaScript object-identity comparison was invalid, no old hash changed.",
+  "actualMountedFinalDefiners": {
+    "signatures": 3001,
+    "registered": 1607,
+    "roots": 1091,
+    "pendingRoots": [
+      "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support_v1.sql"
+    ]
+  },
+  "rootOriginalHelperCases": 12,
+  "rootMountedGrammar": {
+    "status": "PASS_GRAMMAR_ONLY",
+    "exactSixBodies": true,
+    "noOwnerSubstitutions": true,
+    "receiptComparison": "PARSED_JSON_EQUAL_AND_ONLY_WINDOWS_NEWLINES",
+    "writesSuppressed": 1,
+    "sourceWrites": 0
+  },
+  "fullSourceGateReceipt": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_HEALTH_SUPPORT_FULL_SOURCE_GATE_20261017.json",
+  "independentPeer": {
+    "commit": "d419a9d9c5b31997a07a1c5643c89a89730d4c53",
+    "manifestSha256": "682bdd4d4d2078a60adcccb928082ad7a87e48ffd31323c26e2ce695bb9721c9",
+    "verdict": "PASS_SOURCE_ONLY_NO_ACTIONABLE_FINDING",
+    "compoundChecks": 11,
+    "frozenFiles": 8,
+    "native": "NOT_RUN"
+  }
+}

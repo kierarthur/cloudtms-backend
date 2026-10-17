@@ -1,0 +1,155 @@
+{
+  "version": "DAILY_HEALTH_SUPPORT_SAVED_INDEX_EQUALITY_V1",
+  "scope": "docs/healthroster-build/proposals/daily-health-support-managed-root-20261017",
+  "files": [
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-support-managed-root-20261017/CATALOGUE_EXPECTATIONS.json",
+      "bytes": 1351,
+      "sha256": "4d6e06091ea0c45743b0bd67294a28c82511f45434b43565946d4303425ac207",
+      "savedEqualsIndex": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-support-managed-root-20261017/CURRENT_ROOT_AND_HELPER_CHECKS.json",
+      "bytes": 3936,
+      "sha256": "59aeba414f9994b68b5cf45f00fc6e58efa0535cbc48f70056ab1e0406c07d45",
+      "savedEqualsIndex": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-support-managed-root-20261017/GRAMMAR_RESULTS.json",
+      "bytes": 1428,
+      "sha256": "e065c22515e9ccb72b67fe78e006a40be036236559953155ee894641ffeb950f",
+      "savedEqualsIndex": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-support-managed-root-20261017/METADATA_EDITS.json",
+      "bytes": 76000,
+      "sha256": "fa23c9de225c08b822eb38ccd159183f1739462c5f6f95318f2df2807b2386f3",
+      "savedEqualsIndex": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-support-managed-root-20261017/PAYLOAD_MANIFEST.json",
+      "bytes": 3044,
+      "sha256": "fe9276804fee29a6a5c1ba45edd82c7542e5fa1ebea7b6a3a91c2da421a2db83",
+      "savedEqualsIndex": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-support-managed-root-20261017/README.md",
+      "bytes": 7457,
+      "sha256": "6c2e9cafe10948c10f2c8539dc9e0059c440f0027b71cd81e309dca416135b0e",
+      "savedEqualsIndex": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-support-managed-root-20261017/SOURCE_GUARDS.json",
+      "bytes": 7590,
+      "sha256": "54a2713fc2398b15561ffba153c396209b40ff63760817eb05feea314f8873b6",
+      "savedEqualsIndex": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-support-managed-root-20261017/SOURCE_LOADER_RESULTS.json",
+      "bytes": 1241,
+      "sha256": "cbc9a1f43b84b20fa2d566c0ab5d8187e202c77d69fa26d0240136c0ec08defa",
+      "savedEqualsIndex": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-support-managed-root-20261017/TEST_RESULTS.json",
+      "bytes": 1830,
+      "sha256": "99ecf0e80f7633f9a58960d26089d5785633dd44ed0459f54f0358aa2a1f5982",
+      "savedEqualsIndex": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-support-managed-root-20261017/build-source-check.mjs",
+      "bytes": 3713,
+      "sha256": "1b19c7ced2907f8a9d0038c9c14abd88f041d515a865a6f7596c5f0093ef2ec7",
+      "savedEqualsIndex": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-support-managed-root-20261017/build.mjs",
+      "bytes": 10855,
+      "sha256": "2aa10708999895eb8c472bf90d4937db62db7d45f23752d48263036219abd820",
+      "savedEqualsIndex": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-support-managed-root-20261017/grammar.py",
+      "bytes": 2267,
+      "sha256": "2d2f5b68fd73ff7193a51ad7cf1de06847b653aa25fba5ee382f1cd7f8005788",
+      "savedEqualsIndex": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-support-managed-root-20261017/offline-checks.mjs",
+      "bytes": 1445,
+      "sha256": "9bbc5c3ce08faeaf335424908a2271586593187e6178efcd035f15ee65ceda2f",
+      "savedEqualsIndex": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-support-managed-root-20261017/payload/docs/bpay-next/final-definer-closures.json",
+      "bytes": 1681882,
+      "sha256": "37eb7b44bf997287bb0684edc1873bbd0a38ee2111234e3aa23a18b8ab141bd6",
+      "savedEqualsIndex": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-support-managed-root-20261017/payload/supabase/migrations/17102026_0248_daily_health_support_admission.sql",
+      "bytes": 835,
+      "sha256": "6dcb719b0e62eec72cd547e59e9726dec7b7ccc513edba463ada003046b8842d",
+      "savedEqualsIndex": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-support-managed-root-20261017/payload/supabase/release/current-release.json",
+      "bytes": 36188,
+      "sha256": "cf68ab7b56dd2bfe5a865892cd8364845851ac6fb6fb56fd884e4f16ef2359f8",
+      "savedEqualsIndex": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-support-managed-root-20261017/payload/supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/01_complete_helpers.sqlinc",
+      "bytes": 15886,
+      "sha256": "95c35931e723787e4c5258ef704cb1115f0edbd9fd6b34e9ab25c4d0966b355b",
+      "savedEqualsIndex": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-support-managed-root-20261017/payload/supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/99_acl.sqlinc",
+      "bytes": 1358,
+      "sha256": "ec1dae1cab0e44a1713ace86ceaf4d6ae916e5550ba4f204e407450ce73e117a",
+      "savedEqualsIndex": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-support-managed-root-20261017/payload/supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support_v1.sql",
+      "bytes": 172,
+      "sha256": "e4e70d06e78dce2d8ea19f033cf5ef9fadc2de753106cc5677dad7b982dcd1d8",
+      "savedEqualsIndex": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-support-managed-root-20261017/payload/supabase/verification/17102026_0248_daily_health_support_security.sql",
+      "bytes": 2400,
+      "sha256": "d2a1bc26c9c5b5650f78235e46e505037e4e59fbd74f095859fd3fc62817a847",
+      "savedEqualsIndex": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-support-managed-root-20261017/reverse/complete_additive_reverse.sqlinc",
+      "bytes": 544,
+      "sha256": "9db78df9b9f25ad98aa0451ae2503ab35115ee30bbcae524d414c09927633628",
+      "savedEqualsIndex": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-support-managed-root-20261017/source-check.mjs",
+      "bytes": 6010,
+      "sha256": "5fb696022451ab4287db72ffff0191e01715c39fa7d58a4d3d544d2683db7623",
+      "savedEqualsIndex": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-support-managed-root-20261017/test.mjs",
+      "bytes": 7454,
+      "sha256": "f6510aa785ad1b595521039413263fa46aa3fff30db90861e56edab8c36b04c1",
+      "savedEqualsIndex": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-support-managed-root-20261017/verify-saved-index.mjs",
+      "bytes": 1608,
+      "sha256": "649d16a0e7e29afe361575aacd45407f15d2c6b44c11431bd1d3ca75530b8760",
+      "savedEqualsIndex": true
+    }
+  ],
+  "checked": 24,
+  "payloads": 7,
+  "excludedSelfReceipt": "docs/healthroster-build/proposals/daily-health-support-managed-root-20261017/SAVED_INDEX_RESULTS.json",
+  "rootWrites": 0,
+  "native": "NOT_RUN"
+}

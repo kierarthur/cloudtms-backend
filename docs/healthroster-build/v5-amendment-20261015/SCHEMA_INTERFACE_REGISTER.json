@@ -7126,5 +7126,70 @@
     "contract": "NOT_SEALED",
     "install2": "NOT_INSTALLED",
     "finalPartB": "NOT_RUN"
+  },
+  "daily_health_support_source_continuation_20261017": {
+    "status": "SOURCE_MOUNTED_NATIVE_NOT_RUN",
+    "authorCommit": "82b14dc385319ebe3d741bb2586c9b6ed172914c",
+    "originalExactBodies": "e938e54f81bb2416d4a281fa025fc8e714c8eb35",
+    "managedRoot": "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support_v1.sql",
+    "oneTimeAdmission": "supabase/migrations/17102026_0248_daily_health_support_admission.sql",
+    "mandatoryVerifier": "supabase/verification/17102026_0248_daily_health_support_security.sql",
+    "privateHelpers": 6,
+    "publicComposers": 0,
+    "bankBodies": 0,
+    "newF23Hazards": 0,
+    "newF23Allowances": 0,
+    "sourceInventory": {
+      "migrations": 424,
+      "repeatables": 1091
+    },
+    "finalDefiners": {
+      "signatures": 3001,
+      "registered": 1607,
+      "roots": 1091
+    },
+    "mandatoryVerifiers": {
+      "upgrade": 179,
+      "newDatabase": 180
+    },
+    "oldMigrationHashesPreserved": 423,
+    "fullSourceGate": {
+      "status": "PASS_SOURCE_ONLY",
+      "sqlSources": 2153,
+      "rpcRoots": 76,
+      "elapsedMilliseconds": 149060
+    },
+    "rootReceipt": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_HEALTH_SUPPORT_ROOT_MOUNT_20261017.json",
+    "native": "NOT_RUN",
+    "publicDailyJoin": "GENUINE_BANK_CONTRIBUTIONS_REQUIRED",
+    "contract": "NOT_SEALED",
+    "install2": "NOT_INSTALLED",
+    "finalCritics": "NOT_RUN",
+    "original92ObjectsUnchanged": true
+  },
+  "office_keep_source_continuation_20261017": {
+    "status": "SOURCE_IMPLEMENTED_AND_ROOT_REVIEWED",
+    "officeCommit": "0840c9b0cf53d4f0152c83f0a34bca96ad3345da",
+    "surfaces": [
+      "SOURCE_WORKSPACE",
+      "SIMPLE_TIMESHEET_WORK"
+    ],
+    "publicContextFields": 27,
+    "writerPayloadFields": 7,
+    "writerAcknowledgementFields": 13,
+    "rootTests": 170,
+    "controlledBrowserCases": 5,
+    "findingsApplied": 3,
+    "findingsRejected": 0,
+    "scope": "OFFICE_KEEP_REVIEW_ONLY_NOT_FINAL_GLOBAL_FIX_COUNT",
+    "realCrossTabWebLock": true,
+    "uncertainOriginalRequestRetained": true,
+    "explicitGenuineMultiCreditSelection": true,
+    "rootReceipt": "docs/healthroster-build/v6-owner-delivery-20261016/OFFICE_KEEP_ROOT_REVIEW_20261017.json",
+    "nativeApiJoin": "NOT_RUN",
+    "installedHostAcceptance": "NOT_RUN",
+    "release": "NOT_RUN",
+    "finalCritics": "NOT_RUN",
+    "original92ObjectsUnchanged": true
   }
 }

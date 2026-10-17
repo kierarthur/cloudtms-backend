@@ -1,0 +1,19 @@
+{
+  "version": "DAILY_HEALTH_SUPPORT_INDEPENDENT_CATALOGUE_CONTRACT_V1",
+  "routines": [
+    {"signature":"private.daily_rate_correction_health_reason_note_v1(text)","result":"text","volatility":"i","searchPath":"pg_catalog,private,pg_temp"},
+    {"signature":"private.daily_rate_correction_health_actor_require_v1(uuid,boolean)","result":"void","volatility":"v","searchPath":"pg_catalog,public,private,pg_temp"},
+    {"signature":"private.daily_rate_correction_health_basis_v1(jsonb,boolean)","result":"jsonb","volatility":"v","searchPath":"pg_catalog,public,private,pg_temp"},
+    {"signature":"private.daily_rate_correction_health_review_prepare_v1(jsonb)","result":"jsonb","volatility":"v","searchPath":"pg_catalog,public,private,pg_temp"},
+    {"signature":"private.daily_rate_correction_health_accept_basis_v1(jsonb)","result":"jsonb","volatility":"v","searchPath":"pg_catalog,public,private,pg_temp"},
+    {"signature":"private.daily_rate_correction_health_result_basis_v1(uuid,uuid)","result":"jsonb","volatility":"v","searchPath":"pg_catalog,public,private,pg_temp"}
+  ],
+  "namespace":"private",
+  "owner":"audited logical postgres mapped to release CURRENT_USER",
+  "securityDefiner":true,
+  "language":"plpgsql",
+  "allowedNonOwnerExecuteGrantees":[],
+  "serviceRoleExecute":false,
+  "publicComposerSymbolsAdded":0,
+  "native":"NOT_RUN"
+}
