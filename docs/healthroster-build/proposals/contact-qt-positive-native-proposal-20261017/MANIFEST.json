@@ -1,5 +1,5 @@
 {
-  "version": "CONTACT_QT_FIXED_CHILD_SQLSTATE_DIAGNOSTIC_FORWARD_V1",
+  "version": "CONTACT_QT_STATEMENT_SNAPSHOT_CSE_SOURCE_FORWARD_V1",
   "sourceParent": "feb36c0c13c87b57b7566172e4bfaa1254117794",
   "sourceTests": 16,
   "parsedNativeInputPlBodies": 21,
@@ -64,7 +64,7 @@
     {
       "file": "OFFLINE_INPUTS.json",
       "bytes": 113699,
-      "sha256": "449d920d0c267303c37264eac775c00fe0cf6715dc84cfa9312741585f589eab"
+      "sha256": "dd53d4cc43ff0c9eed56cf7536b39429b147ce5bb59efd1f70d66663661f25a1"
     },
     {
       "file": "prepare-adapter.mjs",
@@ -98,8 +98,8 @@
     },
     {
       "file": "README.md",
-      "bytes": 5911,
-      "sha256": "665075d47612a3abc16cca6b8da0ec2386a58dc70232c085296c76e300da3d93"
+      "bytes": 6806,
+      "sha256": "6f8c4ab941a971e710828de4ab22308579350c7565dc4de80664b367ad87fa7f"
     },
     {
       "file": "reference/actor/build-program.mjs",
@@ -188,8 +188,8 @@
     },
     {
       "file": "ROOT_SOURCE_BINDING.json",
-      "bytes": 18088,
-      "sha256": "9c0a872f1df38ebd9c087ae671032a47c845a2c367e101f75a60b8c7dc11b117"
+      "bytes": 18589,
+      "sha256": "74965cda56af3384d22960345e26b798e10844a741b8163656808c250a74482b"
     },
     {
       "file": "SETUP_ENTRY.md",
@@ -198,8 +198,8 @@
     },
     {
       "file": "SOURCE_PINS.json",
-      "bytes": 26267,
-      "sha256": "f70de4401dd1f7ba6fd4479d08c5e8d303733819ba9031bcdb5539f502d62d9a"
+      "bytes": 26765,
+      "sha256": "2b54e76a6416f20231e513072748f4eaa136d3fa1c7210a897acf5ed731a6c78"
     },
     {
       "file": "SOURCE_REVIEW.json",
@@ -208,8 +208,8 @@
     },
     {
       "file": "source.mjs",
-      "bytes": 5751,
-      "sha256": "1dc02b678f9db5899fb424170b99f1788ec297eb839477d711a3fc5b822551b9"
+      "bytes": 7176,
+      "sha256": "6512932d124af8fb109e1840822af512820c52d10b8c7bdb225637050a00c886"
     },
     {
       "file": "TEST_RESULTS.txt",
@@ -232,5 +232,5 @@
       "sha256": "a16b0a67e5c333e39c23fed4c5287d1929aa0baf9ac2107b9b93112de55f6794"
     }
   ],
-  "parentManifestSha256": "96b79241ed757a6ede404bdb9d1dd19ff29137d12b2c46847ce529f993c2a828"
+  "parentManifestSha256": "663e7fdbcbe4d8169c008c706a0bc2d16b28394f6aec7191a158e68fd961f42f"
 }

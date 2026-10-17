@@ -1,0 +1,41 @@
+{
+  "version": "DAILY_CONTEXT_INDEPENDENT_RAW_REVIEW_V1",
+  "candidateCommit": "28457faeab3269ab65dbd2df92f6b04ee074cb41",
+  "candidateManifestSha256": "0977b1340702d8a1ec0a752be064801fee2af368b138a8a4b2381d793e252487",
+  "candidateFiles": 41,
+  "selectedWholeRawOwners": 18,
+  "selectedRootCommit": "c276aa49eb4db86ff42e184011a09bf2b59f253e",
+  "selectedSourceSavedIndexCurrentHeadEqual": true,
+  "literalWholeParentIdentityReconstructions": 18,
+  "currentManagedInventory": {
+    "migrations": 426,
+    "repeatables": 1096,
+    "uppercaseMigrationPaths": [
+      "supabase/migrations/13072026_1648_MIGRATION.SQL",
+      "supabase/migrations/26052026_1525_INDEX_OUTBOX.SQL"
+    ],
+    "declarationFilesVisited": 2073,
+    "finalSelectedOwners": 18
+  },
+  "helperPins": [
+    {
+      "file": "scripts/cloudtms-db-release-lib.mjs",
+      "sha256": "22b3a5cd4ab5ca93f59f891c03187a6f5214e6f4bb99381e203700c52b413bbf"
+    },
+    {
+      "file": "scripts/cloudtms-managed-release-sql.mjs",
+      "sha256": "ff391fccf7f690d4d476e935870d740667e4dfd92b972bfd5d7d80b1b3bb912b"
+    },
+    {
+      "file": "scripts/bpay-next-final-definers.mjs",
+      "sha256": "51ab7fd6d5c582ee7f4cab612502c4fc7ac11088cb1a996dd2cf1e6561468d09"
+    }
+  ],
+  "originalProgrammesReplayed": 3,
+  "originalTests": 20,
+  "independentTests": 27,
+  "bankBodiesRead": 0,
+  "rootWrites": 0,
+  "runtimeTargets": [],
+  "native": "NOT_RUN"
+}

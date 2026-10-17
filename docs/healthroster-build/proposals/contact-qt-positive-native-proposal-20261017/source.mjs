@@ -9,6 +9,15 @@ export const requireThat=(ok,code)=>{if(!ok)throw Error(code);};
 const physical=p=>fs.realpathSync.native(p).replaceAll('\\','/');
 const git=(root,args)=>execFileSync('git',['-c','gc.auto=0','-c','maintenance.auto=false','-C',root,...args],{maxBuffer:24e6});
 const checked=new Set();
+// Pure byte predicate. Actual source() supplies real saved/index/HEAD and
+// committed predecessor bytes; offline tests do not grant source admission.
+export function assertPinnedSourceImages(row,{saved,index,current,parent,parentForward=null}){
+ requireThat([saved,index,current,parent].every(Buffer.isBuffer),'CONTACT_QT_RAW_SOURCE_IMAGES_REQUIRED');
+ requireThat(saved.length===row.bytes&&sha(saved)===row.sha256,'CONTACT_QT_REVIEWED_ROOT_SOURCE_CHANGED');
+ requireThat(saved.equals(index)&&saved.equals(current),'CONTACT_QT_ROOT_COMMITTED_SOURCE_REQUIRED');
+ requireThat(parentForward?parentForward.file===row.file&&parent.length===parentForward.parentBytes&&sha(parent)===parentForward.parentSha256:saved.equals(parent),'CONTACT_QT_ROOT_COMMITTED_PREDECESSOR_REQUIRED');
+ return true;
+}
 export const sortWriters=rows=>[...rows].sort((a,b)=>(a.schema+'|'+a.identity).localeCompare(b.schema+'|'+b.identity));
 export const markerFor=identity=>'hr_install2_'+identity.turnId.slice('hr_turn_'.length);
 export function assertPhysical(root){
@@ -35,9 +44,11 @@ export function assertManifestedFixtureEntry(root){
 export async function source(root,caseId){
  assertPhysical(root);requireThat(CASES.includes(caseId),'CONTACT_QT_EXACT_CASE_REQUIRED');
  const pins=JSON.parse(fs.readFileSync(here+'/SOURCE_PINS.json')),head=git(root,['rev-parse','HEAD']).toString().trim(),key=head+'|'+sha(JSON.stringify(pins));
+ const forward=pins.snapshotSourceForward,forwardNames=['scripts/healthroster-live-test-restoration.mjs','scripts/healthroster-install1-full-rehearsal.mjs'];
+ if(forward!==undefined)requireThat(pins.rootCommit==='42802228977b941325f0feb44c11918b0f42190f'&&Array.isArray(forward)&&forward.length===2&&forward.every((r,i)=>Object.keys(r).sort().join('|')==='file|parentBytes|parentSha256'&&r.file===forwardNames[i]&&Number.isSafeInteger(r.parentBytes)&&r.parentBytes>0&&/^[0-9a-f]{64}$/.test(r.parentSha256)),'CONTACT_QT_EXACT_SNAPSHOT_SOURCE_FORWARD_REQUIRED');
  if(!checked.has(key))git(root,['merge-base','--is-ancestor',pins.rootCommit,head]);
  try{git(root,['diff','--cached','--quiet',head,'--',...pins.rootInputs.map(r=>r.file)]);}catch{throw Error('CONTACT_QT_ROOT_INDEX_SOURCE_CHANGED');}
- for(const row of pins.rootInputs){const b=fs.readFileSync(root+'/'+row.file);requireThat(b.length===row.bytes&&sha(b)===row.sha256,'CONTACT_QT_REVIEWED_ROOT_SOURCE_CHANGED');if(!checked.has(key))requireThat(b.equals(git(root,['show',pins.rootCommit+':'+row.file]))&&b.equals(git(root,['show',head+':'+row.file])),'CONTACT_QT_ROOT_COMMITTED_SOURCE_REQUIRED');}checked.add(key);
+ for(const row of pins.rootInputs){const b=fs.readFileSync(root+'/'+row.file);requireThat(b.length===row.bytes&&sha(b)===row.sha256,'CONTACT_QT_REVIEWED_ROOT_SOURCE_CHANGED');if(!checked.has(key))assertPinnedSourceImages(row,{saved:b,index:git(root,['show',':'+row.file]),current:git(root,['show',head+':'+row.file]),parent:git(root,['show',pins.rootCommit+':'+row.file]),parentForward:forward?.find(r=>r.file===row.file)??null});}checked.add(key);
  const expected=JSON.parse(fs.readFileSync(here+'/PROGRAMMES.json'))[caseId],programme=await buildProgram({root,caseId});
  requireThat(expected&&programme.sqlSha256===expected.sqlSha256&&programme.sqlBytes===expected.sqlBytes&&programme.statements===expected.statements,'CONTACT_QT_SEALED_PROGRAMME_REQUIRED');
  if(fs.existsSync(here+'/MANIFEST.json'))for(const row of JSON.parse(fs.readFileSync(here+'/MANIFEST.json')).files)requireThat(sha(fs.readFileSync(here+'/'+row.file))===row.sha256,'CONTACT_QT_ADAPTER_SOURCE_CHANGED');

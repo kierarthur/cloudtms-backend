@@ -1,0 +1,47 @@
+{
+  "version": "DAILY_S5_FALSE_SIGNATURE_SOURCE_FEASIBILITY_V1",
+  "status": "SOURCE_FEASIBLE_EXACT_OFFICE_MANUAL_FIXTURE_ONLY_NATIVE_NOT_QUALIFIED",
+  "existingSignature": "public.timesheet_lifecycle_guard_signature_v1(uuid,uuid,boolean)",
+  "argumentsDescriptionOnly": ["actual genuine S4 Timesheet UUID", null, false],
+  "programmeAuthored": false,
+  "nativeSqlRendered": false,
+  "unconditionalLifecycleRouteReadOnly": false,
+  "reason": "The existing affected_rows route passes settings_defaults.temp_log to p_include_payload and may insert audit_events through _temp_diag_log.",
+  "falseArmSignatureSemantics": "Same actual native MD5 payload; p_include_payload is consulted only after the signature is computed and controls diagnostics/returned payload, not the hash inputs.",
+  "freshNativeScopeRequired": [
+    "exact root-committed TEST_SETUP_MANIFEST and canonical setup baseline for the genuine Office producers",
+    "exact installed owner/body/ACL/schema identities for every executed dependency; source-only pins do not prove installation",
+    "actual active authenticated Office Admin/WP-PP actor separately bound; the signature routine itself takes no actor and grants no permission",
+    "one genuine current unarchived DAILY/HOURS/no-Contract physical row with exact S4 ID/version/booking/candidate/client",
+    "unique same-booking physical scope/current allocation, no historical-fallback identity or ambiguous current row",
+    "one actual current native financial row matching the genuine S4 producer; no synthetic financial snapshot or role patch",
+    "no contract_weeks row pointing to the exact Timesheet or a same-booking physical member",
+    "zero Candidate-created Daily workflow identity for this booking; no candidate-daily-first origin or workflow branch",
+    "zero Source lineage family_booking_id and exceptional family root_family_booking_id for this booking",
+    "actual enforced read-only B under the original server-owned rollback/shared-turn protocol, separately reviewed before any native trial",
+    "fresh genuine signature response must succeed and name the exact current physical ID/version/booking; no fallback or locally generated signature",
+    "original complete canonical/catalogue/ledger/restoration and independent C-after proof; no relaxed audit/background observations"
+  ],
+  "executedHealthClosureIfAllScopeFactsHold": [
+    "public.timesheet_lifecycle_guard_signature_v1",
+    "private._candidate_feature_enabled_current_v1",
+    "private._candidate_signature_component_v1 when existing feature flag is enabled",
+    "private._candidate_record_capabilities_v1 reads and raises existing caught P0002 before downstream policies/projections for this exact contractless Office fixture",
+    "remaining signature-component workflow/evidence/component heap SELECTs and native MD5/JSON builtins"
+  ],
+  "excludedBranchesRequireActualGuards": {
+    "logging": "explicit existing false argument; leave actual temp_log untouched",
+    "candidateCreatedDaily": "zero genuine workflow identity; broader Candidate projection/policy closure is not qualified",
+    "sourceCategory": "zero both exact Source association predicates; general Source closure includes Banking-owned bpay_next_source_origin_state_v1(uuid,uuid) and is not qualified here"
+  },
+  "noBankAuthorityInferred": true,
+  "authoriseSuccessNotProved": true,
+  "actualActor": null,
+  "actualSignature": null,
+  "actualFixtureId": null,
+  "nativeDefinitionObservation": "Root f9d6d77d fixed read-only definition observation only; complete inner guard body raw-equal, no invocation. Transitive installation and actual fixture remain unproved.",
+  "bankBodiesRead": false,
+  "networkCalls": 0,
+  "databaseConnections": 0,
+  "native": "NOT_RUN"
+}

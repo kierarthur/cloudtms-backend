@@ -1,6 +1,6 @@
 {
   "sourceParent": "feb36c0c13c87b57b7566172e4bfaa1254117794",
-  "currentRootCheckpoint": "a8dc643b193d531509f3fb926d34aee6d3718b30",
+  "currentRootCheckpoint": "42802228977b941325f0feb44c11918b0f42190f",
   "rootPhysical": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-install2-14102026",
   "source": [
     {
@@ -103,17 +103,19 @@
     },
     {
       "file": "scripts/healthroster-install1-full-rehearsal.mjs",
-      "sha256": "af2b6b591a8d6c251ad08507130bd2cf0cc9861d966055174e511de9c4102754",
-      "bytes": 48190,
-      "parentAndCurrentCommittedRawEqual": true,
-      "savedEqualsCommitted": true
+      "sha256": "8b4ab4113e42cea647dbbd1a22be2eef68806b62f3c8c2f06c58d4c904982cfc",
+      "bytes": 48321,
+      "parentAndCurrentCommittedRawEqual": false,
+      "savedEqualsCommitted": false,
+      "candidateForwardFromSha256": "af2b6b591a8d6c251ad08507130bd2cf0cc9861d966055174e511de9c4102754"
     },
     {
       "file": "scripts/healthroster-live-test-restoration.mjs",
-      "sha256": "fb4ffa42acf7cf319cdcb45a233babdb9720bb1bc73e4cb1f6ddcd3be696a4a6",
-      "bytes": 14597,
-      "parentAndCurrentCommittedRawEqual": true,
-      "savedEqualsCommitted": true
+      "sha256": "a91c1bf04f868ff372b20fb6beca239a7807fe9cc92c0c2682afffcd79554adc",
+      "bytes": 15050,
+      "parentAndCurrentCommittedRawEqual": false,
+      "savedEqualsCommitted": false,
+      "candidateForwardFromSha256": "fb4ffa42acf7cf319cdcb45a233babdb9720bb1bc73e4cb1f6ddcd3be696a4a6"
     },
     {
       "file": "scripts/healthroster-rehearsal-turn.mjs",
@@ -446,5 +448,7 @@
     }
   ],
   "rootExistingFilesEdited": 0,
-  "native": "NOT_RUN"
+  "native": "NOT_RUN",
+  "snapshotCandidateNotInstalled": true,
+  "snapshotCandidateNote": "Two expected source rows are proposed postimages; unchanged61 rows equal this committed parent. After root mounts/commits, actual saved/index/HEAD source guards and exact428 predecessor guards must independently pass."
 }

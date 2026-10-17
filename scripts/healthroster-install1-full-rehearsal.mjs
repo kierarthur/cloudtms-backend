@@ -14,7 +14,7 @@ import {canonical,digest,scanManagedSql,exactAtomicBody,literal} from './cloudtm
 import {neutraliseReviewedVerifierEnvelope,renderFullRehearsalUnits,closedRehearsalDiagnostic,scanRehearsalSql} from './healthroster-full-rehearsal-protocol.mjs';
 import {assertTurnIdentity,ownTurnActivityExclusionSql} from './healthroster-turn-control.mjs';
 import {verifierClosure} from './healthroster-install1-verifier-census.mjs';
-import {backgroundSnapshotFieldsSql,fixtureObservationSql,transactionIdentitySql,validateFixtureObservations,assertQualifiedLiveRestoration} from './healthroster-live-test-restoration.mjs';
+import {boundBackgroundSnapshotFieldsSql,fixtureObservationSql,transactionIdentitySql,validateFixtureObservations,assertQualifiedLiveRestoration} from './healthroster-live-test-restoration.mjs';
 import {assertFreshInstall2NativeGate} from './healthroster-install2-native-gate.mjs';
 import {compileReviewedManagedEnvelope,managedEnvelopeReviewPath,managedCalleeAuditPath} from './healthroster-reviewed-managed-envelope.mjs';
 import {f5Verifier,partitionF5VerificationFiles} from './healthroster-f5-post-verified-gate.mjs';
@@ -551,7 +551,7 @@ export function restorationSnapshotSql({identity,marker,relations,exportContract
  'migrations',(select coalesce(jsonb_agg(to_jsonb(l) order by path),'[]'::jsonb) from private.cloudtms_migration_ledger l),
  'repeatables',(select coalesce(jsonb_agg(to_jsonb(l) order by path),'[]'::jsonb) from private.cloudtms_repeatable_ledger l),
  'releases',(select coalesce(jsonb_agg(to_jsonb(l) order by release_id),'[]'::jsonb) from private.cloudtms_database_releases l)) value),
- catalogue as (${exportQuery})
+ catalogue as (${exportQuery})${observeLiveBusiness?', background_statement_snapshot as materialized (select pg_current_snapshot() snapshot_value)':''}
  select (identity_proof.jsonb_build_object::jsonb || jsonb_build_object(
  'ledgerFingerprint',${hash('select value from ledger')},
  'catalogueFingerprint',${hash('select to_jsonb(c) from catalogue c')},
@@ -559,7 +559,7 @@ export function restorationSnapshotSql({identity,marker,relations,exportContract
  'businessRowsFingerprint',${hash("select coalesce(jsonb_agg(jsonb_build_object('relation',relation,'hash',row_fingerprint) order by relation),'[]'::jsonb) from business")},
  'businessRelations',(select coalesce(jsonb_agg(jsonb_build_object('relation',relation,'count',row_count,'hash',row_fingerprint) order by relation),'[]'::jsonb) from business),
  'relationCensus',${literal(digest(JSON.stringify([...names].sort())))},
- ${observeLiveBusiness?backgroundSnapshotFieldsSql()+',':''}
+ ${observeLiveBusiness?boundBackgroundSnapshotFieldsSql()+',':''}
  'otherActivityCount',(select count(*) from pg_catalog.pg_stat_activity where datname=current_database() and ${ownTurnActivityExclusionSql(identity)} and (state <> 'idle' or xact_start is not null))))::text from identity_proof;`;
 }
 

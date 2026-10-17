@@ -16,7 +16,12 @@ export function assertQualifiedLiveRestoration(before,after,proof){
 }
 const hash=sql=>`encode(pg_catalog.sha256(pg_catalog.convert_to((${sql})::text,'UTF8')),'hex')`;
 const key=relation=>relation===backgroundRelations[0]?'batch_receipt_id':'id';
-export function backgroundSnapshotFieldsSql(){
+export function backgroundSnapshotFieldsSql(){return renderBackgroundSnapshotFieldsSql(false);}
+// The existing zero-argument renderer remains byte-identical for legacy callers.
+// Only the owning snapshot query may bind this fixed one-row statement CTE.
+export function boundBackgroundSnapshotFieldsSql(){return renderBackgroundSnapshotFieldsSql(true);}
+function renderBackgroundSnapshotFieldsSql(bound){
+ const activeSnapshot=bound?'(select snapshot_value from background_statement_snapshot)':'pg_current_snapshot()';
  const batch=backgroundRelations[0],outbox=backgroundRelations[1];
  // Native claim provenance: the completed native receipt, item identity,
  // request/response hashes and lease interval all agree with the actual owner.
@@ -37,18 +42,18 @@ export function backgroundSnapshotFieldsSql(){
     'max_items',r.claim_limit,'lease_seconds',extract(epoch from r.lease_expires_at_utc-r.created_at_utc)::integer))
   and r.terminal_response_sha256=private._candidate_daily_json_sha256_v1(r.terminal_response_body)`;
  const batches=`select coalesce(jsonb_agg(jsonb_build_object('keyHash',${hash('r.batch_receipt_id')},
-   'rowHash',${hash('to_jsonb(r)')},'xmin',r.xmin::text,'xactStatus',case when pg_snapshot_xmax(pg_current_snapshot())::text::numeric<4294967296 then pg_xact_status(r.xmin::text::xid8) end,
+   'rowHash',${hash('to_jsonb(r)')},'xmin',r.xmin::text,'xactStatus',case when pg_snapshot_xmax(${activeSnapshot})::text::numeric<4294967296 then pg_xact_status(r.xmin::text::xid8) end,
    'nativeClaimProved',coalesce((${proof}),false),'createdAt',r.created_at_utc,'updatedAt',r.updated_at_utc,'completedAt',r.completed_at_utc)
    order by r.batch_receipt_id),'[]'::jsonb) from ${batch} r`;
  const outboxes=`select coalesce(jsonb_agg(jsonb_build_object('keyHash',${hash('r.id')},'rowHash',${hash('to_jsonb(r)')},
    'stableHash',${hash("to_jsonb(r)-array['attempt_count','next_attempt_at']")},'xmin',r.xmin::text,
-   'xactStatus',case when pg_snapshot_xmax(pg_current_snapshot())::text::numeric<4294967296 then pg_xact_status(r.xmin::text::xid8) end,
+   'xactStatus',case when pg_snapshot_xmax(${activeSnapshot})::text::numeric<4294967296 then pg_xact_status(r.xmin::text::xid8) end,
    'attemptCount',r.attempt_count,'nextAttemptAt',r.next_attempt_at,'createdAt',r.created_at)
    order by r.id),'[]'::jsonb) from ${outbox} r`;
  return `'backgroundObservedAt',clock_timestamp(),'backgroundSnapshotStartedAt',transaction_timestamp(),
-  'backgroundSnapshotXmax',pg_snapshot_xmax(pg_current_snapshot())::text,
-  'backgroundSnapshotEpochZero',pg_snapshot_xmax(pg_current_snapshot())::text::numeric<4294967296,
-  'backgroundSnapshotXip',(select coalesce(jsonb_agg(x::text),'[]'::jsonb) from pg_snapshot_xip(pg_current_snapshot()) x),
+  'backgroundSnapshotXmax',pg_snapshot_xmax(${activeSnapshot})::text,
+  'backgroundSnapshotEpochZero',pg_snapshot_xmax(${activeSnapshot})::text::numeric<4294967296,
+  'backgroundSnapshotXip',(select coalesce(jsonb_agg(x::text),'[]'::jsonb) from pg_snapshot_xip(${activeSnapshot}) x),
   'backgroundRows',jsonb_build_object(${literal(batch)},(${batches}),${literal(outbox)},(${outboxes})),
   'backgroundWriterRoutines',(select coalesce(jsonb_agg(r order by r->>'schema',r->>'identity'),'[]'::jsonb)
     from catalogue c cross join lateral jsonb_array_elements(c.jsonb_build_object::jsonb->'routines') r

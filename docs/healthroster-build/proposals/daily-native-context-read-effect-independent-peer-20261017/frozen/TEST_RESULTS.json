@@ -1,0 +1,108 @@
+{
+  "version": "DAILY_CONTEXT_SOURCE_EFFECT_COUNTEREXAMPLES_V1",
+  "cases": [
+    {
+      "case": "complete actual18-owner source remains held for native/finance qualification",
+      "status": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "case": "data-changing CTE under SELECT",
+      "status": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "case": "direct UPDATE",
+      "status": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "case": "SELECT row-lock side effect",
+      "status": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "case": "SELECT INTO new table",
+      "status": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "case": "stable parent hides unknown volatile call",
+      "status": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "case": "sequence mutation hidden by SELECT",
+      "status": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "case": "session configuration hidden by SELECT",
+      "status": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "case": "advisory lock hidden by SELECT",
+      "status": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "case": "network extension hidden by SELECT",
+      "status": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "case": "new relation not in complete source set",
+      "status": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "case": "unreviewed custom cast",
+      "status": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "case": "digest shadow namespace is not pgcrypto",
+      "status": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "case": "missing complete current owner",
+      "status": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "case": "unparsed nested SQL cannot be waived",
+      "status": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "case": "dynamic PL cannot be waived",
+      "status": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "case": "foreign/unreviewed language cannot be waived",
+      "status": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "case": "one-argument finance boundary remains explicit",
+      "status": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "case": "unqualified digest resolution remains required",
+      "status": "PASS",
+      "native": "NOT_RUN"
+    },
+    {
+      "case": "default-VOLATILE PDF readers are source inspected, not assumed pure from parent STABLE",
+      "status": "PASS",
+      "native": "NOT_RUN"
+    }
+  ],
+  "tests": 20,
+  "native": "NOT_RUN",
+  "syntheticMutationsOnly": true
+}

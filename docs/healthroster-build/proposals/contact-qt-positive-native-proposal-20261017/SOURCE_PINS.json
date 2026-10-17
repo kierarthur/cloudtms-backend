@@ -1,7 +1,7 @@
 {
   "version": "CONTACT_QT_POSITIVE_SOURCE_AUTHORITY_V1",
   "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
-  "rootCommit": "feb36c0c13c87b57b7566172e4bfaa1254117794",
+  "rootCommit": "42802228977b941325f0feb44c11918b0f42190f",
   "rootInputs": [
     {
       "file": "supabase/migrations/16102026_1205_weekly_contact_20_automatic_followup_tranche.sql",
@@ -87,13 +87,13 @@
     },
     {
       "file": "scripts/healthroster-install1-full-rehearsal.mjs",
-      "bytes": 48190,
-      "sha256": "af2b6b591a8d6c251ad08507130bd2cf0cc9861d966055174e511de9c4102754"
+      "bytes": 48321,
+      "sha256": "8b4ab4113e42cea647dbbd1a22be2eef68806b62f3c8c2f06c58d4c904982cfc"
     },
     {
       "file": "scripts/healthroster-live-test-restoration.mjs",
-      "bytes": 14597,
-      "sha256": "fb4ffa42acf7cf319cdcb45a233babdb9720bb1bc73e4cb1f6ddcd3be696a4a6"
+      "bytes": 15050,
+      "sha256": "a91c1bf04f868ff372b20fb6beca239a7807fe9cc92c0c2682afffcd79554adc"
     },
     {
       "file": "scripts/healthroster-rehearsal-turn.mjs",
@@ -766,5 +766,18 @@
     "QT_ADMIN_CONTROLS_V1"
   ],
   "bankBodiesSelected": 0,
-  "native": "NOT_RUN"
+  "native": "NOT_RUN",
+  "snapshotCompositionParent": "42802228977b941325f0feb44c11918b0f42190f",
+  "snapshotSourceForward": [
+    {
+      "file": "scripts/healthroster-live-test-restoration.mjs",
+      "parentSha256": "fb4ffa42acf7cf319cdcb45a233babdb9720bb1bc73e4cb1f6ddcd3be696a4a6",
+      "parentBytes": 14597
+    },
+    {
+      "file": "scripts/healthroster-install1-full-rehearsal.mjs",
+      "parentSha256": "af2b6b591a8d6c251ad08507130bd2cf0cc9861d966055174e511de9c4102754",
+      "parentBytes": 48190
+    }
+  ]
 }
