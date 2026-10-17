@@ -1,0 +1,8 @@
+-- Complete additive reverse; no current owner is changed by this proposal.
+drop function public.timesheet_contract_move_preview_v1(jsonb);
+drop function private.timesheet_contract_move_read_v1(uuid,uuid);
+drop function private.timesheet_contract_move_preview_replay_v1(jsonb);
+drop function private.timesheet_contract_move_preview_read_v1(uuid,uuid);
+drop function private.timesheet_contract_move_invoice_effect_v1(jsonb,uuid);
+drop function private.timesheet_contract_move_actions_assert_v1(jsonb);
+drop function private.timesheet_contract_move_public_assert_v1(jsonb,text);
