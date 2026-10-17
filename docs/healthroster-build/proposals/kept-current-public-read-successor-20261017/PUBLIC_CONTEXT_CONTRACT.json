@@ -1,0 +1,92 @@
+{
+  "status": "CURRENT_HEALTH_IMPLEMENTATION_CONTRACT_SOURCE_ONLY",
+  "route": "POST /api/weekly-source/v1/commands",
+  "action": "KEEP_AS_PAID_CONTEXT",
+  "rpc": "public.weekly_source_keep_as_paid_context_v1(jsonb)",
+  "request": {
+    "schema_version": "WEEKLY_SOURCE_KEEP_AS_PAID_CONTEXT_REQUEST_V1",
+    "work_event_id": "lowercase canonical PostgreSQL UUID; all hexadecimal version/variant bits accepted",
+    "credit_invoice_line_id": "Optional lower canonical UUID from genuine selected native credited row; absence is allowed only when there is exactly one linked credit for an eligible CREDITED action."
+  },
+  "actor": "actor_user_id is injected from the authenticated current Worker user; payload is exactly schema_version/work_event_id plus optional credit_invoice_line_id; null is not an optional selected ID.",
+  "requiredRole": "Current active Office payment actor: admin OR payment_authoriser OR payment_golden_key; service-only native entry plus actual group/client/current covering-export VIEW_PAY_WORK scope",
+  "responseSchema": "WEEKLY_SOURCE_KEPT_AS_PAID_CONTEXT_READ_V1",
+  "responseKeys": [
+    "schema_version",
+    "work_event_id",
+    "candidate_id",
+    "client_id",
+    "contract_id",
+    "source_group_id",
+    "source_cycle_id",
+    "finalisation_week_ending",
+    "projection_publication_id",
+    "upload_id",
+    "source_present",
+    "invoiced",
+    "paid",
+    "paid_evidence_state",
+    "root_timesheet_ids",
+    "credit_lines",
+    "reason",
+    "kept_by_default",
+    "decision_available",
+    "decision_needed",
+    "facts_fingerprint",
+    "decision_applies",
+    "latest_acknowledgement",
+    "holds_pay",
+    "holds_invoice",
+    "accepted_source_removed",
+    "disabled_reason"
+  ],
+  "credit_lines": "Array of closed {invoice_line_id:uuid}, genuine linked IDs only for the existing writer CAS; no invoice ID, amount, reference or document is exposed",
+  "reason": "CREDITED | NOT_INVOICED_DISAPPEARED | null",
+  "facts_fingerprint": "lowercase hex64 | null; use unchanged as expected_facts_fingerprint for the existing strict KEEP_AS_PAID writer",
+  "latest_acknowledgement": {
+    "nullable": true,
+    "keys": [
+      "audit_id",
+      "decision_id",
+      "actor_user_id",
+      "actor_display",
+      "acknowledged_at_utc",
+      "acknowledgement_sequence"
+    ],
+    "acknowledgement_sequence": "positive canonical decimal string <=9223372036854775807; never convert to JavaScript Number",
+    "meaning": "Latest genuine event ACK is selected before current reason/hash comparison and stays visible when historical; decision_applies alone states its current applicability"
+  },
+  "buttonEnabled": "decision_available === true AND decision_needed === true AND disabled_reason === null; reason must be one of the two exact values and facts_fingerprint must be present",
+  "readCurrentness": "Fresh complete genuine CURRENT export, or actual current successful APPLIED correction export, covers the original event/group/client/date; raw present/unfinalised is never inferred absent. No current Source pay head or root proof means decision_available false. Unsupported ordinary-source omission remains unavailable until its genuine producer is delivered.",
+  "disabled_reason": {
+    "type": "null or closed {code:string,message:string}",
+    "values": {
+      "CURRENT_SOURCE_PAY_BASIS_UNAVAILABLE": "The current Source pay basis is not yet available. Refresh this shift before deciding.",
+      "SOURCE_PRESENT": "This shift is present in the latest source file.",
+      "ACCEPTED_SOURCE_REMOVED": "Source hours have already been accepted for this shift.",
+      "CURRENT_ACKNOWLEDGEMENT": "Keep as paid is already recorded for these Source facts.",
+      "SOURCE_FACTS_UNAVAILABLE": "The current Source facts are not yet available. Refresh this shift before deciding.",
+      "NO_DECISION_REQUIRED": "No Keep as paid decision is needed for these Source facts.",
+      "CREDIT_SELECTION_REQUIRED": "Open the credited Source line before recording Keep as paid."
+    }
+  },
+  "unknowns": "paid and decision_needed/holds may be null; preserve null. An ACK, invoice, head or absent export does not prove paid cash, withheld money, recovery or a Bank cut.",
+  "privateFieldsExcluded": [
+    "native_paid_basis",
+    "current_pay_head_movement_id",
+    "accepted_source_removal_proofs",
+    "credit_lines.invoice_id",
+    "credit_lines.net_pence"
+  ],
+  "native": "NOT_RUN",
+  "installable": false,
+  "paid_evidence_state": [
+    "UNKNOWN",
+    "NOT_SETTLED",
+    "SETTLED_ORIGINAL",
+    "SETTLED_SOURCE_SEGMENT"
+  ],
+  "typedSchema": "PUBLIC_CONTEXT.schema.json",
+  "runtimeDecoder": "kept-pay-context.mjs decodeKeptPayContext(value, requestPayload); preserve all returned scalar types and nulls.",
+  "selectedCredit": "An exact genuine request credit ID must belong to returned credit_lines. When exactly one returned credit exists, its actual ID may populate the existing writer; multiple returned IDs require native selected row, never first/sorted choice. An empty list never admits CREDITED."
+}

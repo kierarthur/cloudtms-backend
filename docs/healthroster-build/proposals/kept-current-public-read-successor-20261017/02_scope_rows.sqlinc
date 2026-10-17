@@ -1,0 +1,90 @@
+-- Actual Source context rows, including omitted work; no synthetic transition,
+-- payout or financial classification. Discovery never means absence/eligible.
+create or replace function private.weekly_source_keep_as_paid_scope_rows_v1(
+  p_actor_user_id uuid,p_source_group_id uuid,p_client_id uuid,p_source_cycle_id uuid,
+  p_root_timesheet_id uuid,p_work_week_ending date
+) returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare v_row record;v_context jsonb;v_result jsonb:='[]'::jsonb;v_unavailable jsonb;
+  v_cycle public.weekly_source_cycles%rowtype;v_upload public.weekly_source_uploads%rowtype;
+  v_family uuid[];
+begin
+  perform private.weekly_source_query_require_service_v1();
+  if private.weekly_source_pay_actor_allowed_v1(p_actor_user_id) is distinct from true then
+    raise exception 'WEEKLY_SOURCE_PAYMENT_AUTHORISER_REQUIRED' using errcode='42501';end if;
+  if p_source_group_id is null then return '[]'::jsonb;end if;
+  if not exists(select 1 from public.weekly_source_groups g where g.id=p_source_group_id
+    and g.active and g.source_family='ROSTER') then return '[]'::jsonb;end if;
+  if p_source_cycle_id is not null then
+    select * into strict v_cycle from public.weekly_source_cycles where id=p_source_cycle_id
+      and source_group_id=p_source_group_id;
+    -- This is discovery only. Each row below re-proves the actual latest
+    -- covering CURRENT/APPLIED export through the canonical public owner.
+    select upload.* into v_upload from public.weekly_source_uploads upload
+    join public.weekly_source_projection_publications publication on publication.upload_id=upload.id
+    where publication.source_cycle_id=v_cycle.id and publication.authority_scope_kind='CYCLE'
+      and publication.report_scope_id is null and publication.state in ('CURRENT','APPLIED')
+      and (publication.id=v_cycle.current_projection_publication_id or exists(
+        select 1 from public.weekly_source_final_revisions fr where fr.id=v_cycle.current_final_revision_id
+          and fr.state='CURRENT' and fr.upload_id=upload.id))
+      and upload.coverage_state='COMPLETE' and upload.coverage_timezone='Europe/London'
+    order by publication.published_at_utc desc,publication.created_at_utc desc,publication.id desc limit 1;
+    if v_upload.id is null then return '[]'::jsonb;end if;
+  end if;
+  if p_root_timesheet_id is not null then
+    v_family:=private.weekly_source_invoice_family_timesheet_ids_v1(p_root_timesheet_id);
+    if coalesce(cardinality(v_family),0)=0 then
+      raise exception 'WEEKLY_SOURCE_KEEP_AS_PAID_CONTEXT_SCOPE_UNAVAILABLE' using errcode='55000';end if;
+  end if;
+  for v_row in
+    select event.id,event.client_id,event.work_date,coalesce(candidate.display_name,candidate.tms_ref,'Candidate') candidate,
+      original.start_at_local,original.end_at_local,original.break_minutes,original.finalisation_week_ending
+    from public.weekly_work_events event
+    join public.weekly_source_format_profiles profile on profile.id=event.source_format_profile_id
+      and profile.profile_code in ('HEALTHROSTER_WEEKLY_FROM_TO_ACTUAL_V1',
+        'HEALTHROSTER_WEEKLY_EXPLICIT_ACTUAL_V1','ROSTER_WEEKLY_SUMMARY_ACTUAL_V1')
+    join public.candidates candidate on candidate.id=event.candidate_id
+    join lateral(select snapshot.*,cycle.finalisation_week_ending from public.weekly_source_final_snapshot_lines snapshot
+      join public.weekly_source_final_revisions revision on revision.id=snapshot.final_revision_id and revision.state in ('CURRENT','SUPERSEDED')
+      join public.weekly_source_cycles cycle on cycle.id=revision.source_cycle_id and cycle.source_group_id=p_source_group_id
+      where snapshot.work_event_id=event.id and snapshot.candidate_id=event.candidate_id and snapshot.client_id=event.client_id
+      order by cycle.finalisation_week_ending desc,revision.revision_number desc,snapshot.id desc limit 1) original on true
+    where event.first_source_group_id=p_source_group_id and event.identity_kind='PROFILE_EXTERNAL_KEY'
+      and (p_client_id is null or event.client_id=p_client_id)
+      and (p_work_week_ending is null or event.work_date between p_work_week_ending-6 and p_work_week_ending)
+      and (p_source_cycle_id is null or event.work_date between v_upload.confirmed_coverage_start_local_date and v_upload.confirmed_coverage_end_local_date)
+      and (p_root_timesheet_id is null or exists(select 1 from public.weekly_source_row_timesheet_lineages lineage
+        where lineage.work_event_id=event.id and lineage.candidate_id=event.candidate_id and lineage.client_id=event.client_id
+          and lineage.timesheet_id=any(v_family)))
+    order by event.work_date,event.id
+  loop
+    perform private.weekly_source_office_authority_v1(p_actor_user_id,'VIEW_PAY_WORK',
+      p_source_group_id,v_row.client_id,v_row.finalisation_week_ending);
+    v_context:=null;v_unavailable:=null;
+    begin
+      v_context:=public.weekly_source_keep_as_paid_context_v1(jsonb_build_object(
+        'schema_version','WEEKLY_SOURCE_KEEP_AS_PAID_CONTEXT_REQUEST_V1',
+        'work_event_id',v_row.id,'actor_user_id',p_actor_user_id));
+    exception when sqlstate '55000' then
+      -- A missing genuine current producer is visible as unavailable. It is
+      -- not NO_CHANGE, no absence, no zero and no permission to decide.
+      if sqlerrm not in ('WEEKLY_SOURCE_KEEP_AS_PAID_EXPORT_UNAVAILABLE',
+        'WEEKLY_SOURCE_KEEP_AS_PAID_HEAD_UNBOUND','WEEKLY_SOURCE_KEEP_AS_PAID_LINEAGE_UNBOUND') then raise;end if;
+      v_unavailable:=jsonb_build_object('code','CURRENT_SOURCE_CONTEXT_UNAVAILABLE',
+        'message','The current Source context is not yet available. Refresh this shift before deciding.');
+    end;
+    if v_context is not null and p_source_cycle_id is not null and v_context->>'source_cycle_id' is distinct from p_source_cycle_id::text then continue;end if;
+    if v_unavailable is not null or v_context->'source_present'='false'::jsonb or v_context->'latest_acknowledgement' is distinct from 'null'::jsonb
+      or v_context->'accepted_source_removed'='true'::jsonb then
+      v_result:=v_result||jsonb_build_array(jsonb_build_object('work_event_id',v_row.id,
+        'candidate',v_row.candidate,'work_date',v_row.work_date,
+        'start',to_char(v_row.start_at_local,'HH24:MI'),'end',to_char(v_row.end_at_local,'HH24:MI'),
+        'break_minutes',v_row.break_minutes,'context',v_context,'unavailable_reason',v_unavailable));
+    end if;
+  end loop;
+  return v_result;
+end;
+$function$;
+alter function private.weekly_source_keep_as_paid_scope_rows_v1(uuid,uuid,uuid,uuid,uuid,date) owner to postgres;
+revoke all on function private.weekly_source_keep_as_paid_scope_rows_v1(uuid,uuid,uuid,uuid,uuid,date) from public,anon,authenticated,service_role;

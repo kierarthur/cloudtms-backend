@@ -1,0 +1,32 @@
+{
+  "checkpoint": "24c57e6c7af4a8fb07d5e3126ab9ac76e9448560",
+  "parentCommit": "b6922e27c18312cd4f285e31c6ad99489612d577",
+  "pins": [
+    {
+      "commit": "b6922e27c18312cd4f285e31c6ad99489612d577",
+      "path": "docs/healthroster-build/proposals/source-later-accept-current-successor-20261017/forward/09_complete_current_context.sqlinc",
+      "sha256": "a040179a16b1c274d47251f4ef908d353e7c23cda9b2b22912c6f6f7d5f4b6a4"
+    },
+    {
+      "commit": "24c57e6c7af4a8fb07d5e3126ab9ac76e9448560",
+      "path": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/28_native_contact_workspace.sqlinc",
+      "sha256": "48c28182274acc2f27de4ee8751135b24b71afa9fcce782a616630b9b9bab028"
+    },
+    {
+      "commit": "24c57e6c7af4a8fb07d5e3126ab9ac76e9448560",
+      "path": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "sha256": "8f65ee0c9cf46b5465c920057212e6d2499b119e05c4c1dedd2f0cfecb89eea7"
+    },
+    {
+      "commit": "24c57e6c7af4a8fb07d5e3126ab9ac76e9448560",
+      "path": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_client_week_context.sqlinc",
+      "sha256": "7ee49ed797ccb4b469677a9ccddb20b7a821f6a318cb56e64dd31e8f34ddbb13"
+    },
+    {
+      "commit": "b6922e27c18312cd4f285e31c6ad99489612d577",
+      "path": "docs/healthroster-build/proposals/source-later-accept-current-successor-20261017/forward/broker/src/weekly-source/routes.js",
+      "sha256": "ad1378679bcc02c7b10134e97a06e7daf20906e95945160cc9207e53c272d781"
+    }
+  ],
+  "native": "NOT_RUN"
+}

@@ -1,0 +1,362 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:cloudtms:weekly-source-kept-as-paid-context-read:v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "work_event_id",
+    "candidate_id",
+    "client_id",
+    "contract_id",
+    "source_group_id",
+    "source_cycle_id",
+    "finalisation_week_ending",
+    "projection_publication_id",
+    "upload_id",
+    "source_present",
+    "invoiced",
+    "paid",
+    "paid_evidence_state",
+    "root_timesheet_ids",
+    "credit_lines",
+    "reason",
+    "kept_by_default",
+    "decision_available",
+    "decision_needed",
+    "facts_fingerprint",
+    "decision_applies",
+    "latest_acknowledgement",
+    "holds_pay",
+    "holds_invoice",
+    "accepted_source_removed",
+    "disabled_reason"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "WEEKLY_SOURCE_KEPT_AS_PAID_CONTEXT_READ_V1"
+    },
+    "work_event_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
+    },
+    "candidate_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
+    },
+    "client_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
+    },
+    "contract_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
+    },
+    "source_group_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
+    },
+    "source_cycle_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
+    },
+    "finalisation_week_ending": {
+      "type": "string",
+      "format": "date"
+    },
+    "projection_publication_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
+    },
+    "upload_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
+    },
+    "source_present": {
+      "type": "boolean"
+    },
+    "invoiced": {
+      "type": "boolean"
+    },
+    "paid": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "paid_evidence_state": {
+      "enum": [
+        "UNKNOWN",
+        "NOT_SETTLED",
+        "SETTLED_ORIGINAL",
+        "SETTLED_SOURCE_SEGMENT"
+      ]
+    },
+    "root_timesheet_ids": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
+      }
+    },
+    "credit_lines": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "invoice_line_id"
+        ],
+        "properties": {
+          "invoice_line_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
+          }
+        }
+      }
+    },
+    "reason": {
+      "enum": [
+        "CREDITED",
+        "NOT_INVOICED_DISAPPEARED",
+        null
+      ]
+    },
+    "kept_by_default": {
+      "type": "boolean"
+    },
+    "decision_available": {
+      "type": "boolean"
+    },
+    "decision_needed": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "facts_fingerprint": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "decision_applies": {
+      "type": "boolean"
+    },
+    "latest_acknowledgement": {
+      "anyOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "audit_id",
+            "decision_id",
+            "actor_user_id",
+            "actor_display",
+            "acknowledged_at_utc",
+            "acknowledgement_sequence"
+          ],
+          "properties": {
+            "audit_id": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
+            },
+            "decision_id": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
+            },
+            "actor_user_id": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
+            },
+            "actor_display": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "acknowledged_at_utc": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "acknowledgement_sequence": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]{0,18}$",
+              "maxLength": 19,
+              "description": "Canonical positive PostgreSQL bigint decimal string; decimal comparison <=9223372036854775807 is mandatory in shared runtime decoder. Never JS Number."
+            }
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "holds_pay": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "holds_invoice": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "accepted_source_removed": {
+      "type": "boolean"
+    },
+    "disabled_reason": {
+      "anyOf": [
+        {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "code",
+                "message"
+              ],
+              "properties": {
+                "code": {
+                  "const": "CURRENT_SOURCE_PAY_BASIS_UNAVAILABLE"
+                },
+                "message": {
+                  "const": "The current Source pay basis is not yet available. Refresh this shift before deciding."
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "code",
+                "message"
+              ],
+              "properties": {
+                "code": {
+                  "const": "SOURCE_PRESENT"
+                },
+                "message": {
+                  "const": "This shift is present in the latest source file."
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "code",
+                "message"
+              ],
+              "properties": {
+                "code": {
+                  "const": "ACCEPTED_SOURCE_REMOVED"
+                },
+                "message": {
+                  "const": "Source hours have already been accepted for this shift."
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "code",
+                "message"
+              ],
+              "properties": {
+                "code": {
+                  "const": "CURRENT_ACKNOWLEDGEMENT"
+                },
+                "message": {
+                  "const": "Keep as paid is already recorded for these Source facts."
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "code",
+                "message"
+              ],
+              "properties": {
+                "code": {
+                  "const": "SOURCE_FACTS_UNAVAILABLE"
+                },
+                "message": {
+                  "const": "The current Source facts are not yet available. Refresh this shift before deciding."
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "code",
+                "message"
+              ],
+              "properties": {
+                "code": {
+                  "const": "NO_DECISION_REQUIRED"
+                },
+                "message": {
+                  "const": "No Keep as paid decision is needed for these Source facts."
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "code",
+                "message"
+              ],
+              "properties": {
+                "code": {
+                  "const": "CREDIT_SELECTION_REQUIRED"
+                },
+                "message": {
+                  "const": "Open the credited Source line before recording Keep as paid."
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "description": "Closed public successful result only. All eight identity fields and root/credit IDs are non-null canonical UUID strings. Unknown financial/decision booleans and reason/facts/ACK are nullable exactly as declared. Runtime decoder additionally validates request binding, credit selection, ACK bigint bound and eligibility relationships."
+}

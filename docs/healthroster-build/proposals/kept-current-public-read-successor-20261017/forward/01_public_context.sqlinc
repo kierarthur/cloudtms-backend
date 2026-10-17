@@ -1,0 +1,64 @@
+-- The public read is a scoped projection of the canonical current context.
+-- Financial/native proof blobs and invoice amounts are deliberately private.
+create or replace function public.weekly_source_keep_as_paid_context_v1(p_request jsonb)
+returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare v_actor uuid;v_event uuid;v_context jsonb;v_disabled jsonb;v_credits jsonb;v_selected_credit uuid;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  if p_request ? 'credit_invoice_line_id' then
+    perform private.weekly_source_publication_require_keys_v1(p_request,
+      array['schema_version','work_event_id','actor_user_id','credit_invoice_line_id'],'keep_as_paid.context');
+    v_selected_credit:=(private.weekly_source_publication_scalar_v1(
+      p_request->'credit_invoice_line_id','credit_invoice_line_id','UUID')#>>'{}')::uuid;
+  else
+    perform private.weekly_source_publication_require_keys_v1(p_request,
+      array['schema_version','work_event_id','actor_user_id'],'keep_as_paid.context');
+  end if;
+  if p_request->>'schema_version' is distinct from 'WEEKLY_SOURCE_KEEP_AS_PAID_CONTEXT_REQUEST_V1' then
+    raise exception 'WEEKLY_SOURCE_KEEP_AS_PAID_CONTEXT_REQUEST_INVALID' using errcode='22023';end if;
+  v_actor:=(private.weekly_source_publication_scalar_v1(p_request->'actor_user_id','actor_user_id','UUID')#>>'{}')::uuid;
+  v_event:=(private.weekly_source_publication_scalar_v1(p_request->'work_event_id','work_event_id','UUID')#>>'{}')::uuid;
+  if private.weekly_source_pay_actor_allowed_v1(v_actor) is distinct from true then
+    raise exception 'WEEKLY_SOURCE_PAYMENT_AUTHORISER_REQUIRED' using errcode='42501';end if;
+  v_context:=private.weekly_source_kept_as_paid_context_v1(v_event,v_actor);
+  if v_context->>'schema_version' is distinct from 'WEEKLY_SOURCE_KEPT_AS_PAID_CONTEXT_V1'
+    or v_context->>'work_event_id' is distinct from v_event::text then
+    raise exception 'WEEKLY_SOURCE_KEEP_AS_PAID_CONTEXT_UNBOUND' using errcode='55000';end if;
+  if v_selected_credit is not null and not exists(select 1 from jsonb_array_elements(v_context->'credit_lines') credit
+    where credit.value->>'invoice_line_id'=v_selected_credit::text) then
+    raise exception 'WEEKLY_SOURCE_KEEP_AS_PAID_CREDIT_LINE_UNBOUND' using errcode='22023';end if;
+  if v_context->'accepted_source_removed'='true'::jsonb then
+    v_disabled:=jsonb_build_object('code','ACCEPTED_SOURCE_REMOVED','message','Source hours have already been accepted for this shift.');
+  elsif v_context->'source_present'='true'::jsonb then
+    v_disabled:=jsonb_build_object('code','SOURCE_PRESENT','message','This shift is present in the latest source file.');
+  elsif v_context->>'current_pay_head_movement_id' is null
+    or jsonb_array_length(v_context->'root_timesheet_ids')=0 then
+    v_disabled:=jsonb_build_object('code','CURRENT_SOURCE_PAY_BASIS_UNAVAILABLE','message','The current Source pay basis is not yet available. Refresh this shift before deciding.');
+  elsif v_context->'decision_applies'='true'::jsonb then
+    v_disabled:=jsonb_build_object('code','CURRENT_ACKNOWLEDGEMENT','message','Keep as paid is already recorded for these Source facts.');
+  elsif v_context->>'reason'='CREDITED' and jsonb_array_length(v_context->'credit_lines')>1
+    and v_selected_credit is null then
+    v_disabled:=jsonb_build_object('code','CREDIT_SELECTION_REQUIRED','message','Open the credited Source line before recording Keep as paid.');
+  elsif v_context->'decision_needed'='false'::jsonb then
+    v_disabled:=jsonb_build_object('code','NO_DECISION_REQUIRED','message','No Keep as paid decision is needed for these Source facts.');
+  elsif v_context->>'facts_fingerprint' is null or v_context->'decision_needed'='null'::jsonb then
+    v_disabled:=jsonb_build_object('code','SOURCE_FACTS_UNAVAILABLE','message','The current Source facts are not yet available. Refresh this shift before deciding.');
+  elsif v_context->'decision_available' is distinct from 'true'::jsonb
+    or v_context->'decision_needed' is distinct from 'true'::jsonb then
+    v_disabled:=jsonb_build_object('code','NO_DECISION_REQUIRED','message','No Keep as paid decision is needed for these Source facts.');
+  end if;
+  select coalesce(jsonb_agg(jsonb_build_object('invoice_line_id',credit.value->'invoice_line_id')
+    order by credit.value->>'invoice_line_id'),'[]'::jsonb) into v_credits
+    from jsonb_array_elements(v_context->'credit_lines') credit;
+  return (v_context-array['native_paid_basis','current_pay_head_movement_id','accepted_source_removal_proofs',
+      'paid_quantity_known','withheld_amount_known'])
+    ||jsonb_build_object('schema_version','WEEKLY_SOURCE_KEPT_AS_PAID_CONTEXT_READ_V1',
+      'credit_lines',v_credits,'accepted_source_removed',coalesce(v_context->'accepted_source_removed','false'::jsonb),
+      'disabled_reason',v_disabled);
+end;
+$function$;
+alter function public.weekly_source_keep_as_paid_context_v1(jsonb) owner to postgres;
+revoke all on function public.weekly_source_keep_as_paid_context_v1(jsonb) from public,anon,authenticated,service_role;
+grant execute on function public.weekly_source_keep_as_paid_context_v1(jsonb) to service_role;
