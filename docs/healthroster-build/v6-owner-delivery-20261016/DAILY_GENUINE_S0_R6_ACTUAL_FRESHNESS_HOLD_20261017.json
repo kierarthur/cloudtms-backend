@@ -1,0 +1,41 @@
+{
+  "version": "DAILY_GENUINE_S0_R6_ACTUAL_FRESHNESS_HOLD_V1",
+  "rootSourceStart": "0184485ddc54780a524bb8e8bdeea82843885e1c",
+  "sourceCommit": "8d2ef953c927ad5bc2a5787b8da6a3891565a8e3",
+  "actualOutputDirectory": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\.codex-tmp\\daily-genuine-stages-20261017-ecab888c3f78437718dda9c6ed0f6101",
+  "accepted": true,
+  "rolledBack": true,
+  "connectedFresh": true,
+  "nativeBeforeMainObservedAt": "2026-10-17T13:55:36.867191+00:00",
+  "nativeBeforeFreshObservedAt": "2026-10-17T13:55:40.928613+00:00",
+  "actualClosedSubmit": {
+    "status": "HOLD",
+    "code": "FIXTURE_FRESH_NATIVE_CLOCK_REQUIRED",
+    "phase": "submit",
+    "stage": "S0",
+    "browserClosed": true
+  },
+  "beforeEvidenceCommit": "24805aff1cf148b0cb3eefc47cbf04e2b67cac29",
+  "setupCommit": "7c0cdad576cdea05c7623f892dec03eff620cdde",
+  "nativeResultSha256": "6cf7877cb15b78e2586cce95059324889fc78962279bda13358f1d35f2811637",
+  "businessRequests": 0,
+  "attemptCreated": false,
+  "qualifiedPrefix": "NOT_CREATED",
+  "sharedTurnRelease": {
+    "chat": "HealthRoster",
+    "task": "DAILY_GENUINE_S0_STAGED_ONLY",
+    "status": "RELEASED",
+    "takenAt": "2026-10-17T13:55:21.280Z",
+    "releasedAt": "2026-10-17T13:56:11.179Z",
+    "explicitUnlockConfirmed": true,
+    "connectionClosed": true,
+    "proved": false,
+    "key": [
+      20261013,
+      1
+    ]
+  },
+  "next": "Review exact R7 publication batching; no unchanged retry/freshness waiver.",
+  "install2": "NOT_INSTALLED",
+  "finalCritics": "NOT_RUN"
+}
