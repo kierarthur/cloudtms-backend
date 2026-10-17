@@ -38,8 +38,8 @@ export function readStage(result,receipt){
  requireThat(identity.physicalDatabase==='cloudtms_test_clone'&&identity.identityTest===true&&identity.customerKeyNull===true
   &&identity.module==='LEGACY:1'&&identity.applyingCount===0&&identity.markerAbsent===true,'PURE_MCP_FRESH_MARKER_ABSENCE_REQUIRED');
  requireThat(held.physicalDatabase==='cloudtms_test_clone'&&held.databaseOid===receipt.holderIdentity.databaseOid
-  &&held.holderGranted===true&&held.holderPid===receipt.holderIdentity.backendPid&&held.noRoleSwitch===true
-  &&positivePid(held.backendPid)&&held.backendPid!==transaction.backendPid&&held.backendPid!==receipt.holderIdentity.backendPid,'PURE_MCP_FRESH_HELD_TURN_REQUIRED');
+  &&held.holderGranted===true&&held.holderPid===receipt.holderIdentity.backendPid&&held.readOnly===true&&held.noRoleSwitch===true
+  &&positivePid(held.backendPid)&&held.backendPid!==receipt.holderIdentity.backendPid,'PURE_MCP_FRESH_HELD_TURN_REQUIRED');
  return {transaction,observations:[observation],expectedUnits:[0],freshPeerPid:held.backendPid};
 }
 export function bindSnapshots({receipt,stage,beforePacket,afterPacket}){
@@ -55,7 +55,10 @@ export function bindSnapshots({receipt,stage,beforePacket,afterPacket}){
    &&packet.snapshot.marker===receipt.marker&&packet.snapshot.markerAbsent===true,'PURE_BOTH_COMPLETE_BACKGROUND_SCOPE_REQUIRED');
  }
  const afterPid=afterPacket.peer.readerPid;
- requireThat(new Set([receipt.holderIdentity.backendPid,stage.transaction.backendPid,stage.freshPeerPid,beforePacket.peer.readerPid,afterPid]).size===5,'PURE_DISTINCT_C_AFTER_REQUIRED');
+ // A fresh MCP client can reuse B's (or the already closed C-before's)
+ // physical pooled backend. The independent C-after must still be distinct.
+ requireThat(new Set([receipt.holderIdentity.backendPid,stage.transaction.backendPid,beforePacket.peer.readerPid]).size===3,'PURE_GENUINE_BEFORE_HOLDER_B_REQUIRED');
+ requireThat(![receipt.holderIdentity.backendPid,stage.transaction.backendPid,beforePacket.peer.readerPid,stage.freshPeerPid].includes(afterPid),'PURE_DISTINCT_C_AFTER_REQUIRED');
  requireThat(afterPacket.fixtureProof?.backendPid===afterPid&&afterPacket.fixtureProof.connectedFresh===true
   &&afterPacket.provenance.fixtureSource==='UNCHANGED_CANONICAL_FRESH_FIXTURE_PROOF_C_AFTER_THIRD_FRAME','PURE_GENUINE_C_AFTER_FIXTURE_PROOF_REQUIRED');
  return {before:beforePacket.snapshot,after:afterPacket.snapshot};

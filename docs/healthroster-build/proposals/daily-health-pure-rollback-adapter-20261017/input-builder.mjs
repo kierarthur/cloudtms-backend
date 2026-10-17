@@ -7,7 +7,8 @@ export function heldSql(identity){return `exists(select 1 from pg_catalog.pg_loc
  and pid=${identity.backendPid} and classid=20261013 and objid=1 and objsubid=2 and mode='ExclusiveLock' and granted)`;}
 export function holderProofSql(identity){return `select jsonb_build_object('physicalDatabase',current_database(),
  'databaseOid',(select oid::bigint from pg_catalog.pg_database where datname=current_database()),
- 'holderPid',${identity.backendPid},'backendPid',pg_backend_pid(),'holderGranted',(${heldSql(identity)}),'noRoleSwitch',current_user=session_user);`;}
+ 'holderPid',${identity.backendPid},'backendPid',pg_backend_pid(),'holderGranted',(${heldSql(identity)}),
+ 'readOnly',current_setting('transaction_read_only')::boolean,'noRoleSwitch',current_user=session_user);`;}
 export async function buildInput({root,identity}){
  const {programme,rehearsal,live,sql,control}=await source(root);control.assertTurnIdentity(identity);
  const marker=markerFor(identity);requireThat(/^hr_install2_[a-f0-9]{32}$/.test(marker),'PURE_MARKER_IDENTITY_REQUIRED');

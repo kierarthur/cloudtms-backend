@@ -5,16 +5,16 @@
   "nativeShapedFixtures": "SYNTHETIC_ONLY",
   "dbConnections": 0,
   "adapter": {
-    "tests": 11,
-    "passed": 11,
+    "tests": 12,
+    "passed": 12,
     "failed": 0,
-    "outputSha256": "b2524d9ad2f67a8d6b9cc689aa31c0509cfbea84c1abba3461f161e50830ff78"
+    "outputSha256": "be15fa03d5bdd016d3ed7d51655591f2b3c5d5ce0e32123091f09f0631107307"
   },
   "unchangedOriginals": {
     "tests": 44,
     "passed": 44,
     "failed": 0,
-    "outputSha256": "d935f80ab86e771f3cba1c4a02c45988c53810db23f2f555328b080ce467d266",
+    "outputSha256": "ce79a93499bf622f72a2a7dfff7f50dd9955ad3355e91759ba836de5efd71bc5",
     "files": [
       {
         "file": "tests/healthroster-live-test-restoration.test.mjs",

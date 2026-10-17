@@ -37,5 +37,13 @@
   "restoration": "NOT_RUN",
   "publicDailyComposers": "NOT_RUN",
   "fullInstall": "NOT_RUN",
-  "dbConnections": 0
+  "dbConnections": 0,
+  "forwardReview": {
+    "parent": "b6d4dc6bdd1267bc871c92fb3e5210c2eea63a07",
+    "finding": "Remove extra physical-pool uniqueness condition; a fresh MCP client may reuse B or closed C-before; independent C-after and original native restoration qualification remain required",
+    "freshMcpProof": "connectedFresh=true plus actual readOnly=true, marker absence, correct physical TEST database and current held turn",
+    "sourceOnly": true,
+    "originalQualifierChanged": false,
+    "pureProgrammeChanged": false
+  }
 }

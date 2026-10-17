@@ -52,7 +52,11 @@ fixture frame and transport refusal semantics are retained. The runtime original
 modules, especially their private WeakMap qualifier, are never copied or edited.
 
 The reader's independent C-after must be a different backend from A, B,
-C-before and the MCP verification connection. It runs the unchanged
+C-before and any distinct MCP verification backend. A fresh MCP client may
+legitimately reuse B's pooled backend or the already closed C-before backend;
+its `connectedFresh=true`, actual read-only state, marker absence and held-turn
+proof remain required. A, B and C-before must themselves be distinct. C-after
+runs the unchanged
 `freshFixtureProofSql` using B's actual PID, XID and observations. That proof must
 observe B aborted, both observed-key scopes absent, and the real marker absent.
 The four original sealed writer records must equal actual complete before/after
@@ -104,14 +108,17 @@ dispatched external MCP call cannot be cancelled by this local process: root
 must reconcile its result before another trial. Never dispatch a stale READY
 input after abort/timeout. No final PASS is emitted for unconfirmed cleanup.
 
-Offline validation: 11 adapter tests and 44 unchanged original restoration/turn
+Offline validation: 12 adapter tests and 44 unchanged original restoration/turn
 tests pass. PG17 grammar parses the original programme, complete B, MCP
 verification and both C source examples without substitutions; native body
 compilation remains NOT_PROVED. `OFFLINE_INPUTS.json` contains **synthetic source
 examples, never dispatch inputs or native evidence**. Tests cover real-marker
 evidence requirements, assertion/statement envelopes, distinct backend IDs,
 complete scope, original WeakMap copy refusal, parent/fixture/writer/ledger
-refusals, caps, malformed UTF-8, finite controls and elapsed bounds.
+refusals, caps, malformed UTF-8, finite controls and elapsed bounds. The pooled
+MCP regression accepts B/C-before reuse only with independent C-after and actual
+original restoration qualification; C-after reuse and stale/copied proofs refuse.
+`FORWARD_REVERSE.json` records complete bounded reversals to frozen `b6d4dc6b`.
 
 All current work is isolated source-only. No database connection, lock, Docker,
 release, runtime/root edit, Banking body read, or credential access occurred.

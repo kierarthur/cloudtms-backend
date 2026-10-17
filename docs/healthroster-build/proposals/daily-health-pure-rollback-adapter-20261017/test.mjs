@@ -26,7 +26,7 @@ function nativeFixture(){
  set('completion',row({physicalDatabase:'cloudtms_test_clone',databaseOid:123,backendPid:200,xid:'50',marker:built.receipt.marker,
   markerPresent:true,markerRows:0,holderPid:100,holderGranted:true,noRoleSwitch:true}));
  result.rollbackVerification={connectedFresh:true,database:'cloudtms_test_clone',statements:[row('pg_catalog, public'),row({physicalDatabase:'cloudtms_test_clone',identityTest:true,customerKeyNull:true,module:'LEGACY:1',applyingCount:0,markerAbsent:true}),
-  row({physicalDatabase:'cloudtms_test_clone',databaseOid:123,holderPid:100,backendPid:300,holderGranted:true,noRoleSwitch:true})].map((s,i)=>({statement:i+1,...s}))};
+  row({physicalDatabase:'cloudtms_test_clone',databaseOid:123,holderPid:100,backendPid:300,holderGranted:true,readOnly:true,noRoleSwitch:true})].map((s,i)=>({statement:i+1,...s}))};
  return result;
 }
 function snapshots(){
@@ -97,7 +97,7 @@ test('native-shaped success requires real B marker, original assertion and genui
   r=>r.statements[built.receipt.indices.completion-1].rows[0].result.markerPresent=false,
   r=>r.statements[built.receipt.indices.completion-1].rows[0].result.markerRows=1,
   r=>r.statements[built.receipt.indices.completion-1].rows[0].result.xid='51',
-  r=>r.rollbackVerification.connectedFresh=false,r=>r.rollbackVerification.statements[2].rows[0].result.backendPid=200,
+  r=>r.rollbackVerification.connectedFresh=false,r=>r.rollbackVerification.statements[2].rows[0].result.readOnly=false,
   r=>r.rollbackVerification.statements[1].rows[0].result.markerAbsent=false]){
   const r=nativeFixture();mutate(r);assert.throws(()=>readStage(r,built.receipt));
  }
@@ -107,6 +107,24 @@ test('distinct C-after bound to original fixture proof; no aliases or omitted re
  for(const pid of [100,200,300,400]){const q=snapshots();q.afterPacket.peer.readerPid=pid;assert.throws(()=>bindSnapshots({receipt:built.receipt,stage,...q}));}
  const q=snapshots();q.afterPacket.fixtureProof.backendPid=999;assert.throws(()=>bindSnapshots({receipt:built.receipt,stage,...q}));
  const omitted=snapshots();omitted.beforePacket.snapshot.businessRelations.pop();assert.throws(()=>bindSnapshots({receipt:built.receipt,stage,...omitted}));
+});
+test('fresh MCP pooled B or closed C-before PID qualifies only with independent C-after and original restoration',async()=>{
+ for(const pooledPid of [200,400]){
+  const result=nativeFixture();result.rollbackVerification.statements[2].rows[0].result.backendPid=pooledPid;
+  const stage=readStage(result,built.receipt);assert.equal(stage.freshPeerPid,pooledPid);
+  const p=snapshots(),summary=await validateRestoration({root:ROOT,result,receipt:built.receipt,...p});
+  assert.equal(summary.readerPids.after,500);assert.equal(summary.restoration.liveRestoration.parentRollback.status,'aborted');
+  const originalProof=p.afterPacket.snapshot.liveRestoration;
+  assert.throws(()=>src.rehearsal.assertFreshRestoration(p.beforePacket.snapshot,{...p.afterPacket.snapshot,liveRestoration:structuredClone(originalProof)},built.receipt.marker),/REHEARSAL_LIVE_RESTORATION_UNBRANDED_OR_STALE/);
+  p.beforePacket.snapshot.backgroundSnapshotXmax='99';
+  assert.throws(()=>src.rehearsal.assertFreshRestoration(p.beforePacket.snapshot,p.afterPacket.snapshot,built.receipt.marker),/REHEARSAL_LIVE_RESTORATION_UNBRANDED_OR_STALE/);
+  for(const mutate of [q=>{q.afterPacket.peer.readerPid=200;q.afterPacket.fixtureProof.backendPid=200;},
+   q=>{q.afterPacket.peer.readerPid=400;q.afterPacket.fixtureProof.backendPid=400;},q=>q.afterPacket.fixtureProof.backendPid=pooledPid,
+   q=>q.afterPacket.fixtureProof.parentStatus='committed',q=>q.afterPacket.fixtureProof.rehearsalXid='49',
+   q=>q.afterPacket.fixtureProof.relations[0].remaining=1,q=>q.beforePacket.peer.readerPid=200]){
+   const q=snapshots();mutate(q);await assert.rejects(()=>validateRestoration({root:ROOT,result,receipt:built.receipt,...q}));
+  }
+ }
 });
 test('original qualifier succeeds only on complete synthetic native-shaped proof and mints an uncopyable brand',async()=>{
  const p=snapshots(),summary=await validateRestoration({root:ROOT,result:nativeFixture(),receipt:built.receipt,...p});

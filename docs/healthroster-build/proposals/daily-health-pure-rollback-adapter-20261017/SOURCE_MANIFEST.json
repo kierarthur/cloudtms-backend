@@ -8,7 +8,7 @@
     },
     {
       "file": "input-builder.mjs",
-      "sha256": "2c69b632f8651530925fa080a179eb8a1b606126ff333a78c4e408a1a300dd76"
+      "sha256": "bd5f47d9c4e68cde68b2301601c704b70e325aeaac0184353cf3d2157557be84"
     },
     {
       "file": "fixed-metadata-reader.mjs",
@@ -20,7 +20,7 @@
     },
     {
       "file": "result-validator.mjs",
-      "sha256": "dcd020a5ec6022a58d03d03b40fdf60031576b1f24fa26cf6da4dfa9acb51a4d"
+      "sha256": "9e64357e25e717d497ca5d453ccbe44f69a5efefdd3c68f086a1e655781dcce2"
     },
     {
       "file": "hold-pure.mjs",
