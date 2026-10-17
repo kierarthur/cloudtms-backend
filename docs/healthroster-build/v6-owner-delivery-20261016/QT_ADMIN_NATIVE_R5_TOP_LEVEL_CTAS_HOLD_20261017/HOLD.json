@@ -1,0 +1,52 @@
+{
+  "status": "HOLD",
+  "caseId": "QT_ADMIN_CONTROLS_V1",
+  "code": "CONTACT_QT_MCP_ROLLBACK_ENVELOPE_REFUSED",
+  "observedErrorCode": "CONTACT_QT_MCP_ROLLBACK_ENVELOPE_REFUSED",
+  "deadlineObserved": false,
+  "localTiming": {
+    "sequenceStartedAt": "2026-10-17T16:19:26.215Z",
+    "workDeadlineAt": "2026-10-17T16:21:26.215Z",
+    "readyAt": "2026-10-17T16:20:23.905Z",
+    "resultReadAt": "2026-10-17T16:21:00.912Z"
+  },
+  "rootCallTiming": {
+    "version": "ROOT_OBSERVED_MCP_CALL_TIMING_V1",
+    "route": "mcp__cloudtms_miget_operations_kier_codex__miget_db_transaction_rollback",
+    "sqlSha256": "3f75e4d74df7db410ee66e5283b325a3ac3c44261c3a69e90318a60634b0f806",
+    "callStartedAt": "2026-10-17T16:20:27.808Z",
+    "callReturnedAt": "2026-10-17T16:20:59.724Z",
+    "rootObservedCallMilliseconds": 31916,
+    "authority": "ACTUAL_ROOT_ORCHESTRATION_CLOCK_OBSERVATIONS_NOT_SERVER_OR_TRANSPORT_LATENCY"
+  },
+  "nativeClockFrames": [
+    {
+      "phase": "B_GUARD_BEFORE",
+      "readOnly": false,
+      "holderPid": 294119,
+      "backendPid": 293476,
+      "observedAt": "2026-10-17T16:20:29.7849+00:00",
+      "databaseOid": 324139,
+      "holderGranted": true,
+      "physicalDatabase": "cloudtms_test_clone",
+      "statementStartedAt": "2026-10-17T16:20:29.781953+00:00",
+      "transactionStartedAt": "2026-10-17T16:20:29.586326+00:00"
+    },
+    {
+      "phase": "B_GUARD_AFTER",
+      "readOnly": false,
+      "holderPid": 294119,
+      "backendPid": 293476,
+      "observedAt": "2026-10-17T16:20:29.83778+00:00",
+      "databaseOid": 324139,
+      "holderGranted": true,
+      "physicalDatabase": "cloudtms_test_clone",
+      "statementStartedAt": "2026-10-17T16:20:29.836848+00:00",
+      "transactionStartedAt": "2026-10-17T16:20:29.586326+00:00"
+    }
+  ],
+  "sharedTurnCompletion": "SEE_ORIGINAL_SEND7_JOURNAL_NO_SYNTHETIC_CLOSE_PROOF",
+  "dispatchedMcpMustBeReconciledBeforeNextTrial": true,
+  "elapsedMilliseconds": 94742,
+  "completeMapsPersisted": false
+}

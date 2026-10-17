@@ -1,0 +1,41 @@
+{
+  "version": "QT_ADMIN_NATIVE_R5_TOP_LEVEL_CTAS_HOLD_V1",
+  "sourceCommit": "526c561d9d7e9bcb803cdaaf7bab1cf777099ecb",
+  "candidateCommit": "8f6923485d1a17b8cec0443e20474fab3b4f91f6",
+  "verdict": "HOLD_FIRST_FULL_AUDIT_DIGEST_STATEMENT_TIMEOUT",
+  "statement": 60,
+  "parsedStatementCount": 68,
+  "sqlState": "57014",
+  "actualCall": {
+    "startedAt": "2026-10-17T16:20:27.808Z",
+    "returnedAt": "2026-10-17T16:20:59.724Z",
+    "milliseconds": 31916
+  },
+  "accepted": false,
+  "rolledBack": true,
+  "freshConnected": true,
+  "freshAbsence": {
+    "readOnly": true,
+    "backendPid": 293476,
+    "qtObjectsAbsent": true,
+    "userFixtureRowsRemaining": 0
+  },
+  "markerAbsent": true,
+  "module": "LEGACY:1",
+  "applyingCount": 0,
+  "firstDigest": "Top-level before CTAS; no fixture insert or constructor case reached.",
+  "ctasWireAbi": "UNOBSERVED; statement60 timed out.",
+  "canonicalAfter": "NOT_RUN",
+  "globalRestorationClaimed": false,
+  "ownTurn": {
+    "takenAt": "2026-10-17T16:19:25.480Z",
+    "releasedAt": "2026-10-17T16:21:00.954Z",
+    "explicitUnlockConfirmed": true,
+    "connectionClosed": true,
+    "proved": false,
+    "originalExitCode": 1
+  },
+  "disposition": "No unchanged retry or raised caps. Top-level CTAS did not remove the bounded full-audit timeout; actual parallel execution and cause remain unproved. Preserve complete digest/scope checks in any reviewed successor.",
+  "install2": "NOT_INSTALLED",
+  "finalCritics": "NOT_RUN"
+}
