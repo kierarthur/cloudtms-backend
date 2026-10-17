@@ -1,0 +1,48 @@
+-- Health presentation only. No monetary computation or authority default.
+create or replace function private.timesheet_contract_move_actions_assert_v1(p_actions jsonb)
+returns jsonb language plpgsql stable security definer set search_path=pg_catalog,private,pg_temp
+as $function$
+declare item jsonb;
+begin
+ if jsonb_typeof(p_actions) is distinct from 'array' then raise exception 'CORRECTION_PUBLIC_RESPONSE_INVALID' using errcode='23514';end if;
+ for item in select value from jsonb_array_elements(p_actions) loop
+  perform private.timesheet_contract_move_public_assert_v1(item,'ACTION');
+ end loop;
+ if (select count(*) from jsonb_array_elements(p_actions))<>(select count(distinct jsonb_build_array(
+  x->'kind',x->'target_type',x->'target_id',x->'decision_id',x->'member_key',x->'client_id',x->'period_start',x->'period_end'))
+  from jsonb_array_elements(p_actions) x) then raise exception 'CORRECTION_PUBLIC_RESPONSE_INVALID' using errcode='23514';end if;
+ return p_actions;
+end;
+$function$;
+
+create or replace function private.timesheet_contract_move_invoice_effect_v1(p_invoice jsonb,p_actor_user_id uuid)
+returns jsonb language plpgsql stable security definer set search_path=pg_catalog,public,private,pg_temp
+as $function$
+declare dispositions text[]; effect text;
+begin
+ if not exists(select 1 from public.tms_users u where u.id=p_actor_user_id and u.is_active) then
+  raise exception 'CORRECTION_RESULT_NOT_VISIBLE' using errcode='42501';end if;
+ -- Actual0955 billing projection uses current Admin visibility, independently
+ -- of WP-PP mutation permission. No native disposition is leaked to others.
+ if not exists(select 1 from public.tms_users u where u.id=p_actor_user_id and u.is_active and upper(u.role::text)='ADMIN') then
+  return '{"visibility":"REDACTED"}'::jsonb;
+ end if;
+ if jsonb_typeof(p_invoice->'slices') is distinct from 'array' or jsonb_array_length(p_invoice->'slices')=0
+  or exists(select 1 from jsonb_array_elements(p_invoice->'slices') s where coalesce(s->>'disposition','')
+   not in('PRESERVE_SOURCE','NO_INVOICE','EDIT_DRAFT','RELOCATE_DRAFT','REPLACE_ISSUED')) then
+  raise exception 'CORRECTION_NATIVE_INVOICE_UNBOUND' using errcode='23514';end if;
+ select array_agg(distinct s->>'disposition' order by s->>'disposition') into dispositions from jsonb_array_elements(p_invoice->'slices') s;
+ -- Complete distinct native disposition set, including mixed Source/ordinary
+ -- branches. No first slice, price, partial total or inferred invoice state.
+ effect:=array_to_string(array[
+  case when 'PRESERVE_SOURCE'=any(dispositions) then 'Source invoice history remains unchanged.' end,
+  case when 'NO_INVOICE'=any(dispositions) then 'Uninvoiced work retains its native collection gates.' end,
+  case when 'EDIT_DRAFT'=any(dispositions) then 'Selected invoice Draft lines will be updated.' end,
+  case when 'RELOCATE_DRAFT'=any(dispositions) then 'Selected invoice Draft lines require native relocation.' end,
+  case when 'REPLACE_ISSUED'=any(dispositions) then 'Original invoice lines require native credits and replacement Drafts.' end
+ ],' ');
+ return private.timesheet_contract_move_public_assert_v1(jsonb_build_object('visibility','FULL','text',effect),'EFFECT');
+end;
+$function$;
+revoke all on function private.timesheet_contract_move_actions_assert_v1(jsonb) from public,anon,authenticated,service_role;
+revoke all on function private.timesheet_contract_move_invoice_effect_v1(jsonb,uuid) from public,anon,authenticated,service_role;

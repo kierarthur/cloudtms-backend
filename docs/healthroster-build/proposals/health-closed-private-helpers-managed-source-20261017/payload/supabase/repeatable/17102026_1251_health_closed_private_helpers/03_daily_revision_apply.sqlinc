@@ -1,0 +1,115 @@
+-- Complete independent Health native block. SOURCE ONLY: not mounted alone.
+-- Full composers are build-time held until the real Banking owner joins exist.
+create or replace function private.daily_rate_correction_health_revision_apply_v1(p_args jsonb)
+returns jsonb language plpgsql volatile security definer
+set search_path=pg_catalog,public,private,pg_temp
+as $function$
+<<native_apply>>
+declare basis jsonb; o private.timesheet_contract_move_operations%rowtype;
+ r private.timesheet_contract_move_reviews%rowtype; m private.timesheet_contract_move_members%rowtype;
+ actor uuid; context_id uuid; authority_receipt uuid; manifest jsonb; mapped jsonb;
+ financial uuid; publication jsonb; receipt jsonb; preparation jsonb;
+ command uuid; work_id uuid; revision_id uuid; accepted_revision_no bigint; now_utc timestamptz;
+begin
+ -- Repeat the exact frozen Health admission even for an owner-only direct call.
+ -- The full Accept composer must FIRST qualify the genuine Bank cut/freeze
+ -- under its native locks. This helper supplies no alternate financial gate.
+ basis:=private.daily_rate_correction_health_accept_basis_v1(p_args);
+ actor:=(p_args->>'actor_user_id')::uuid;
+ select x.* into strict o from private.timesheet_contract_move_operations x
+  where x.id=(p_args->>'operation_id')::uuid for update;
+ select x.* into strict r from private.timesheet_contract_move_reviews x
+  where x.id=(p_args->>'review_id')::uuid and x.operation_id=o.id for share;
+ select x.* into strict m from private.timesheet_contract_move_members x where x.operation_id=o.id;
+ if o.state is distinct from 'REVIEWED' or o.created_by_user_id is distinct from actor
+  or o.financial_state is distinct from 'QUALIFIED' or o.current_financial_cut_id is null
+  or o.before_pay_cut_hash is distinct from r.pay_cut_hash or o.accepted_review_id is not null
+  or o.placement_receipt_json is not null or o.to_timesheet_id is not null
+  or m.to_timesheet_id is not null or m.to_financial_id is not null
+  or m.from_timesheet_id is distinct from o.from_timesheet_id
+  or m.member_hash is distinct from private.timesheet_contract_move_row_hash_v1(basis#>'{physical,members,0}') then
+  raise exception 'DAILY_RATE_NATIVE_REVISION_NOT_ADMITTED' using errcode='55000';end if;
+ if (private.timesheet_contract_move_context_v1()).id is not null then
+  raise exception 'DAILY_RATE_EXISTING_EXECUTION_CONTEXT' using errcode='42501';end if;
+ -- This is the only published Daily producer signature. Existence is only a
+ -- dependency check: actual publication and final native assertions below are
+ -- mandatory. No ordinary publisher shortcut, synthetic NOT_REQUIRED or kernel.
+ if to_regprocedure('private.bpay_next_daily_rate_correction_publish_v1(uuid,uuid)') is null then
+  raise exception 'DAILY_RATE_NATIVE_PUBLICATION_UNAVAILABLE' using errcode='55000';end if;
+ now_utc:=clock_timestamp();context_id:=gen_random_uuid();authority_receipt:=gen_random_uuid();
+ mapped:=(basis#>'{physical,members,0}')||jsonb_build_object('to_timesheet_id',m.from_timesheet_id,
+  'to_version',m.from_version,'current_booking_id',m.original_booking_id,'authority_receipt_id',authority_receipt);
+ update private.timesheet_contract_move_operations set accepted_review_id=r.id,accepted_review_digest=r.review_digest,
+  billing_revision=billing_revision+1,to_timesheet_id=from_timesheet_id,state_revision=state_revision+1 where id=o.id;
+ update private.timesheet_contract_move_members set to_timesheet_id=from_timesheet_id,to_version=from_version,
+  current_booking_id=original_booking_id where operation_id=o.id and member_key=m.member_key;
+ select x.* into strict o from private.timesheet_contract_move_operations x where x.id=o.id;
+ manifest:=jsonb_build_object('version','CORRECTION_NATIVE_EVENTS_V1','operation_id',o.id,'review_id',r.id,
+  'members',jsonb_build_array(mapped),'events','[]'::jsonb);
+ insert into private.timesheet_contract_move_execution_contexts(id,operation_id,backend_pid,transaction_id,actor_user_id,
+  review_id,manifest_sha256,billing_revision,event_no,phase,native_manifest_json,created_at_utc,expires_at_utc)
+ values(context_id,o.id,pg_backend_pid(),pg_current_xact_id(),actor,r.id,
+  private.timesheet_contract_move_row_hash_v1(manifest),o.billing_revision,0,'DAILY_RATE_REVISION',manifest,
+  now_utc,now_utc+interval '120 seconds');
+ perform set_config('cloudtms.contract_move_execution_context',context_id::text,true);
+ -- The existing 0858 owner registers exact full OLD/NEW rows, issues and
+ -- consumes the real Health and ordinary-authorisation named guard events.
+ financial:=private.daily_rate_correction_revision_admit_v1(o.id,m.member_key);
+ publication:=private.bpay_next_daily_rate_correction_publish_v1(o.id,financial);
+ if jsonb_typeof(publication) is distinct from 'object'
+  or publication->>'version' is distinct from 'DAILY_RATE_PUBLICATION_V1'
+  or publication->>'state' is distinct from 'REGISTERED' then
+  raise exception 'DAILY_RATE_NATIVE_PUBLICATION_NOT_PROVED' using errcode='23514';end if;
+ command:=(publication->>'command_id')::uuid;work_id:=(publication->>'work_id')::uuid;
+ revision_id:=(publication->>'revision_id')::uuid;
+ if financial is null or financial is distinct from private.daily_rate_correction_financial_id_v1(o.id,m.member_key)
+  or command is null or work_id is null or revision_id is null then
+  raise exception 'DAILY_RATE_NATIVE_PUBLICATION_NOT_PROVED' using errcode='23514';end if;
+ select x.* into strict o from private.timesheet_contract_move_operations x where x.id=o.id;
+ if o.state is distinct from 'REVIEWED' or o.accepted_review_id is distinct from r.id
+  or o.accepted_review_digest is distinct from r.review_digest
+  or o.financial_state is distinct from 'QUALIFIED' or o.current_financial_cut_id is null
+  or (o.financial_command_id is not null and o.financial_command_id is distinct from command)
+  or jsonb_typeof(o.accepted_valuation_json) is distinct from 'object' or o.accepted_valuation_json='{}'::jsonb then
+  raise exception 'DAILY_RATE_NATIVE_VALUATION_UNBOUND' using errcode='55000';end if;
+ -- Read the actual published revision ordinal after publication. Both IDs and
+ -- the new approved financial row are independently bound; no preview+1,
+ -- operation billing counter or added publisher return field is authority.
+ select v.revision_no into strict accepted_revision_no
+ from private.bpay_next_work_revision v join private.bpay_next_work w on w.id=v.work_id
+ where v.id=native_apply.revision_id and w.id=native_apply.work_id and w.current_revision_id=v.id
+  and w.current_revision_no=v.revision_no and v.financial_snapshot_id=native_apply.financial
+  and v.physical_timesheet_id=o.from_timesheet_id and v.physical_timesheet_version=m.from_version
+  and w.original_timesheet_id=o.from_timesheet_id and w.booking_id=m.original_booking_id
+  and w.candidate_id=o.candidate_id and w.contract_id is null and w.origin_kind='DAILY'
+  and w.work_kind='ORDINARY' and w.approval_state='APPROVED'
+  and v.source_kind='ORDINARY' and v.approved_at_utc is not null and v.sealed_at_utc is not null;
+ if accepted_revision_no is null or accepted_revision_no<=0 then
+  raise exception 'DAILY_RATE_ACCEPTED_REVISION_ORDINAL_UNBOUND' using errcode='23514';end if;
+ receipt:=jsonb_build_object('version','DAILY_RATE_REVISION_RECEIPT_V1','receipt_id',authority_receipt,
+  'operation_id',o.id,'review_id',r.id,'current_timesheet_id',o.from_timesheet_id,'placement_revision',accepted_revision_no::text,
+  'previous_financial_id',m.from_financial_id,'current_financial_id',financial,
+  'work_id',work_id,'revision_id',revision_id,'command_id',command,
+  'unchanged_work_sha256',encode(o.unchanged_work_sha256,'hex'));
+ update private.timesheet_contract_move_operations set financial_command_id=command,placement_receipt_json=receipt,
+  state_revision=state_revision+1 where id=o.id;
+ -- Cleanup's existing DELETE guard refuses any unconsumed native event. No
+ -- exception handler hides a failed publication, guard, preparation or cleanup.
+ perform private.timesheet_contract_move_capability_cleanup_v1();
+ preparation:=private.invoice_contract_move_prepare_v1(o.id,o.billing_revision,actor,clock_timestamp());
+ perform private.timesheet_contract_move_capability_cleanup_v1();
+ select x.* into strict o from private.timesheet_contract_move_operations x where x.id=o.id;
+ if o.after_invoice_hash is null or o.accepted_review_id is distinct from r.id
+  or o.state is distinct from 'REVIEWED' then
+  raise exception 'DAILY_RATE_NATIVE_INVOICE_CERTIFICATE_UNBOUND' using errcode='55000';end if;
+ -- Existing native proof checks actual same-ID approved revision, exact old
+ -- row preservation, canonical Work/revision/command/publication/guard receipts
+ -- and exclusive Invoice obligation. Publisher JSON alone proves none of them.
+ perform private.daily_rate_correction_assert_v1(o.id,r.id);
+ return jsonb_build_object('version','DAILY_RATE_HEALTH_REVISION_APPLIED_V1','operation_id',o.id,'review_id',r.id,
+  'placement_receipt_id',authority_receipt,'state_revision',o.state_revision::text);
+ -- The caller still must seal the one immutable ACCEPT journal/COMPLETE receipt
+ -- and project the genuine current-reader result in this SAME transaction.
+end;
+$function$;
+revoke all on function private.daily_rate_correction_health_revision_apply_v1(jsonb) from public,anon,authenticated,service_role;

@@ -1,0 +1,11 @@
+\set ON_ERROR_STOP on
+begin;
+-- Complete accepted Health helpers only; no held composition or public entry.
+\ir 17102026_1251_health_closed_private_helpers/01_daily_presentation.sqlinc
+\ir 17102026_1251_health_closed_private_helpers/02_daily_review_enrollment.sqlinc
+\ir 17102026_1251_health_closed_private_helpers/03_daily_revision_apply.sqlinc
+\ir 17102026_1251_health_closed_private_helpers/04_daily_current_placement.sqlinc
+\ir 17102026_1251_health_closed_private_helpers/05_contract_public_assert.sqlinc
+\ir 17102026_1251_health_closed_private_helpers/06_contract_projection.sqlinc
+\ir 17102026_1251_health_closed_private_helpers/99_private_acl.sqlinc
+commit;

@@ -28584,6 +28584,132 @@
       ],
       "owner": "Health Source current-read and exact native child consumer",
       "healthSourceReadReview": "docs/healthroster-build/proposals/source-current-read-health-successor-20261017/INTEGRATION.md"
+    },
+    {
+      "signature": "private.daily_rate_correction_health_financial_projection_assert_v1(jsonb,boolean)",
+      "finalRoot": "supabase/repeatable/17102026_1251_health_closed_private_helpers_v1.sql",
+      "finalPhysical": "supabase/repeatable/17102026_1251_health_closed_private_helpers/01_daily_presentation.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/17102026_1251_health_closed_private_helpers/01_daily_presentation.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/17102026_1251_health_closed_private_helpers_v1.sql"
+      ],
+      "owner": "Health closed private helper; immutable accepted source body",
+      "healthClosedHelperReview": "docs/healthroster-build/proposals/health-closed-private-helpers-managed-source-20261017/README.md"
+    },
+    {
+      "signature": "private.daily_rate_correction_health_invoice_effect_v1(jsonb)",
+      "finalRoot": "supabase/repeatable/17102026_1251_health_closed_private_helpers_v1.sql",
+      "finalPhysical": "supabase/repeatable/17102026_1251_health_closed_private_helpers/01_daily_presentation.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/17102026_1251_health_closed_private_helpers/01_daily_presentation.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/17102026_1251_health_closed_private_helpers_v1.sql"
+      ],
+      "owner": "Health closed private helper; immutable accepted source body",
+      "healthClosedHelperReview": "docs/healthroster-build/proposals/health-closed-private-helpers-managed-source-20261017/README.md"
+    },
+    {
+      "signature": "private.daily_rate_correction_health_actions_assert_v1(jsonb)",
+      "finalRoot": "supabase/repeatable/17102026_1251_health_closed_private_helpers_v1.sql",
+      "finalPhysical": "supabase/repeatable/17102026_1251_health_closed_private_helpers/01_daily_presentation.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/17102026_1251_health_closed_private_helpers/01_daily_presentation.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/17102026_1251_health_closed_private_helpers_v1.sql"
+      ],
+      "owner": "Health closed private helper; immutable accepted source body",
+      "healthClosedHelperReview": "docs/healthroster-build/proposals/health-closed-private-helpers-managed-source-20261017/README.md"
+    },
+    {
+      "signature": "private.daily_rate_correction_health_review_enroll_v1(jsonb)",
+      "finalRoot": "supabase/repeatable/17102026_1251_health_closed_private_helpers_v1.sql",
+      "finalPhysical": "supabase/repeatable/17102026_1251_health_closed_private_helpers/02_daily_review_enrollment.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/17102026_1251_health_closed_private_helpers/02_daily_review_enrollment.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/17102026_1251_health_closed_private_helpers_v1.sql"
+      ],
+      "owner": "Health closed private helper; immutable accepted source body",
+      "healthClosedHelperReview": "docs/healthroster-build/proposals/health-closed-private-helpers-managed-source-20261017/README.md"
+    },
+    {
+      "signature": "private.daily_rate_correction_health_revision_apply_v1(jsonb)",
+      "finalRoot": "supabase/repeatable/17102026_1251_health_closed_private_helpers_v1.sql",
+      "finalPhysical": "supabase/repeatable/17102026_1251_health_closed_private_helpers/03_daily_revision_apply.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/17102026_1251_health_closed_private_helpers/03_daily_revision_apply.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/17102026_1251_health_closed_private_helpers_v1.sql"
+      ],
+      "owner": "Health closed private helper; immutable accepted source body",
+      "healthClosedHelperReview": "docs/healthroster-build/proposals/health-closed-private-helpers-managed-source-20261017/README.md"
+    },
+    {
+      "signature": "private.daily_rate_correction_health_current_placement_v1(uuid,uuid)",
+      "finalRoot": "supabase/repeatable/17102026_1251_health_closed_private_helpers_v1.sql",
+      "finalPhysical": "supabase/repeatable/17102026_1251_health_closed_private_helpers/04_daily_current_placement.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/17102026_1251_health_closed_private_helpers/04_daily_current_placement.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/17102026_1251_health_closed_private_helpers_v1.sql"
+      ],
+      "owner": "Health closed private helper; immutable accepted source body",
+      "healthClosedHelperReview": "docs/healthroster-build/proposals/health-closed-private-helpers-managed-source-20261017/README.md"
+    },
+    {
+      "signature": "private.timesheet_contract_move_public_assert_v1(jsonb,text)",
+      "finalRoot": "supabase/repeatable/17102026_1251_health_closed_private_helpers_v1.sql",
+      "finalPhysical": "supabase/repeatable/17102026_1251_health_closed_private_helpers/05_contract_public_assert.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/17102026_1251_health_closed_private_helpers/05_contract_public_assert.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/17102026_1251_health_closed_private_helpers_v1.sql"
+      ],
+      "owner": "Health closed private helper; immutable accepted source body",
+      "healthClosedHelperReview": "docs/healthroster-build/proposals/health-closed-private-helpers-managed-source-20261017/README.md"
+    },
+    {
+      "signature": "private.timesheet_contract_move_actions_assert_v1(jsonb)",
+      "finalRoot": "supabase/repeatable/17102026_1251_health_closed_private_helpers_v1.sql",
+      "finalPhysical": "supabase/repeatable/17102026_1251_health_closed_private_helpers/06_contract_projection.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/17102026_1251_health_closed_private_helpers/06_contract_projection.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/17102026_1251_health_closed_private_helpers_v1.sql"
+      ],
+      "owner": "Health closed private helper; immutable accepted source body",
+      "healthClosedHelperReview": "docs/healthroster-build/proposals/health-closed-private-helpers-managed-source-20261017/README.md"
+    },
+    {
+      "signature": "private.timesheet_contract_move_invoice_effect_v1(jsonb,uuid)",
+      "finalRoot": "supabase/repeatable/17102026_1251_health_closed_private_helpers_v1.sql",
+      "finalPhysical": "supabase/repeatable/17102026_1251_health_closed_private_helpers/06_contract_projection.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/17102026_1251_health_closed_private_helpers/06_contract_projection.sqlinc"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/17102026_1251_health_closed_private_helpers_v1.sql"
+      ],
+      "owner": "Health closed private helper; immutable accepted source body",
+      "healthClosedHelperReview": "docs/healthroster-build/proposals/health-closed-private-helpers-managed-source-20261017/README.md"
     }
   ],
   "editorChains": [

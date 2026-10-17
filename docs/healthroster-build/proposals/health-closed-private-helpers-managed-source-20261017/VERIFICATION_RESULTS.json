@@ -1,0 +1,17 @@
+{
+  "version": "HEALTH_CLOSED9_FINITE_SOURCE_VERIFICATION_V1",
+  "parent": "e5b113e4a985f08574e558844e3e81579faf49e1",
+  "payloads": 13,
+  "acceptedWholeBodyFiles": 6,
+  "privateDefinitions": 9,
+  "existingRegistryChainsPreserved": 1650,
+  "metadataWholeReversals": 3,
+  "migrationRowsPreserved": 426,
+  "namespaceActualPredicateVectors": 325,
+  "namespaceOverloadsKinds": "ALL_UNFILTERED",
+  "newServicePublicOrBrowserGrants": 0,
+  "heldTemplatesInVerifier": 0,
+  "originalSchemaIdentitiesPreserved": 92,
+  "existingClassifiersMandatoryArraysSchemaAndTransport": "UNCHANGED",
+  "native": "NOT_RUN"
+}

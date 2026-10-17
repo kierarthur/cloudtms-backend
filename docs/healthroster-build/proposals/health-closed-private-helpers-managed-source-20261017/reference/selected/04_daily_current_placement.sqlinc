@@ -1,0 +1,134 @@
+-- Health-native structural placement only. No financial projection or Bank ABI.
+-- SOURCE ONLY: the full Result still requires its genuine Banking owner join.
+create or replace function private.daily_rate_correction_health_current_placement_v1(p_operation_id uuid,p_actor_user_id uuid)
+returns jsonb language plpgsql volatile security definer
+set search_path=pg_catalog,public,private,pg_temp
+as $function$
+declare basis jsonb; current_basis jsonb; current_binding jsonb; placement jsonb;
+ o private.timesheet_contract_move_operations%rowtype; current_o private.timesheet_contract_move_operations%rowtype;
+ current_operation uuid; current_receipt uuid; native_context record; native_checked record;
+begin
+ -- Preserve the independent active Office reader and original retained basis.
+ -- Never invoke the Admin/pay-only mutation context to read current identity.
+ basis:=private.daily_rate_correction_health_result_basis_v1(p_operation_id,p_actor_user_id);
+ select x.* into strict o from private.timesheet_contract_move_operations x where x.id=p_operation_id;
+ if coalesce(basis->>'state','') not in('COMPLETE','SUPERSEDED') then
+  raise exception 'DAILY_RATE_COMMITTED_PLACEMENT_REQUIRED' using errcode='55000';end if;
+ -- Current canonical identity is resolved by the same native read used by0910.
+ -- Saved paid/locked TSFIN Candidate/Client is not a current resolver.
+ select native_row.* into strict native_context
+ from public.tsfin_load_context_batch(array[o.from_timesheet_id]) native_row;
+ if native_context.effective_timesheet_id is distinct from o.from_timesheet_id
+  or native_context.out_candidate->>'id' is distinct from o.candidate_id::text
+  or native_context.out_client_id is distinct from o.actual_client_id then
+  raise exception 'DAILY_RATE_CURRENT_HEALTH_PLACEMENT_UNBOUND' using errcode='55000';end if;
+ -- Point through the immutable accepted Work ID to its actual current pointer.
+ -- The accepted revision/financial row is intentionally not required current.
+ select jsonb_build_object('work_id',w.id,'revision_id',v.id,'revision_no',v.revision_no::text,
+  'financial_id',f.id,'physical_timesheet_id',v.physical_timesheet_id,
+  'physical_timesheet_version',v.physical_timesheet_version::text,'booking_id',w.booking_id,
+  'approval_refs',f.rate_source_refs_json) into strict current_binding
+ from private.bpay_next_work w
+ join private.bpay_next_work_revision v on v.id=w.current_revision_id and v.work_id=w.id
+  and v.revision_no=w.current_revision_no
+ join public.timesheets t on t.timesheet_id=v.physical_timesheet_id and t.timesheet_id=w.original_timesheet_id
+  and t.booking_id=w.booking_id and t.version=v.physical_timesheet_version
+ join public.timesheets_financials f on f.id=v.financial_snapshot_id and f.timesheet_id=t.timesheet_id
+  and f.timesheet_version=t.version and f.is_current and not f.is_stale
+ where w.id=(o.placement_receipt_json->>'work_id')::uuid and w.original_timesheet_id=o.from_timesheet_id
+  and w.candidate_id=o.candidate_id and w.contract_id is null and w.origin_kind='DAILY'
+  and w.work_kind='ORDINARY' and w.approval_state='APPROVED'
+  and t.sheet_scope::text='DAILY' and t.contract_id is null and t.is_current
+  and t.archived_at_utc is null and t.revoked_at is null
+  and t.line_type::text='HOURS' and t.is_adjustment is not true and t.parent_timesheet_id is null
+  and t.correction_id is null and nullif(btrim(t.adjustment_origin),'') is null
+  and nullif(btrim(t.correction_kind),'') is null and t.authorised_at_server is not null
+  and t.worked_start_iso is not null and t.worked_end_iso is not null and t.worked_end_iso>t.worked_start_iso
+  and nullif(f.role,'') is not null and f.role=upper(t.job_title_norm) and f.band is not distinct from t.band
+  and f.id::text=native_context.out_cur_fin->>'id'
+  and f.candidate_id=o.candidate_id and f.client_id=o.actual_client_id and f.basis::text='SELF_REPORTED'
+  and f.authorised_at_utc is not null and v.revision_no>0 and v.source_kind='ORDINARY'
+  and v.approved_at_utc is not null and v.sealed_at_utc is not null;
+ -- 0858 writes these exact approval provenance keys on the new financial row.
+ -- Unsupported non-Health current revisions are not reclassified or inferred
+ -- from ordinal, timestamp, booking suffix, old receipt or a history scan.
+ if jsonb_typeof(current_binding->'approval_refs') is distinct from 'object'
+  or current_binding#>>'{approval_refs,approval_purpose}' is distinct from 'RATE_CORRECTION'
+  or not coalesce(pg_input_is_valid(current_binding#>>'{approval_refs,correction_operation_id}','uuid'),false) then
+  raise exception 'DAILY_RATE_CURRENT_HEALTH_PLACEMENT_UNBOUND' using errcode='55000';end if;
+ current_operation:=(current_binding#>>'{approval_refs,correction_operation_id}')::uuid;
+ if current_operation::text is distinct from current_binding#>>'{approval_refs,correction_operation_id}' then
+  raise exception 'DAILY_RATE_CURRENT_HEALTH_PLACEMENT_UNBOUND' using errcode='55000';end if;
+ current_basis:=private.daily_rate_correction_health_result_basis_v1(current_operation,p_actor_user_id);
+ select x.* into strict current_o from private.timesheet_contract_move_operations x where x.id=current_operation;
+ if coalesce(current_basis->>'state','') not in('COMPLETE','SUPERSEDED')
+  or current_o.from_timesheet_id is distinct from o.from_timesheet_id
+  or current_o.family_root_id is distinct from o.from_timesheet_id
+  or current_o.candidate_id is distinct from o.candidate_id or current_o.actual_client_id is distinct from o.actual_client_id
+  or current_o.accepted_review_id::text is distinct from current_binding#>>'{approval_refs,accepted_review_id}'
+  or current_o.created_by_user_id::text is distinct from current_binding#>>'{approval_refs,approved_by_user_id}'
+  or current_o.placement_receipt_json->>'work_id' is distinct from current_binding->>'work_id'
+  or current_o.placement_receipt_json->>'revision_id' is distinct from current_binding->>'revision_id'
+  or current_o.placement_receipt_json->>'current_financial_id' is distinct from current_binding->>'financial_id'
+  or current_o.placement_receipt_json->>'current_timesheet_id' is distinct from o.from_timesheet_id::text
+  or not coalesce(pg_input_is_valid(current_o.placement_receipt_json->>'receipt_id','uuid'),false)
+  or not exists(select 1 from private.timesheet_contract_move_members m
+   where m.operation_id=current_o.id and m.from_timesheet_id=o.from_timesheet_id
+    and m.to_timesheet_id=o.from_timesheet_id and m.to_contract_id is null and m.from_contract_id is null
+    and m.to_financial_id=(current_binding->>'financial_id')::uuid
+    and m.to_version=(current_binding->>'physical_timesheet_version')::integer
+    and m.original_booking_id=current_binding->>'booking_id') then
+  raise exception 'DAILY_RATE_CURRENT_HEALTH_PLACEMENT_UNBOUND' using errcode='55000';end if;
+ current_receipt:=(current_o.placement_receipt_json->>'receipt_id')::uuid;
+ if current_receipt::text is distinct from current_o.placement_receipt_json->>'receipt_id' then
+  raise exception 'DAILY_RATE_CURRENT_HEALTH_PLACEMENT_UNBOUND' using errcode='55000';end if;
+ -- Do not read or backfill placement_revision from an old immutable receipt.
+ -- Its genuine current ordinal comes only from the approved native revision.
+ placement:=jsonb_build_object('status','COMMITTED','original_timesheet_id',o.from_timesheet_id,
+  'current_timesheet_id',o.from_timesheet_id,'placement_revision',current_binding->'revision_no',
+  'receipt_id',current_receipt);
+ -- Re-read current canonical resolution after the independent operation basis.
+ -- Only structural identity is compared; no rate/economic or creator projection.
+ select native_row.* into strict native_checked
+ from public.tsfin_load_context_batch(array[o.from_timesheet_id]) native_row;
+ if native_checked.effective_timesheet_id is distinct from native_context.effective_timesheet_id
+  or native_checked.out_candidate->>'id' is distinct from native_context.out_candidate->>'id'
+  or native_checked.out_client_id is distinct from native_context.out_client_id
+  or native_checked.out_cur_fin->>'id' is distinct from current_binding->>'financial_id' then
+  raise exception 'REVIEW_STALE' using errcode='40001';end if;
+ -- Recheck the actual selected tuple after the independent current-operation
+ -- basis read. The Result composer also compares this mapping around Bank's
+ -- real current-reader join; financial visibility/currentness remains its own.
+ if not exists(select 1 from private.bpay_next_work w
+  join private.bpay_next_work_revision v on v.id=w.current_revision_id and v.work_id=w.id
+   and v.revision_no=w.current_revision_no
+  join public.timesheets t on t.timesheet_id=v.physical_timesheet_id and t.timesheet_id=w.original_timesheet_id
+   and t.booking_id=w.booking_id and t.version=v.physical_timesheet_version
+  join public.timesheets_financials f on f.id=v.financial_snapshot_id and f.timesheet_id=t.timesheet_id
+   and f.timesheet_version=t.version and f.is_current and not f.is_stale
+  where w.id=(current_binding->>'work_id')::uuid and v.id=(current_binding->>'revision_id')::uuid
+   and v.revision_no::text=current_binding->>'revision_no' and f.id=(current_binding->>'financial_id')::uuid
+   and f.rate_source_refs_json=current_binding->'approval_refs'
+   and w.original_timesheet_id=o.from_timesheet_id and w.candidate_id=o.candidate_id
+   and w.contract_id is null and w.origin_kind='DAILY' and w.work_kind='ORDINARY' and w.approval_state='APPROVED'
+   and t.sheet_scope::text='DAILY' and t.contract_id is null and t.is_current
+   and t.archived_at_utc is null and t.revoked_at is null
+   and t.line_type::text='HOURS' and t.is_adjustment is not true and t.parent_timesheet_id is null
+   and t.correction_id is null and nullif(btrim(t.adjustment_origin),'') is null
+   and nullif(btrim(t.correction_kind),'') is null and t.authorised_at_server is not null
+   and t.worked_start_iso is not null and t.worked_end_iso is not null and t.worked_end_iso>t.worked_start_iso
+   and nullif(f.role,'') is not null and f.role=upper(t.job_title_norm) and f.band is not distinct from t.band
+   and f.id::text=native_checked.out_cur_fin->>'id'
+   and f.candidate_id=o.candidate_id and f.client_id=o.actual_client_id and f.basis::text='SELF_REPORTED'
+   and f.authorised_at_utc is not null and v.revision_no>0 and v.source_kind='ORDINARY'
+   and v.approved_at_utc is not null and v.sealed_at_utc is not null)
+  or (select to_jsonb(x) from private.timesheet_contract_move_operations x where x.id=current_o.id) is distinct from to_jsonb(current_o)
+  or private.daily_rate_correction_health_result_basis_v1(p_operation_id,p_actor_user_id) is distinct from basis
+  or private.daily_rate_correction_health_result_basis_v1(current_operation,p_actor_user_id) is distinct from current_basis then
+  raise exception 'REVIEW_STALE' using errcode='40001';end if;
+ return placement;
+exception when no_data_found or too_many_rows then
+ raise exception 'DAILY_RATE_CURRENT_HEALTH_PLACEMENT_UNBOUND' using errcode='55000';
+end;
+$function$;
+revoke all on function private.daily_rate_correction_health_current_placement_v1(uuid,uuid) from public,anon,authenticated,service_role;

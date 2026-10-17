@@ -1,0 +1,318 @@
+{
+  "version": "HEALTH_CLOSED9_ACTUAL_CURRENT_LOADER_SOURCE_GATES_V1",
+  "parent": "e5b113e4a985f08574e558844e3e81579faf49e1",
+  "payloadSelectionSha256": "eee7e0ef611aca0bbe94ccd96002fafbbb0cd4288271527e808dae76ee10940f",
+  "scriptPins": [
+    {
+      "file": "scripts/cloudtms-db-release-lib.mjs",
+      "sha256": "22b3a5cd4ab5ca93f59f891c03187a6f5214e6f4bb99381e203700c52b413bbf",
+      "parent": "e5b113e4a985f08574e558844e3e81579faf49e1"
+    },
+    {
+      "file": "scripts/cloudtms-managed-release-sql.mjs",
+      "sha256": "ff391fccf7f690d4d476e935870d740667e4dfd92b972bfd5d7d80b1b3bb912b",
+      "parent": "e5b113e4a985f08574e558844e3e81579faf49e1"
+    },
+    {
+      "file": "scripts/bpay-next-final-definers.mjs",
+      "sha256": "51ab7fd6d5c582ee7f4cab612502c4fc7ac11088cb1a996dd2cf1e6561468d09",
+      "parent": "e5b113e4a985f08574e558844e3e81579faf49e1"
+    },
+    {
+      "file": "scripts/bpay-next-source-gates.mjs",
+      "sha256": "0ea663b95c457f4f06b403aa4928f42a0993dfecafdc495a6fa1915713d931f8",
+      "parent": "e5b113e4a985f08574e558844e3e81579faf49e1"
+    }
+  ],
+  "positive": {
+    "before": {
+      "migrations": 426,
+      "repeatables": 1096
+    },
+    "candidate": {
+      "migrations": 427,
+      "repeatables": 1097
+    },
+    "verification": {
+      "signatures": 3046,
+      "registered": 1659,
+      "roots": 1097,
+      "pendingRoots": [
+        "supabase/repeatable/17102026_1251_health_closed_private_helpers_v1.sql"
+      ]
+    },
+    "callMetadata": [
+      {
+        "name": "private.daily_rate_correction_public_assert_v1",
+        "definitions": [
+          {
+            "signature": "private.daily_rate_correction_public_assert_v1(jsonb,text)",
+            "finalRoot": "supabase/repeatable/16102026_1342_nhsp_v6_daily_public_services_v1.sql",
+            "finalPhysical": "supabase/repeatable/16102026_1342_nhsp_v6_daily_public_services/01_public_services.sqlinc"
+          }
+        ]
+      },
+      {
+        "name": "private.daily_rate_correction_request_assert_v1",
+        "definitions": [
+          {
+            "signature": "private.daily_rate_correction_request_assert_v1(jsonb,text)",
+            "finalRoot": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority_v1.sql",
+            "finalPhysical": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/03_requests.sqlinc"
+          }
+        ]
+      },
+      {
+        "name": "private.daily_rate_correction_preview_replay_v1",
+        "definitions": [
+          {
+            "signature": "private.daily_rate_correction_preview_replay_v1(jsonb)",
+            "finalRoot": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority_v1.sql",
+            "finalPhysical": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/03_requests.sqlinc"
+          }
+        ]
+      },
+      {
+        "name": "private.daily_rate_correction_health_actor_require_v1",
+        "definitions": [
+          {
+            "signature": "private.daily_rate_correction_health_actor_require_v1(uuid,boolean)",
+            "finalRoot": "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support_v1.sql",
+            "finalPhysical": "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/01_complete_helpers.sqlinc"
+          }
+        ]
+      },
+      {
+        "name": "private.daily_rate_correction_context_v1",
+        "definitions": [
+          {
+            "signature": "private.daily_rate_correction_context_v1(uuid,uuid,boolean)",
+            "finalRoot": "supabase/repeatable/17102026_0910_nhsp_v6_daily_role_identity_v1.sql",
+            "finalPhysical": "supabase/repeatable/17102026_0910_nhsp_v6_daily_role_identity/01_complete_context.sqlinc"
+          }
+        ]
+      },
+      {
+        "name": "private.daily_rate_correction_health_basis_v1",
+        "definitions": [
+          {
+            "signature": "private.daily_rate_correction_health_basis_v1(jsonb,boolean)",
+            "finalRoot": "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support_v1.sql",
+            "finalPhysical": "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/01_complete_helpers.sqlinc"
+          }
+        ]
+      },
+      {
+        "name": "private.daily_rate_correction_health_review_prepare_v1",
+        "definitions": [
+          {
+            "signature": "private.daily_rate_correction_health_review_prepare_v1(jsonb)",
+            "finalRoot": "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support_v1.sql",
+            "finalPhysical": "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/01_complete_helpers.sqlinc"
+          }
+        ]
+      },
+      {
+        "name": "private.daily_rate_correction_health_accept_basis_v1",
+        "definitions": [
+          {
+            "signature": "private.daily_rate_correction_health_accept_basis_v1(jsonb)",
+            "finalRoot": "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support_v1.sql",
+            "finalPhysical": "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/01_complete_helpers.sqlinc"
+          }
+        ]
+      },
+      {
+        "name": "private.timesheet_contract_move_row_hash_v1",
+        "definitions": [
+          {
+            "signature": "private.timesheet_contract_move_row_hash_v1(jsonb)",
+            "finalRoot": "supabase/repeatable/16102026_0713_nhsp_v6_06_integrated_move_source_composition_v1.sql",
+            "finalPhysical": "supabase/repeatable/includes/nhsp_v6_health_review_context.sqlinc"
+          }
+        ]
+      },
+      {
+        "name": "private.timesheet_contract_move_context_v1",
+        "definitions": [
+          {
+            "signature": "private.timesheet_contract_move_context_v1()",
+            "finalRoot": "supabase/repeatable/16102026_0713_nhsp_v6_06_integrated_move_source_composition_v1.sql",
+            "finalPhysical": "supabase/repeatable/includes/nhsp_v6_health_native_apply.sqlinc"
+          }
+        ]
+      },
+      {
+        "name": "private.daily_rate_correction_revision_admit_v1",
+        "definitions": [
+          {
+            "signature": "private.daily_rate_correction_revision_admit_v1(uuid,text)",
+            "finalRoot": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority_v1.sql",
+            "finalPhysical": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/02_admission.sqlinc"
+          }
+        ]
+      },
+      {
+        "name": "private.bpay_next_daily_rate_correction_publish_v1",
+        "definitions": []
+      },
+      {
+        "name": "private.daily_rate_correction_financial_id_v1",
+        "definitions": [
+          {
+            "signature": "private.daily_rate_correction_financial_id_v1(uuid,text)",
+            "finalRoot": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority_v1.sql",
+            "finalPhysical": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/02_admission.sqlinc"
+          }
+        ]
+      },
+      {
+        "name": "private.timesheet_contract_move_capability_cleanup_v1",
+        "definitions": [
+          {
+            "signature": "private.timesheet_contract_move_capability_cleanup_v1()",
+            "finalRoot": "supabase/repeatable/16102026_0713_nhsp_v6_06_integrated_move_source_composition_v1.sql",
+            "finalPhysical": "supabase/repeatable/includes/nhsp_v6_health_native_apply.sqlinc"
+          }
+        ]
+      },
+      {
+        "name": "private.invoice_contract_move_prepare_v1",
+        "definitions": [
+          {
+            "signature": "private.invoice_contract_move_prepare_v1(uuid,bigint,uuid,timestamp with time zone)",
+            "finalRoot": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority_v1.sql",
+            "finalPhysical": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority/01_complete_invoice_authorities.sqlinc"
+          }
+        ]
+      },
+      {
+        "name": "private.daily_rate_correction_assert_v1",
+        "definitions": [
+          {
+            "signature": "private.daily_rate_correction_assert_v1(uuid,uuid)",
+            "finalRoot": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority_v1.sql",
+            "finalPhysical": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/02_admission.sqlinc"
+          }
+        ]
+      },
+      {
+        "name": "private.daily_rate_correction_health_result_basis_v1",
+        "definitions": [
+          {
+            "signature": "private.daily_rate_correction_health_result_basis_v1(uuid,uuid)",
+            "finalRoot": "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support_v1.sql",
+            "finalPhysical": "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/01_complete_helpers.sqlinc"
+          }
+        ]
+      },
+      {
+        "name": "public.tsfin_load_context_batch",
+        "definitions": [
+          {
+            "signature": "public.tsfin_load_context_batch(uuid[])",
+            "finalRoot": "supabase/repeatable/21072026_1235_36_tsfin_load_context_batch.sql",
+            "finalPhysical": "supabase/repeatable/21072026_1235_36_tsfin_load_context_batch.sql"
+          }
+        ]
+      },
+      {
+        "name": "private.timesheet_contract_move_public_assert_v1",
+        "definitions": [
+          {
+            "signature": "private.timesheet_contract_move_public_assert_v1(jsonb,text)",
+            "finalRoot": "supabase/repeatable/17102026_1251_health_closed_private_helpers_v1.sql",
+            "finalPhysical": "supabase/repeatable/17102026_1251_health_closed_private_helpers/05_contract_public_assert.sqlinc"
+          }
+        ]
+      }
+    ],
+    "closedRoots": [
+      "supabase/repeatable/17102026_1251_health_closed_private_helpers_v1.sql"
+    ],
+    "freshClosure": [
+      "supabase/repeatable/17102026_1251_health_closed_private_helpers_v1.sql",
+      "supabase/repeatable/17102026_1251_health_closed_private_helpers/01_daily_presentation.sqlinc",
+      "supabase/repeatable/17102026_1251_health_closed_private_helpers/02_daily_review_enrollment.sqlinc",
+      "supabase/repeatable/17102026_1251_health_closed_private_helpers/03_daily_revision_apply.sqlinc",
+      "supabase/repeatable/17102026_1251_health_closed_private_helpers/04_daily_current_placement.sqlinc",
+      "supabase/repeatable/17102026_1251_health_closed_private_helpers/05_contract_public_assert.sqlinc",
+      "supabase/repeatable/17102026_1251_health_closed_private_helpers/06_contract_projection.sqlinc",
+      "supabase/repeatable/17102026_1251_health_closed_private_helpers/99_private_acl.sqlinc"
+    ]
+  },
+  "negativeCases": [
+    {
+      "name": "MISSING_NEW_PRIVATE_LEAF",
+      "refusal": "NO_UNPINNED_OR_MISSING_SOURCE supabase/repeatable/17102026_1251_health_closed_private_helpers/04_daily_current_placement.sqlinc"
+    },
+    {
+      "name": "REGISTERED_SIGNATURE_WITHOUT_ACTUAL_OWNER",
+      "refusal": "BPAY_NEXT_FINAL_DEFINER_ORDER: private.health_closed_missing_owner_v1(jsonb)"
+    }
+  ],
+  "registry": {
+    "before": 1650,
+    "after": 1659,
+    "preservedExistingChains": 1650,
+    "beforeSha256": "c10ac5fa3aafa9c2def791badd2b647bea2e980cd88a43af81c9a1cba7e7e00c",
+    "candidateSha256": "f357496129f0d1eab1f2a2115a8da788be9c2f4a42f50e4d41baa1c700fc3cc0"
+  },
+  "sourceCensus": [
+    {
+      "target": "supabase/migrations/17102026_1251_health_closed_private_helpers_admission.sql",
+      "sha256": "2d4a29c5351427be5e20d2a3357d212419825b7ad2fdffb9956f1745df657f67",
+      "hazards": []
+    },
+    {
+      "target": "supabase/repeatable/17102026_1251_health_closed_private_helpers/01_daily_presentation.sqlinc",
+      "sha256": "a3c7ce4e96fd67395e292752df2274e7464536ce3566b543a23f149de49fafc0",
+      "hazards": []
+    },
+    {
+      "target": "supabase/repeatable/17102026_1251_health_closed_private_helpers/02_daily_review_enrollment.sqlinc",
+      "sha256": "006dd80653b9156ad1f162b9a2e78bc1e243fa38b5cdc75e123d5bc88119f3e6",
+      "hazards": []
+    },
+    {
+      "target": "supabase/repeatable/17102026_1251_health_closed_private_helpers/03_daily_revision_apply.sqlinc",
+      "sha256": "90b49c5606b136e95bda3f2d2623a022085ed506df221e2a1201e4a5bab3a61d",
+      "hazards": []
+    },
+    {
+      "target": "supabase/repeatable/17102026_1251_health_closed_private_helpers/04_daily_current_placement.sqlinc",
+      "sha256": "13e2850f6b58006f37fe7905c2e8d277db7dcee65dfa624cd034b654efca4b9b",
+      "hazards": []
+    },
+    {
+      "target": "supabase/repeatable/17102026_1251_health_closed_private_helpers/05_contract_public_assert.sqlinc",
+      "sha256": "c1856f4f95badb81987b125126f177bbccde0cdbd2eca9b169ab466fd829ff33",
+      "hazards": []
+    },
+    {
+      "target": "supabase/repeatable/17102026_1251_health_closed_private_helpers/06_contract_projection.sqlinc",
+      "sha256": "bf29e1a342b6556a611717a2c623c27b888c362b46bb690129ae0d9d4fff3414",
+      "hazards": []
+    },
+    {
+      "target": "supabase/repeatable/17102026_1251_health_closed_private_helpers/99_private_acl.sqlinc",
+      "sha256": "d5374ef904f7a0eb66265554a9520441532f1f8e14c8888be25d18a7bc7d6764",
+      "hazards": []
+    },
+    {
+      "target": "supabase/repeatable/17102026_1251_health_closed_private_helpers_v1.sql",
+      "sha256": "9bd9c8b5bba862125da65cf779424ff2a2c1a1fcbeb5dce38cc80b505cc0ead5",
+      "hazards": []
+    },
+    {
+      "target": "supabase/verification/17102026_1251_health_closed_private_helpers_security.sql",
+      "sha256": "a39701191faa2bfd78abe4332f43728db37ca9130591a5c8d7d701d25f9d9270",
+      "hazards": []
+    }
+  ],
+  "allowancesAdded": 0,
+  "metadataWholeParentsRetained": true,
+  "globalJoinedSourceGate": "ROOT_AFTER_REVIEW_NOT_RUN",
+  "BankSemanticBodyReview": false,
+  "native": "NOT_RUN"
+}

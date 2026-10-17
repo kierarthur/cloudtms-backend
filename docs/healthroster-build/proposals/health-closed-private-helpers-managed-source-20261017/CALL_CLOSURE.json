@@ -1,0 +1,432 @@
+{
+  "version": "HEALTH_CLOSED9_EXACT_BODY_DIRECT_CALL_CLOSURE_V1",
+  "parent": "e5b113e4a985f08574e558844e3e81579faf49e1",
+  "grammarProofSha256": "90a6980c4d708942da3fb823a626080a731703f39a9f895174d145ffd5aa0cad",
+  "internalCallSites": [
+    {
+      "owner": "private.timesheet_contract_move_public_assert_v1(jsonb,text)",
+      "callee": "private.timesheet_contract_move_public_assert_v1",
+      "arity": 2
+    },
+    {
+      "owner": "private.timesheet_contract_move_public_assert_v1(jsonb,text)",
+      "callee": "private.timesheet_contract_move_public_assert_v1",
+      "arity": 2
+    },
+    {
+      "owner": "private.timesheet_contract_move_public_assert_v1(jsonb,text)",
+      "callee": "private.timesheet_contract_move_public_assert_v1",
+      "arity": 2
+    },
+    {
+      "owner": "private.timesheet_contract_move_public_assert_v1(jsonb,text)",
+      "callee": "private.timesheet_contract_move_public_assert_v1",
+      "arity": 2
+    },
+    {
+      "owner": "private.timesheet_contract_move_public_assert_v1(jsonb,text)",
+      "callee": "private.timesheet_contract_move_public_assert_v1",
+      "arity": 2
+    },
+    {
+      "owner": "private.timesheet_contract_move_public_assert_v1(jsonb,text)",
+      "callee": "private.timesheet_contract_move_public_assert_v1",
+      "arity": 2
+    },
+    {
+      "owner": "private.timesheet_contract_move_public_assert_v1(jsonb,text)",
+      "callee": "private.timesheet_contract_move_public_assert_v1",
+      "arity": 2
+    },
+    {
+      "owner": "private.timesheet_contract_move_public_assert_v1(jsonb,text)",
+      "callee": "private.timesheet_contract_move_public_assert_v1",
+      "arity": 2
+    },
+    {
+      "owner": "private.timesheet_contract_move_public_assert_v1(jsonb,text)",
+      "callee": "private.timesheet_contract_move_public_assert_v1",
+      "arity": 2
+    },
+    {
+      "owner": "private.timesheet_contract_move_public_assert_v1(jsonb,text)",
+      "callee": "private.timesheet_contract_move_public_assert_v1",
+      "arity": 2
+    },
+    {
+      "owner": "private.timesheet_contract_move_public_assert_v1(jsonb,text)",
+      "callee": "private.timesheet_contract_move_public_assert_v1",
+      "arity": 2
+    },
+    {
+      "owner": "private.timesheet_contract_move_public_assert_v1(jsonb,text)",
+      "callee": "private.timesheet_contract_move_public_assert_v1",
+      "arity": 2
+    },
+    {
+      "owner": "private.timesheet_contract_move_public_assert_v1(jsonb,text)",
+      "callee": "private.timesheet_contract_move_public_assert_v1",
+      "arity": 2
+    },
+    {
+      "owner": "private.timesheet_contract_move_actions_assert_v1(jsonb)",
+      "callee": "private.timesheet_contract_move_public_assert_v1",
+      "arity": 2
+    },
+    {
+      "owner": "private.timesheet_contract_move_invoice_effect_v1(jsonb,uuid)",
+      "callee": "private.timesheet_contract_move_public_assert_v1",
+      "arity": 2
+    }
+  ],
+  "existingOwnerCallSites": [
+    {
+      "owner": "private.daily_rate_correction_health_financial_projection_assert_v1(jsonb,boolean)",
+      "callee": "private.daily_rate_correction_public_assert_v1",
+      "arity": 2
+    },
+    {
+      "owner": "private.daily_rate_correction_health_invoice_effect_v1(jsonb)",
+      "callee": "private.daily_rate_correction_public_assert_v1",
+      "arity": 2
+    },
+    {
+      "owner": "private.daily_rate_correction_health_actions_assert_v1(jsonb)",
+      "callee": "private.daily_rate_correction_public_assert_v1",
+      "arity": 2
+    },
+    {
+      "owner": "private.daily_rate_correction_health_review_enroll_v1(jsonb)",
+      "callee": "private.daily_rate_correction_request_assert_v1",
+      "arity": 2
+    },
+    {
+      "owner": "private.daily_rate_correction_health_review_enroll_v1(jsonb)",
+      "callee": "private.daily_rate_correction_preview_replay_v1",
+      "arity": 1
+    },
+    {
+      "owner": "private.daily_rate_correction_health_review_enroll_v1(jsonb)",
+      "callee": "private.daily_rate_correction_public_assert_v1",
+      "arity": 2
+    },
+    {
+      "owner": "private.daily_rate_correction_health_review_enroll_v1(jsonb)",
+      "callee": "private.daily_rate_correction_health_actor_require_v1",
+      "arity": 2
+    },
+    {
+      "owner": "private.daily_rate_correction_health_review_enroll_v1(jsonb)",
+      "callee": "private.daily_rate_correction_context_v1",
+      "arity": 3
+    },
+    {
+      "owner": "private.daily_rate_correction_health_review_enroll_v1(jsonb)",
+      "callee": "private.daily_rate_correction_preview_replay_v1",
+      "arity": 1
+    },
+    {
+      "owner": "private.daily_rate_correction_health_review_enroll_v1(jsonb)",
+      "callee": "private.daily_rate_correction_public_assert_v1",
+      "arity": 2
+    },
+    {
+      "owner": "private.daily_rate_correction_health_review_enroll_v1(jsonb)",
+      "callee": "private.daily_rate_correction_health_actor_require_v1",
+      "arity": 2
+    },
+    {
+      "owner": "private.daily_rate_correction_health_review_enroll_v1(jsonb)",
+      "callee": "private.daily_rate_correction_health_basis_v1",
+      "arity": 2
+    },
+    {
+      "owner": "private.daily_rate_correction_health_review_enroll_v1(jsonb)",
+      "callee": "private.daily_rate_correction_health_review_prepare_v1",
+      "arity": 1
+    },
+    {
+      "owner": "private.daily_rate_correction_health_review_enroll_v1(jsonb)",
+      "callee": "private.daily_rate_correction_health_actor_require_v1",
+      "arity": 2
+    },
+    {
+      "owner": "private.daily_rate_correction_health_revision_apply_v1(jsonb)",
+      "callee": "private.daily_rate_correction_health_accept_basis_v1",
+      "arity": 1
+    },
+    {
+      "owner": "private.daily_rate_correction_health_revision_apply_v1(jsonb)",
+      "callee": "private.timesheet_contract_move_row_hash_v1",
+      "arity": 1
+    },
+    {
+      "owner": "private.daily_rate_correction_health_revision_apply_v1(jsonb)",
+      "callee": "private.timesheet_contract_move_context_v1",
+      "arity": 0
+    },
+    {
+      "owner": "private.daily_rate_correction_health_revision_apply_v1(jsonb)",
+      "callee": "private.timesheet_contract_move_row_hash_v1",
+      "arity": 1
+    },
+    {
+      "owner": "private.daily_rate_correction_health_revision_apply_v1(jsonb)",
+      "callee": "private.daily_rate_correction_revision_admit_v1",
+      "arity": 2
+    },
+    {
+      "owner": "private.daily_rate_correction_health_revision_apply_v1(jsonb)",
+      "callee": "private.bpay_next_daily_rate_correction_publish_v1",
+      "arity": 2
+    },
+    {
+      "owner": "private.daily_rate_correction_health_revision_apply_v1(jsonb)",
+      "callee": "private.daily_rate_correction_financial_id_v1",
+      "arity": 2
+    },
+    {
+      "owner": "private.daily_rate_correction_health_revision_apply_v1(jsonb)",
+      "callee": "private.timesheet_contract_move_capability_cleanup_v1",
+      "arity": 0
+    },
+    {
+      "owner": "private.daily_rate_correction_health_revision_apply_v1(jsonb)",
+      "callee": "private.invoice_contract_move_prepare_v1",
+      "arity": 4
+    },
+    {
+      "owner": "private.daily_rate_correction_health_revision_apply_v1(jsonb)",
+      "callee": "private.timesheet_contract_move_capability_cleanup_v1",
+      "arity": 0
+    },
+    {
+      "owner": "private.daily_rate_correction_health_revision_apply_v1(jsonb)",
+      "callee": "private.daily_rate_correction_assert_v1",
+      "arity": 2
+    },
+    {
+      "owner": "private.daily_rate_correction_health_current_placement_v1(uuid,uuid)",
+      "callee": "private.daily_rate_correction_health_result_basis_v1",
+      "arity": 2
+    },
+    {
+      "owner": "private.daily_rate_correction_health_current_placement_v1(uuid,uuid)",
+      "callee": "public.tsfin_load_context_batch",
+      "arity": 1
+    },
+    {
+      "owner": "private.daily_rate_correction_health_current_placement_v1(uuid,uuid)",
+      "callee": "private.daily_rate_correction_health_result_basis_v1",
+      "arity": 2
+    },
+    {
+      "owner": "private.daily_rate_correction_health_current_placement_v1(uuid,uuid)",
+      "callee": "public.tsfin_load_context_batch",
+      "arity": 1
+    },
+    {
+      "owner": "private.daily_rate_correction_health_current_placement_v1(uuid,uuid)",
+      "callee": "private.daily_rate_correction_health_result_basis_v1",
+      "arity": 2
+    },
+    {
+      "owner": "private.daily_rate_correction_health_current_placement_v1(uuid,uuid)",
+      "callee": "private.daily_rate_correction_health_result_basis_v1",
+      "arity": 2
+    }
+  ],
+  "actualCandidateDefinerMetadata": [
+    {
+      "name": "private.daily_rate_correction_public_assert_v1",
+      "definitions": [
+        {
+          "signature": "private.daily_rate_correction_public_assert_v1(jsonb,text)",
+          "finalRoot": "supabase/repeatable/16102026_1342_nhsp_v6_daily_public_services_v1.sql",
+          "finalPhysical": "supabase/repeatable/16102026_1342_nhsp_v6_daily_public_services/01_public_services.sqlinc"
+        }
+      ]
+    },
+    {
+      "name": "private.daily_rate_correction_request_assert_v1",
+      "definitions": [
+        {
+          "signature": "private.daily_rate_correction_request_assert_v1(jsonb,text)",
+          "finalRoot": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority_v1.sql",
+          "finalPhysical": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/03_requests.sqlinc"
+        }
+      ]
+    },
+    {
+      "name": "private.daily_rate_correction_preview_replay_v1",
+      "definitions": [
+        {
+          "signature": "private.daily_rate_correction_preview_replay_v1(jsonb)",
+          "finalRoot": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority_v1.sql",
+          "finalPhysical": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/03_requests.sqlinc"
+        }
+      ]
+    },
+    {
+      "name": "private.daily_rate_correction_health_actor_require_v1",
+      "definitions": [
+        {
+          "signature": "private.daily_rate_correction_health_actor_require_v1(uuid,boolean)",
+          "finalRoot": "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support_v1.sql",
+          "finalPhysical": "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/01_complete_helpers.sqlinc"
+        }
+      ]
+    },
+    {
+      "name": "private.daily_rate_correction_context_v1",
+      "definitions": [
+        {
+          "signature": "private.daily_rate_correction_context_v1(uuid,uuid,boolean)",
+          "finalRoot": "supabase/repeatable/17102026_0910_nhsp_v6_daily_role_identity_v1.sql",
+          "finalPhysical": "supabase/repeatable/17102026_0910_nhsp_v6_daily_role_identity/01_complete_context.sqlinc"
+        }
+      ]
+    },
+    {
+      "name": "private.daily_rate_correction_health_basis_v1",
+      "definitions": [
+        {
+          "signature": "private.daily_rate_correction_health_basis_v1(jsonb,boolean)",
+          "finalRoot": "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support_v1.sql",
+          "finalPhysical": "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/01_complete_helpers.sqlinc"
+        }
+      ]
+    },
+    {
+      "name": "private.daily_rate_correction_health_review_prepare_v1",
+      "definitions": [
+        {
+          "signature": "private.daily_rate_correction_health_review_prepare_v1(jsonb)",
+          "finalRoot": "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support_v1.sql",
+          "finalPhysical": "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/01_complete_helpers.sqlinc"
+        }
+      ]
+    },
+    {
+      "name": "private.daily_rate_correction_health_accept_basis_v1",
+      "definitions": [
+        {
+          "signature": "private.daily_rate_correction_health_accept_basis_v1(jsonb)",
+          "finalRoot": "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support_v1.sql",
+          "finalPhysical": "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/01_complete_helpers.sqlinc"
+        }
+      ]
+    },
+    {
+      "name": "private.timesheet_contract_move_row_hash_v1",
+      "definitions": [
+        {
+          "signature": "private.timesheet_contract_move_row_hash_v1(jsonb)",
+          "finalRoot": "supabase/repeatable/16102026_0713_nhsp_v6_06_integrated_move_source_composition_v1.sql",
+          "finalPhysical": "supabase/repeatable/includes/nhsp_v6_health_review_context.sqlinc"
+        }
+      ]
+    },
+    {
+      "name": "private.timesheet_contract_move_context_v1",
+      "definitions": [
+        {
+          "signature": "private.timesheet_contract_move_context_v1()",
+          "finalRoot": "supabase/repeatable/16102026_0713_nhsp_v6_06_integrated_move_source_composition_v1.sql",
+          "finalPhysical": "supabase/repeatable/includes/nhsp_v6_health_native_apply.sqlinc"
+        }
+      ]
+    },
+    {
+      "name": "private.daily_rate_correction_revision_admit_v1",
+      "definitions": [
+        {
+          "signature": "private.daily_rate_correction_revision_admit_v1(uuid,text)",
+          "finalRoot": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority_v1.sql",
+          "finalPhysical": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/02_admission.sqlinc"
+        }
+      ]
+    },
+    {
+      "name": "private.bpay_next_daily_rate_correction_publish_v1",
+      "definitions": []
+    },
+    {
+      "name": "private.daily_rate_correction_financial_id_v1",
+      "definitions": [
+        {
+          "signature": "private.daily_rate_correction_financial_id_v1(uuid,text)",
+          "finalRoot": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority_v1.sql",
+          "finalPhysical": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/02_admission.sqlinc"
+        }
+      ]
+    },
+    {
+      "name": "private.timesheet_contract_move_capability_cleanup_v1",
+      "definitions": [
+        {
+          "signature": "private.timesheet_contract_move_capability_cleanup_v1()",
+          "finalRoot": "supabase/repeatable/16102026_0713_nhsp_v6_06_integrated_move_source_composition_v1.sql",
+          "finalPhysical": "supabase/repeatable/includes/nhsp_v6_health_native_apply.sqlinc"
+        }
+      ]
+    },
+    {
+      "name": "private.invoice_contract_move_prepare_v1",
+      "definitions": [
+        {
+          "signature": "private.invoice_contract_move_prepare_v1(uuid,bigint,uuid,timestamp with time zone)",
+          "finalRoot": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority_v1.sql",
+          "finalPhysical": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority/01_complete_invoice_authorities.sqlinc"
+        }
+      ]
+    },
+    {
+      "name": "private.daily_rate_correction_assert_v1",
+      "definitions": [
+        {
+          "signature": "private.daily_rate_correction_assert_v1(uuid,uuid)",
+          "finalRoot": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority_v1.sql",
+          "finalPhysical": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/02_admission.sqlinc"
+        }
+      ]
+    },
+    {
+      "name": "private.daily_rate_correction_health_result_basis_v1",
+      "definitions": [
+        {
+          "signature": "private.daily_rate_correction_health_result_basis_v1(uuid,uuid)",
+          "finalRoot": "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support_v1.sql",
+          "finalPhysical": "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/01_complete_helpers.sqlinc"
+        }
+      ]
+    },
+    {
+      "name": "public.tsfin_load_context_batch",
+      "definitions": [
+        {
+          "signature": "public.tsfin_load_context_batch(uuid[])",
+          "finalRoot": "supabase/repeatable/21072026_1235_36_tsfin_load_context_batch.sql",
+          "finalPhysical": "supabase/repeatable/21072026_1235_36_tsfin_load_context_batch.sql"
+        }
+      ]
+    },
+    {
+      "name": "private.timesheet_contract_move_public_assert_v1",
+      "definitions": [
+        {
+          "signature": "private.timesheet_contract_move_public_assert_v1(jsonb,text)",
+          "finalRoot": "supabase/repeatable/17102026_1251_health_closed_private_helpers_v1.sql",
+          "finalPhysical": "supabase/repeatable/17102026_1251_health_closed_private_helpers/05_contract_public_assert.sqlinc"
+        }
+      ]
+    }
+  ],
+  "unprovidedProducerDeclaration": "private.bpay_next_daily_rate_correction_publish_v1(uuid,uuid)",
+  "publisherExisting55000RefusalPreserved": true,
+  "newBankInterface": false,
+  "nestedTsfinReaderEffectClosure": "Existing qualified Health/general + named finance boundary; not pure/native qualified by this packet",
+  "heldComposersSelected": 0,
+  "privateHelpersAllPure": false,
+  "native": "NOT_RUN"
+}

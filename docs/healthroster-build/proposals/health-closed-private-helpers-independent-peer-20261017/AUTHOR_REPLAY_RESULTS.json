@@ -1,0 +1,12 @@
+{
+  "frozenCommit": "0f80d35ec5e63e4eb44b6c873d08a72acf3bd1cd",
+  "manifestSha256": "442727720f45dfecbad72c391e8ea07442dc8c53be2b40bc85181e59e492702e",
+  "selectionSha256": "eee7e0ef611aca0bbe94ccd96002fafbbb0cd4288271527e808dae76ee10940f",
+  "sourceCheckSha256": "881e5acb0566f410f1c1865602083624a719aa52180ba7a38e8c556647b2d3c3",
+  "freeze": {"files":42,"committed":true},
+  "verify": {"targets":13,"acceptedWholePages":6,"privateDefinitions":9,"wholeMetadataReversals":3,"namespacePredicateVectors":325,"schemaIdentities":92},
+  "grammar": {"parser":"pglast v7.20/PG17","inputs":10,"bodies":9,"expressions":256,"aliasConflicts":0,"strictNativeReads":2},
+  "sourceCheck": {"before":{"migrations":426,"repeatables":1096},"candidate":{"migrations":427,"repeatables":1097},"signatures":3046,"registered":1659,"roots":1097,"negativeCases":2,"rawSqlInputs":10,"rawHazards":0},
+  "commandsWereUnamended":true,
+  "native":"NOT_RUN"
+}

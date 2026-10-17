@@ -1,0 +1,50 @@
+[
+  {
+    "target": "supabase/repeatable/17102026_1251_health_closed_private_helpers/01_daily_presentation.sqlinc",
+    "source": "docs/healthroster-build/proposals/daily-health-current-placement-source-successor-20261017/health/00_presentation.sqlinc",
+    "sourceCommit": "040bb062b9b0fdf3fa6bb45e400494d65929f40a",
+    "sha256": "a3c7ce4e96fd67395e292752df2274e7464536ce3566b543a23f149de49fafc0",
+    "bytes": 4550,
+    "savedIndexParentHistoricalEqual": true
+  },
+  {
+    "target": "supabase/repeatable/17102026_1251_health_closed_private_helpers/02_daily_review_enrollment.sqlinc",
+    "source": "docs/healthroster-build/proposals/daily-health-current-placement-source-successor-20261017/health/05_review_enrollment.sqlinc",
+    "sourceCommit": "040bb062b9b0fdf3fa6bb45e400494d65929f40a",
+    "sha256": "006dd80653b9156ad1f162b9a2e78bc1e243fa38b5cdc75e123d5bc88119f3e6",
+    "bytes": 2917,
+    "savedIndexParentHistoricalEqual": true
+  },
+  {
+    "target": "supabase/repeatable/17102026_1251_health_closed_private_helpers/03_daily_revision_apply.sqlinc",
+    "source": "docs/healthroster-build/proposals/daily-health-current-placement-source-successor-20261017/health/10_revision_apply.sqlinc",
+    "sourceCommit": "040bb062b9b0fdf3fa6bb45e400494d65929f40a",
+    "sha256": "90b49c5606b136e95bda3f2d2623a022085ed506df221e2a1201e4a5bab3a61d",
+    "bytes": 9309,
+    "savedIndexParentHistoricalEqual": true
+  },
+  {
+    "target": "supabase/repeatable/17102026_1251_health_closed_private_helpers/04_daily_current_placement.sqlinc",
+    "source": "docs/healthroster-build/proposals/daily-health-current-placement-native-identity-forward-20261017/health/20_current_placement.sqlinc",
+    "sourceCommit": "174cf17ff3368b84cbb51d1f57e46d94666105f2",
+    "sha256": "13e2850f6b58006f37fe7905c2e8d277db7dcee65dfa624cd034b654efca4b9b",
+    "bytes": 11112,
+    "savedIndexParentHistoricalEqual": true
+  },
+  {
+    "target": "supabase/repeatable/17102026_1251_health_closed_private_helpers/05_contract_public_assert.sqlinc",
+    "source": "docs/healthroster-build/proposals/contract-preview-current-health-20261017/health/00_public_assert.sqlinc",
+    "sourceCommit": "2d1c81cf5a6939b8ab05d4b3d8db398037c13ed4",
+    "sha256": "c1856f4f95badb81987b125126f177bbccde0cdbd2eca9b169ab466fd829ff33",
+    "bytes": 13058,
+    "savedIndexParentHistoricalEqual": true
+  },
+  {
+    "target": "supabase/repeatable/17102026_1251_health_closed_private_helpers/06_contract_projection.sqlinc",
+    "source": "docs/healthroster-build/proposals/contract-preview-current-health-20261017/health/01_projection.sqlinc",
+    "sourceCommit": "2d1c81cf5a6939b8ab05d4b3d8db398037c13ed4",
+    "sha256": "bf29e1a342b6556a611717a2c623c27b888c362b46bb690129ae0d9d4fff3414",
+    "bytes": 3477,
+    "savedIndexParentHistoricalEqual": true
+  }
+]
