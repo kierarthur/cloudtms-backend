@@ -79,12 +79,12 @@
     {
       "file": "OFFLINE_INPUTS.json",
       "bytes": 113699,
-      "sha256": "dd53d4cc43ff0c9eed56cf7536b39429b147ce5bb59efd1f70d66663661f25a1"
+      "sha256": "e681fe29f07ccf90da8633872b6f46388d4a7c7d3770722a3bc67f49ef4b73f7"
     },
     {
       "file": "PLAN_SOURCE_SCOPES.json",
-      "bytes": 9204,
-      "sha256": "0426985ea599c726934b2a10eca00f1642d6fe99537a2a3441a723c00c395caf"
+      "bytes": 8763,
+      "sha256": "f897562d54a994dbd0b610b3c5fe10dc32ee4cf7b477d63f0fd5cba1e52f6aca"
     },
     {
       "file": "prepare-adapter.mjs",
@@ -118,8 +118,8 @@
     },
     {
       "file": "README.md",
-      "bytes": 7464,
-      "sha256": "4c64027001f2a87d92a8e137344b4b1e2aafcd64fb7b7541f0afcc7eaef2b95c"
+      "bytes": 8075,
+      "sha256": "7856ce3ec68b774a43141cd8c8738fd6026efd49cec1b50d2a47cd8202ed75aa"
     },
     {
       "file": "reference/actor/build-program.mjs",
@@ -219,7 +219,7 @@
     {
       "file": "SOURCE_PINS.json",
       "bytes": 26765,
-      "sha256": "2b54e76a6416f20231e513072748f4eaa136d3fa1c7210a897acf5ed731a6c78"
+      "sha256": "89cbf1f3cb60100388431e966d1d31ceb02a513ab08e165c2d37cc4167249ace"
     },
     {
       "file": "SOURCE_REVIEW.json",

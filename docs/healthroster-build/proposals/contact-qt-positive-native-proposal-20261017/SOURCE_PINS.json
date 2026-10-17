@@ -87,8 +87,8 @@
     },
     {
       "file": "scripts/healthroster-install1-full-rehearsal.mjs",
-      "bytes": 48321,
-      "sha256": "8b4ab4113e42cea647dbbd1a22be2eef68806b62f3c8c2f06c58d4c904982cfc"
+      "bytes": 48330,
+      "sha256": "31acd390acf2ef6dbbd062fbb157feea66f9b5d328440414e67b2bfd4a3f78ab"
     },
     {
       "file": "scripts/healthroster-live-test-restoration.mjs",

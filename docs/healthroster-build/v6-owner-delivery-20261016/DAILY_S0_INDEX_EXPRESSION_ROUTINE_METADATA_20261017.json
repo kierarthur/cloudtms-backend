@@ -1,0 +1,385 @@
+{
+  "version": "DAILY_S0_ACTUAL_FIXED_INDEX_EXPRESSION_ROUTINE_METADATA_V1",
+  "tool": "mcp__cloudtms_miget_operations_kier_codex__miget_db_routine_metadata",
+  "actualResponse": {
+    "authenticated": true,
+    "read_only": true,
+    "database": "agency_test",
+    "live_access_allowed": false,
+    "secrets_returned": false,
+    "metadata_contract": "CLOUDTMS_ROUTINE_METADATA_V1",
+    "requested_routine_count": 4,
+    "requested_role_count": 4,
+    "total": 4,
+    "limit": 10,
+    "offset": 0,
+    "returned": 4,
+    "eof": true,
+    "next_offset": null,
+    "truncated": false,
+    "business_rows_returned": 0,
+    "caller_supplied_sql_accepted": false,
+    "effective_execute_source": "pg_catalog.has_function_privilege(role_oid, routine_oid, EXECUTE)",
+    "effective_schema_usage_source": "pg_catalog.has_schema_privilege(role_oid, schema_oid, USAGE)",
+    "roles": [
+      {
+        "role": "dee50tht",
+        "role_present": true,
+        "can_login": true,
+        "superuser": false,
+        "inherits_by_default": true,
+        "bypass_rls": false
+      },
+      {
+        "role": "service_role",
+        "role_present": true,
+        "can_login": false,
+        "superuser": false,
+        "inherits_by_default": false,
+        "bypass_rls": false
+      },
+      {
+        "role": "anon",
+        "role_present": true,
+        "can_login": false,
+        "superuser": false,
+        "inherits_by_default": false,
+        "bypass_rls": false
+      },
+      {
+        "role": "authenticated",
+        "role_present": true,
+        "can_login": false,
+        "superuser": false,
+        "inherits_by_default": false,
+        "bypass_rls": false
+      }
+    ],
+    "effective_membership_paths": [
+      {
+        "requested_role": "anon",
+        "inherited_role": "anon",
+        "depth": 0,
+        "path": "{anon}",
+        "admin_option": null,
+        "inherit_option": null,
+        "set_option": null
+      },
+      {
+        "requested_role": "authenticated",
+        "inherited_role": "authenticated",
+        "depth": 0,
+        "path": "{authenticated}",
+        "admin_option": null,
+        "inherit_option": null,
+        "set_option": null
+      },
+      {
+        "requested_role": "dee50tht",
+        "inherited_role": "dee50tht",
+        "depth": 0,
+        "path": "{dee50tht}",
+        "admin_option": null,
+        "inherit_option": null,
+        "set_option": null
+      },
+      {
+        "requested_role": "service_role",
+        "inherited_role": "service_role",
+        "depth": 0,
+        "path": "{service_role}",
+        "admin_option": null,
+        "inherit_option": null,
+        "set_option": null
+      }
+    ],
+    "items": [
+      {
+        "requested_ordinal": 0,
+        "schema": "pg_catalog",
+        "name": "btrim",
+        "identity_arguments": "text",
+        "present": true,
+        "routine_oid": "885",
+        "kind": "function",
+        "owner": "postgres",
+        "language": "internal",
+        "security_definer": false,
+        "volatility": "immutable",
+        "result_type": "text",
+        "acl_uses_postgresql_default": true,
+        "direct_or_default_execute_acl": [
+          {
+            "routine_oid": "885",
+            "grantee": "PUBLIC",
+            "grantor": "postgres",
+            "privilege_type": "EXECUTE",
+            "is_grantable": false,
+            "derived_from_postgresql_default_acl": true
+          },
+          {
+            "routine_oid": "885",
+            "grantee": "postgres",
+            "grantor": "postgres",
+            "privilege_type": "EXECUTE",
+            "is_grantable": false,
+            "derived_from_postgresql_default_acl": true
+          }
+        ],
+        "effective_roles": [
+          {
+            "routine_oid": "885",
+            "role": "dee50tht",
+            "role_present": true,
+            "effective_execute": true,
+            "effective_schema_usage": true,
+            "effective_callable": true
+          },
+          {
+            "routine_oid": "885",
+            "role": "service_role",
+            "role_present": true,
+            "effective_execute": true,
+            "effective_schema_usage": true,
+            "effective_callable": true
+          },
+          {
+            "routine_oid": "885",
+            "role": "anon",
+            "role_present": true,
+            "effective_execute": true,
+            "effective_schema_usage": true,
+            "effective_callable": true
+          },
+          {
+            "routine_oid": "885",
+            "role": "authenticated",
+            "role_present": true,
+            "effective_execute": true,
+            "effective_schema_usage": true,
+            "effective_callable": true
+          }
+        ]
+      },
+      {
+        "requested_ordinal": 1,
+        "schema": "pg_catalog",
+        "name": "upper",
+        "identity_arguments": "text",
+        "present": true,
+        "routine_oid": "871",
+        "kind": "function",
+        "owner": "postgres",
+        "language": "internal",
+        "security_definer": false,
+        "volatility": "immutable",
+        "result_type": "text",
+        "acl_uses_postgresql_default": true,
+        "direct_or_default_execute_acl": [
+          {
+            "routine_oid": "871",
+            "grantee": "PUBLIC",
+            "grantor": "postgres",
+            "privilege_type": "EXECUTE",
+            "is_grantable": false,
+            "derived_from_postgresql_default_acl": true
+          },
+          {
+            "routine_oid": "871",
+            "grantee": "postgres",
+            "grantor": "postgres",
+            "privilege_type": "EXECUTE",
+            "is_grantable": false,
+            "derived_from_postgresql_default_acl": true
+          }
+        ],
+        "effective_roles": [
+          {
+            "routine_oid": "871",
+            "role": "dee50tht",
+            "role_present": true,
+            "effective_execute": true,
+            "effective_schema_usage": true,
+            "effective_callable": true
+          },
+          {
+            "routine_oid": "871",
+            "role": "service_role",
+            "role_present": true,
+            "effective_execute": true,
+            "effective_schema_usage": true,
+            "effective_callable": true
+          },
+          {
+            "routine_oid": "871",
+            "role": "anon",
+            "role_present": true,
+            "effective_execute": true,
+            "effective_schema_usage": true,
+            "effective_callable": true
+          },
+          {
+            "routine_oid": "871",
+            "role": "authenticated",
+            "role_present": true,
+            "effective_execute": true,
+            "effective_schema_usage": true,
+            "effective_callable": true
+          }
+        ]
+      },
+      {
+        "requested_ordinal": 2,
+        "schema": "pg_catalog",
+        "name": "daterange",
+        "identity_arguments": "date, date, text",
+        "present": true,
+        "routine_oid": "3942",
+        "kind": "function",
+        "owner": "postgres",
+        "language": "internal",
+        "security_definer": false,
+        "volatility": "immutable",
+        "result_type": "daterange",
+        "acl_uses_postgresql_default": true,
+        "direct_or_default_execute_acl": [
+          {
+            "routine_oid": "3942",
+            "grantee": "PUBLIC",
+            "grantor": "postgres",
+            "privilege_type": "EXECUTE",
+            "is_grantable": false,
+            "derived_from_postgresql_default_acl": true
+          },
+          {
+            "routine_oid": "3942",
+            "grantee": "postgres",
+            "grantor": "postgres",
+            "privilege_type": "EXECUTE",
+            "is_grantable": false,
+            "derived_from_postgresql_default_acl": true
+          }
+        ],
+        "effective_roles": [
+          {
+            "routine_oid": "3942",
+            "role": "dee50tht",
+            "role_present": true,
+            "effective_execute": true,
+            "effective_schema_usage": true,
+            "effective_callable": true
+          },
+          {
+            "routine_oid": "3942",
+            "role": "service_role",
+            "role_present": true,
+            "effective_execute": true,
+            "effective_schema_usage": true,
+            "effective_callable": true
+          },
+          {
+            "routine_oid": "3942",
+            "role": "anon",
+            "role_present": true,
+            "effective_execute": true,
+            "effective_schema_usage": true,
+            "effective_callable": true
+          },
+          {
+            "routine_oid": "3942",
+            "role": "authenticated",
+            "role_present": true,
+            "effective_execute": true,
+            "effective_schema_usage": true,
+            "effective_callable": true
+          }
+        ]
+      },
+      {
+        "requested_ordinal": 3,
+        "schema": "pg_catalog",
+        "name": "daterange",
+        "identity_arguments": "date, date",
+        "present": true,
+        "routine_oid": "3941",
+        "kind": "function",
+        "owner": "postgres",
+        "language": "internal",
+        "security_definer": false,
+        "volatility": "immutable",
+        "result_type": "daterange",
+        "acl_uses_postgresql_default": true,
+        "direct_or_default_execute_acl": [
+          {
+            "routine_oid": "3941",
+            "grantee": "PUBLIC",
+            "grantor": "postgres",
+            "privilege_type": "EXECUTE",
+            "is_grantable": false,
+            "derived_from_postgresql_default_acl": true
+          },
+          {
+            "routine_oid": "3941",
+            "grantee": "postgres",
+            "grantor": "postgres",
+            "privilege_type": "EXECUTE",
+            "is_grantable": false,
+            "derived_from_postgresql_default_acl": true
+          }
+        ],
+        "effective_roles": [
+          {
+            "routine_oid": "3941",
+            "role": "dee50tht",
+            "role_present": true,
+            "effective_execute": true,
+            "effective_schema_usage": true,
+            "effective_callable": true
+          },
+          {
+            "routine_oid": "3941",
+            "role": "service_role",
+            "role_present": true,
+            "effective_execute": true,
+            "effective_schema_usage": true,
+            "effective_callable": true
+          },
+          {
+            "routine_oid": "3941",
+            "role": "anon",
+            "role_present": true,
+            "effective_execute": true,
+            "effective_schema_usage": true,
+            "effective_callable": true
+          },
+          {
+            "routine_oid": "3941",
+            "role": "authenticated",
+            "role_present": true,
+            "effective_execute": true,
+            "effective_schema_usage": true,
+            "effective_callable": true
+          }
+        ]
+      }
+    ]
+  },
+  "usedShapes": [
+    {
+      "name": "btrim",
+      "args": 1
+    },
+    {
+      "name": "upper",
+      "args": 1
+    },
+    {
+      "name": "daterange",
+      "args": 3
+    }
+  ],
+  "extraTwoArgumentDaterange": "METADATA_ONLY_NOT_AN_ACTUAL_INDEX_CALL",
+  "routineCallsExecuted": 0,
+  "businessRowsReturned": 0,
+  "secretsReturned": false
+}

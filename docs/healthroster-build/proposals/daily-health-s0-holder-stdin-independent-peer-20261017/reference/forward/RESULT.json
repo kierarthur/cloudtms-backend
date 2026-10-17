@@ -1,0 +1,14 @@
+{
+  "version": "DAILY_S0_STDIN_REAL_CHILD_SOURCE_CHECKS_V1",
+  "passed": 5,
+  "failed": 0,
+  "originalRealPipeLingeringReproduced": true,
+  "correctedRealChildNormalExitWithoutEOFOrKill": true,
+  "correctedAbortExitWithoutEOFOrKill": true,
+  "protocolEdits": 1,
+  "manifestRowsChanged": 1,
+  "retainedManifestRows": 16,
+  "native": "NOT_RUN",
+  "nativeRetryRequired": false,
+  "originalHolder18SavedImages": "UNCHANGED"
+}

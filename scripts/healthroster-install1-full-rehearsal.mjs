@@ -541,7 +541,7 @@ export function restorationSnapshotSql({identity,marker,relations,exportContract
   if(/^private\.cloudtms_(?:database_identity|database_releases|migration_ledger|repeatable_ledger)$/.test(name))continue;
   chunks.push(`select ${literal(name)} relation,count(*) row_count,
    encode(pg_catalog.sha256(pg_catalog.convert_to(coalesce(string_agg(row_hash,'|' order by row_hash),''),'UTF8')),'hex') row_fingerprint
-   from (select encode(pg_catalog.sha256(pg_catalog.convert_to(to_jsonb(t)::text,'UTF8')),'hex') row_hash from "${row.schema}"."${row.name}" t) hashed_rows`);
+   from (select encode(pg_catalog.sha256(pg_catalog.convert_to(to_jsonb(t)::text,'UTF8')),'hex') row_hash from "${row.schema}"."${row.name}" t offset 0) hashed_rows`);
  }
  requireThat(chunks.length>0,'REHEARSAL_SNAPSHOT_BUSINESS_RELATIONS_REQUIRED');
  const hash=value=>`encode(pg_catalog.sha256(pg_catalog.convert_to((${value})::text,'UTF8')),'hex')`;

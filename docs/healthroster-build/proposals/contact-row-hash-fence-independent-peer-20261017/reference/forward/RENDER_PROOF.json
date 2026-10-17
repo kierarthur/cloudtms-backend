@@ -1,0 +1,57 @@
+{
+  "cases": [
+    {
+      "caseId": "CONTACT_CONSTRUCTORS_V1",
+      "relations": [
+        "private.candidate_daily_batch_receipts",
+        "public.audit_events",
+        "public.settings_defaults",
+        "public.tms_users",
+        "public.ts_financials_outbox",
+        "public.weekly_candidate_cohorts",
+        "public.weekly_candidate_outreach_generations",
+        "public.weekly_manager_recipient_generations",
+        "public.weekly_message_dispatch_commands",
+        "public.weekly_source_global_settings",
+        "public.weekly_timesheet_submission_request_memberships",
+        "public.weekly_timesheet_submission_requests"
+      ],
+      "parentSha256": "42a76b6e6e25ab8df6d09a47111f2cf0661c2da8fdda882e5079fd7eac2b396f",
+      "candidateSha256": "5044b4d3821709aecc48d4d955aa6d8109bdf67d447067030e0dad444715e811",
+      "parentBytes": 25793,
+      "candidateBytes": 25901,
+      "fences": 12,
+      "legacyFences": 12,
+      "wholeRawInverse": true,
+      "sourceIdentity": "SYNTHETIC_SOURCE_ONLY_NOT_NATIVE"
+    },
+    {
+      "caseId": "QT_ADMIN_CONTROLS_V1",
+      "relations": [
+        "private.candidate_daily_batch_receipts",
+        "public.audit_events",
+        "public.settings_defaults",
+        "public.tms_users",
+        "public.ts_financials_outbox",
+        "public.weekly_candidate_cohorts",
+        "public.weekly_candidate_outreach_generations",
+        "public.weekly_manager_recipient_generations",
+        "public.weekly_message_dispatch_commands",
+        "public.weekly_source_global_settings",
+        "public.weekly_timesheet_submission_request_memberships",
+        "public.weekly_timesheet_submission_requests"
+      ],
+      "parentSha256": "42a76b6e6e25ab8df6d09a47111f2cf0661c2da8fdda882e5079fd7eac2b396f",
+      "candidateSha256": "5044b4d3821709aecc48d4d955aa6d8109bdf67d447067030e0dad444715e811",
+      "parentBytes": 25793,
+      "candidateBytes": 25901,
+      "fences": 12,
+      "legacyFences": 12,
+      "wholeRawInverse": true,
+      "sourceIdentity": "SYNTHETIC_SOURCE_ONLY_NOT_NATIVE"
+    }
+  ],
+  "sharedLiveRawUnchanged": true,
+  "externalProcessesOrConnections": 0,
+  "native": "NOT_RUN"
+}

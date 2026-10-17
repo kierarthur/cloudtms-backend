@@ -1,0 +1,154 @@
+{
+  "version": "CONTACT_ROW_HASH_ZERO_OFFSET_FINITE_PROOF_V1",
+  "parent": "a0e8ef17c45d34b86da43da4adb79804dd1863a2",
+  "targets": 51,
+  "changed": 6,
+  "unchanged": 45,
+  "completeRootReverses": 6,
+  "sourceLogicHunks": 1,
+  "unchangedRootPins": 62,
+  "sharedLiveAndOriginalWeakMapRawUnchanged": true,
+  "adapterCompleteFiles": 49,
+  "independentBagAndAdmissionTests": 22,
+  "originalProtocolTests": 59,
+  "originalTestPins": [
+    {
+      "file": "tests/healthroster-live-test-restoration.test.mjs",
+      "bytes": 13344,
+      "sha256": "701dd1d9b0bba0b18c451446089268a48eb722f3455c0718bc26b12912a356bc"
+    },
+    {
+      "file": "tests/healthroster-install1-full-rehearsal.test.mjs",
+      "bytes": 24216,
+      "sha256": "96ef1cb24b109db7e1d3b2f517ac70a0ff3ee02e820a51ae470eb8b73efad371"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/test.mjs",
+      "bytes": 12897,
+      "sha256": "b644b59f663b37cf859137166fbd0dd6dc145887bb1ba0263dc52bab52f8dafd"
+    }
+  ],
+  "ast": {
+    "parser": "v7.20",
+    "postgresql": [
+      17,
+      7
+    ],
+    "cases": [
+      {
+        "case": "CONTACT_CONSTRUCTORS_V1",
+        "live": true,
+        "fences": 12,
+        "relations": [
+          "private.candidate_daily_batch_receipts",
+          "public.audit_events",
+          "public.settings_defaults",
+          "public.tms_users",
+          "public.ts_financials_outbox",
+          "public.weekly_candidate_cohorts",
+          "public.weekly_candidate_outreach_generations",
+          "public.weekly_manager_recipient_generations",
+          "public.weekly_message_dispatch_commands",
+          "public.weekly_source_global_settings",
+          "public.weekly_timesheet_submission_request_memberships",
+          "public.weekly_timesheet_submission_requests"
+        ],
+        "wholeAstInverse": true,
+        "hashAggregateAndAllOtherCallsAstIdentical": true
+      },
+      {
+        "case": "CONTACT_CONSTRUCTORS_V1",
+        "live": false,
+        "fences": 12,
+        "relations": [
+          "private.candidate_daily_batch_receipts",
+          "public.audit_events",
+          "public.settings_defaults",
+          "public.tms_users",
+          "public.ts_financials_outbox",
+          "public.weekly_candidate_cohorts",
+          "public.weekly_candidate_outreach_generations",
+          "public.weekly_manager_recipient_generations",
+          "public.weekly_message_dispatch_commands",
+          "public.weekly_source_global_settings",
+          "public.weekly_timesheet_submission_request_memberships",
+          "public.weekly_timesheet_submission_requests"
+        ],
+        "wholeAstInverse": true,
+        "hashAggregateAndAllOtherCallsAstIdentical": true
+      },
+      {
+        "case": "QT_ADMIN_CONTROLS_V1",
+        "live": true,
+        "fences": 12,
+        "relations": [
+          "private.candidate_daily_batch_receipts",
+          "public.audit_events",
+          "public.settings_defaults",
+          "public.tms_users",
+          "public.ts_financials_outbox",
+          "public.weekly_candidate_cohorts",
+          "public.weekly_candidate_outreach_generations",
+          "public.weekly_manager_recipient_generations",
+          "public.weekly_message_dispatch_commands",
+          "public.weekly_source_global_settings",
+          "public.weekly_timesheet_submission_request_memberships",
+          "public.weekly_timesheet_submission_requests"
+        ],
+        "wholeAstInverse": true,
+        "hashAggregateAndAllOtherCallsAstIdentical": true
+      },
+      {
+        "case": "QT_ADMIN_CONTROLS_V1",
+        "live": false,
+        "fences": 12,
+        "relations": [
+          "private.candidate_daily_batch_receipts",
+          "public.audit_events",
+          "public.settings_defaults",
+          "public.tms_users",
+          "public.ts_financials_outbox",
+          "public.weekly_candidate_cohorts",
+          "public.weekly_candidate_outreach_generations",
+          "public.weekly_manager_recipient_generations",
+          "public.weekly_message_dispatch_commands",
+          "public.weekly_source_global_settings",
+          "public.weekly_timesheet_submission_request_memberships",
+          "public.weekly_timesheet_submission_requests"
+        ],
+        "wholeAstInverse": true,
+        "hashAggregateAndAllOtherCallsAstIdentical": true
+      }
+    ],
+    "completeBeforeInputs": 2,
+    "nativeGuardBodiesParsed": 2,
+    "counterexamples": [
+      "one offset skips a row",
+      "missing one fence",
+      "extra limit truncates",
+      "distinct loses duplicate hashes",
+      "row filter changes population",
+      "different hash algorithm",
+      "changed aggregate separator",
+      "changed aggregate order",
+      "count hash drops nulls",
+      "background source snapshot changed",
+      "one scope removed",
+      "whole row hash weakened"
+    ],
+    "sourceMap": {
+      "directRelations": 33,
+      "closedRelations": 37,
+      "ctes": 16,
+      "sameNamesAndOrdinals": true
+    },
+    "queriesExecuted": 0,
+    "native": "NOT_RUN"
+  },
+  "queriesExecuted": 0,
+  "psqlOrExplainExecuted": false,
+  "actualPostimageSourceAdmission": "NOT_RUN_UNMOUNTED",
+  "native": "NOT_RUN",
+  "performance": "NOT_MEASURED",
+  "cancellationCause": "UNKNOWN"
+}

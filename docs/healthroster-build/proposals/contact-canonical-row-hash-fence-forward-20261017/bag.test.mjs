@@ -1,0 +1,15 @@
+// Algebraic bag tests over explicit synthetic PostgreSQL-text/hash values.
+// These do not emulate to_jsonb formatting, native collation, planning or timing.
+import test from'node:test';import assert from'node:assert/strict';import{createHash}from'node:crypto';
+const sha=s=>createHash('sha256').update(s,'utf8').digest('hex'),cmp=(a,b)=>Buffer.compare(Buffer.from(a),Buffer.from(b));
+const aggregate=(rows,hash)=>({count:rows.length,fingerprint:sha(rows.map(hash).filter(x=>x!==null).sort(cmp).join('|'))});
+const old=(rows,hash=sha)=>aggregate(rows,hash);
+const fenced=(rows,hash=sha)=>{const projected=rows.map(hash);return{count:projected.length,fingerprint:sha(projected.filter(x=>x!==null).sort(cmp).join('|'))};};
+const vectors=[['empty',[]],['single',['{"a": 1}']],['duplicate physical row JSON',['{"a": 1}','{"a": 1}']],['all-null columns',['{"a": null, "b": null}']],['nested null and Unicode',['{"a": [null, "é", "😀"], "b": "\\u0000"}']],['wide synthetic row',['{"wide": "'+'w'.repeat(2*1024*1024)+'"}']],['noncanonical supplied text preserved',['{"a":1}','{"a": 1}']],['multiple unsorted',['{"z": 1}','{"a": null}','{"a": 1}','{"z": 1}']]];
+for(const[name,rows]of vectors)test('same count/full digest: '+name,()=>assert.deepEqual(fenced(rows),old(rows)));
+test('permutations and repeated equal hashes preserve the complete bag',()=>{const rows=['a','b','a','c'];const permutations=x=>x.length?x.flatMap((v,i)=>permutations(x.filter((_,j)=>j!==i)).map(p=>[v,...p])):[[]];const expected=old(rows);for(const p of permutations(rows))assert.deepEqual(fenced(p),expected);assert.notEqual(fenced([...new Set(rows)]).fingerprint,expected.fingerprint);});
+test('SQL-null aggregate model retains count-star and ignores null hash identically',()=>{const values=[null,'a',null,'b'],hash=x=>x===null?null:sha(x);assert.deepEqual(fenced(values,hash),old(values,hash));assert.equal(fenced(values,hash).count,4);assert.deepEqual(fenced([null,null],hash),{count:2,fingerprint:sha('')});});
+test('collision model never deduplicates; zero offset preserves all rows',()=>{const rows=['different1','different2'],hash=()=>sha('collision');assert.deepEqual(fenced(rows,hash),old(rows,hash));assert.notEqual(fenced(rows,hash).fingerprint,fenced(rows.slice(1),hash).fingerprint);assert.equal(fenced(rows,hash).count,2);});
+test('empty and one all-null physical row remain distinct',()=>assert.notDeepEqual(fenced([]),fenced(['{"a": null}'])));
+test('a changed field, duplicate, removed row, separator or order cannot reuse equality',()=>{const rows=['x','y','x'],got=fenced(rows);assert.notDeepEqual(got,fenced(['z','y','x']));assert.notDeepEqual(got,fenced(rows.slice(1)));assert.notEqual(got.fingerprint,sha(rows.map(sha).sort(cmp).join(',')));assert.notEqual(got.fingerprint,sha(rows.map(sha).sort(cmp).reverse().join('|')));});
+test('hash projection model evaluates one preserved hash value per input row',()=>{let calls=0;const rows=['a','a','b'];const got=fenced(rows,x=>{calls++;return sha(x);});assert.equal(calls,3);assert.deepEqual(got,old(rows));});

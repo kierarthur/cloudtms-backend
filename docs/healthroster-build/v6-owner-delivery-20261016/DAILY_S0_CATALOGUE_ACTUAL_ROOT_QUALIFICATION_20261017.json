@@ -1,0 +1,176 @@
+{
+  "version": "DAILY_S0_CATALOGUE_ACTUAL_ROOT_QUALIFICATION_V1",
+  "sourceCommit": "474d819407e7fbf2c2c815d306c584fb30c65811",
+  "startRootCommit": "f569e3830147cfefb955c889cf326b6f77f9ceed",
+  "exactInputSetup": {
+    "setupCommit": "fcec110d0b8f8bf54ba77f51645738dc37407ca4",
+    "remoteFreshEqual": true,
+    "priorManifestPrefixPreserved": true,
+    "inputSqlSha256": "1b8e61e2d1220ddb23e8192e2e3e3424f7e8669205c6599f8c30bdf40280d923"
+  },
+  "native": {
+    "database": "cloudtms_test_clone",
+    "target": "agency_test",
+    "label": "HR_DAILY_GENUINE_S0_CATALOGUE_E995C264DD1CDBD20BC11E468183A1D2",
+    "accepted": true,
+    "rolledBack": true,
+    "connectedFresh": true,
+    "mainStatements": 2,
+    "freshStatements": 1,
+    "observedAt": "2026-10-17T10:28:02.393935+00:00",
+    "freshObservedAt": "2026-10-17T10:28:02.628792+00:00",
+    "readOnly": true,
+    "noRoleSwitch": true,
+    "holderGranted": true
+  },
+  "actualCaptureReceipt": {
+    "version": "DAILY_S0_CATALOGUE_CAPTURE_ONLY_V1",
+    "sqlSha256": "1b8e61e2d1220ddb23e8192e2e3e3424f7e8669205c6599f8c30bdf40280d923",
+    "verificationSqlSha256": "07e16e4b431e5fcb05ad2166a5897200a66b2925d64430ee413a1483884a98c5",
+    "mainMetadataSha256": "1eeae365de4b1ec8d0df4c1e51679e2423aea472978c1ce1d0eb55f310727279",
+    "freshMetadataSha256": "1eeae365de4b1ec8d0df4c1e51679e2423aea472978c1ce1d0eb55f310727279",
+    "relations": 15,
+    "transportCaptured": true,
+    "compatibility": "ROOT_REVIEW_REQUIRED_NOT_QUALIFIED",
+    "businessScope": "NOT_RUN",
+    "canonicalRestoration": "NOT_APPLICABLE_NO_VERDICT_COPIED"
+  },
+  "actualHolderSummary": {
+    "status": "CATALOGUE_CAPTURED_OWN_TURN_RELEASED",
+    "transport": {
+      "version": "DAILY_S0_CATALOGUE_CAPTURE_ONLY_V1",
+      "sqlSha256": "1b8e61e2d1220ddb23e8192e2e3e3424f7e8669205c6599f8c30bdf40280d923",
+      "verificationSqlSha256": "07e16e4b431e5fcb05ad2166a5897200a66b2925d64430ee413a1483884a98c5",
+      "mainMetadataSha256": "1eeae365de4b1ec8d0df4c1e51679e2423aea472978c1ce1d0eb55f310727279",
+      "freshMetadataSha256": "1eeae365de4b1ec8d0df4c1e51679e2423aea472978c1ce1d0eb55f310727279",
+      "relations": 15,
+      "transportCaptured": true,
+      "compatibility": "ROOT_REVIEW_REQUIRED_NOT_QUALIFIED",
+      "businessScope": "NOT_RUN",
+      "canonicalRestoration": "NOT_APPLICABLE_NO_VERDICT_COPIED"
+    },
+    "compatibility": "ROOT_REVIEW_REQUIRED_NOT_QUALIFIED",
+    "businessScope": "NOT_RUN",
+    "originalSharedTurnCompleted": true,
+    "elapsedMs": 17974,
+    "budgets": {
+      "work": 120000,
+      "cleanup": 60000,
+      "whole": 180000,
+      "resultBytes": 8000000
+    }
+  },
+  "actualInputReceipt": {
+    "version": "DAILY_GENUINE_S0_CATALOGUE_INPUT_V1",
+    "identity": {
+      "physicalDatabase": "cloudtms_test_clone",
+      "databaseOid": 324139,
+      "backendPid": 275228,
+      "turnId": "hr_turn_e995c264dd1cdbd20bc11e468183a1d2",
+      "key": [
+        20261013,
+        1
+      ],
+      "takenAt": "2026-10-17T10:27:49.877Z",
+      "task": "DAILY_S0_CATALOGUE_ONLY_CAPTURE"
+    },
+    "label": "HR_DAILY_GENUINE_S0_CATALOGUE_E995C264DD1CDBD20BC11E468183A1D2",
+    "sqlSha256": "1b8e61e2d1220ddb23e8192e2e3e3424f7e8669205c6599f8c30bdf40280d923",
+    "verificationSqlSha256": "07e16e4b431e5fcb05ad2166a5897200a66b2925d64430ee413a1483884a98c5",
+    "businessRelationsEvaluated": 0,
+    "native": "NOT_RUN"
+  },
+  "finiteCompatibility": {
+    "status": "PASS_FOR_THIS_METADATA_CAPTURE_AND_NAMED_READ_SCOPE",
+    "relations": 15,
+    "permanentOrdinaryOwnerHeaps": 15,
+    "partitionInheritanceForeignExpansion": 0,
+    "ownerSelectAndSchemaUsage": 15,
+    "forcedRls": 0,
+    "publicRlsLiteralTrueOwnerServicePolicyRelations": 12,
+    "privateRlsDisabledRelations": 3,
+    "rewriteRules": 0,
+    "completeTypeWalk": true,
+    "types": 25,
+    "builtinBaseOrTextArrayTypes": 12,
+    "ordinaryPublicEnums": 13,
+    "ordinaryEnumLabelsEqualCurrentContract": 13,
+    "domainsOrCustomBaseIo": 0,
+    "indexes": 121,
+    "allIndexesValidReadyLive": true,
+    "indexDefinitionsPg17Parsed": 121,
+    "indexExpressionCalls": [
+      {
+        "name": "pg_catalog.btrim",
+        "identityArguments": "text",
+        "oid": "885"
+      },
+      {
+        "name": "pg_catalog.upper",
+        "identityArguments": "text",
+        "oid": "871"
+      },
+      {
+        "name": "pg_catalog.daterange",
+        "identityArguments": "date, date, text",
+        "oid": "3942"
+      }
+    ],
+    "expressionRoutineMetadata": {
+      "total": 4,
+      "eof": true,
+      "actualUsedSignaturesInternalImmutableInvokerOwnerPostgresAndOwnerCallable": true,
+      "twoArgDaterangeExtraMetadataOnly": true
+    },
+    "operatorClasses": 14,
+    "coreOperatorClasses": 11,
+    "publicExtensionOperatorClasses": 3,
+    "supportBindings": 287,
+    "coreInternalSupportBindings": 264,
+    "publicCBindings": 23,
+    "extensions": [
+      {
+        "name": "pg_trgm",
+        "version": "1.6",
+        "schema": "public",
+        "library": "$libdir/pg_trgm"
+      },
+      {
+        "name": "btree_gist",
+        "version": "1.7",
+        "schema": "public",
+        "library": "$libdir/btree_gist"
+      }
+    ],
+    "extensionDependencyAndLibrarySymbols": "ACTUAL_PG_DEPEND_AND_PROBIN_PROSRC_BOUND_NO_NON_C_BODY_RETURNED",
+    "collation": "ONE_CORE_DEFAULT_DETERMINISTIC",
+    "currentSchemas": [
+      "pg_catalog",
+      "public"
+    ],
+    "scope": "Technical compatibility of this fixed catalogue capture for later separately reviewed ordinary read scope. Reuses existing trusted PostgreSQL17 baseline; no general engine approval policy or producer/finance/API proof is added."
+  },
+  "launcher": {
+    "orchestratorStatus": "HOLD_S0_OWN_RELEASE_NOT_CONFIRMED",
+    "actualFinalStatusPrinted": "CATALOGUE_CAPTURED_OWN_TURN_RELEASED",
+    "actualDatabaseUnlockAndClose": "CONFIRMED_IN_ORIGINAL_SEND7_JOURNAL_2026-10-17T10:28:04.556Z",
+    "processStayedAliveAfterStatus": true,
+    "lateAbortAfterDisposalDidNotCloseProcess": true,
+    "rootClosedOnlyOwnTerminalSession": 34508,
+    "termination": "CTRL_C",
+    "observedExitCode": 1,
+    "closed": true,
+    "likelySourceDefect": "Controls.dispose removed data handlers without pausing its owned stdin; real controlled process regression and finite source fix assigned. Preserve original18 and actual capture; no native retry required."
+  },
+  "analysisCorrections": {
+    "initialIndexFunctionAllowlist": "Root offline assertion allowed only upper/lower and refused genuine btrim/daterange. It was a narrow analysis assumption, not a native failure. Actual121 index AST and fixed builtin metadata resolve all three actual calls."
+  },
+  "ownedOutputFolder": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/.codex-tmp/daily-s0-catalogue-20261017-f728137d0520be42c36dfd4361322d62",
+  "privateStateContentsReadHashedCopied": false,
+  "afterCapacity": {"observedAt": "2026-10-17T10:37:31.438Z", "database": "cloudtms_test_clone", "serviceState": "healthy", "serverVersionNum": 170011, "postmasterStartedAt": "2026-10-14T09:07:33.240Z", "restartPoolOrJobChanges": false},
+  "businessScope": "NOT_RUN",
+  "businessFixturesOrApi": "NOT_RUN",
+  "canonicalRestoration": "NOT_APPLICABLE_NO_VERDICT_COPIED",
+  "install2": "NOT_INSTALLED",
+  "finalPartBCritics": "NOT_RUN"
+}

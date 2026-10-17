@@ -1,0 +1,454 @@
+{
+  "sourceParent": "feb36c0c13c87b57b7566172e4bfaa1254117794",
+  "currentRootCheckpoint": "42802228977b941325f0feb44c11918b0f42190f",
+  "rootPhysical": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-install2-14102026",
+  "source": [
+    {
+      "file": "supabase/migrations/16102026_1205_weekly_contact_20_automatic_followup_tranche.sql",
+      "sha256": "e45f1a433cfb7f6dacad7bc01a5191f40ec176e33f44658fe0e3d0457eadfc17",
+      "bytes": 6187,
+      "parentAndCurrentCommittedRawEqual": true,
+      "savedEqualsCommitted": true
+    },
+    {
+      "file": "supabase/migrations/16102026_1205_weekly_contact_30_submission_cohort_identity.sql",
+      "sha256": "4da7a96a5e9b2c2f7778d5478a4a7ea49586c4893d76ac309b3d36ef7132120f",
+      "bytes": 7563,
+      "parentAndCurrentCommittedRawEqual": true,
+      "savedEqualsCommitted": true
+    },
+    {
+      "file": "supabase/migrations/15102026_0800_candidate_push_timing_authority.sql",
+      "sha256": "78ea2a4ff8cbac67d8cbc381dcfaeec7216cfcfacc253c5f9998a1223af66450",
+      "bytes": 2941,
+      "parentAndCurrentCommittedRawEqual": true,
+      "savedEqualsCommitted": true
+    },
+    {
+      "file": "supabase/repeatable/15102026_0800_candidate_push_timing_authority_v1.sql",
+      "sha256": "97172b222081c79cecce48b0d143fa7bbce2f560e7c19807230d192e78c7906e",
+      "bytes": 14006,
+      "parentAndCurrentCommittedRawEqual": true,
+      "savedEqualsCommitted": true
+    },
+    {
+      "file": "tests/weekly-source/push-timing-admin-native.sql",
+      "sha256": "cde7bef4dd986e396c1820d531e0c45690240deab1cdc2c14454142536de9809",
+      "bytes": 9760,
+      "parentAndCurrentCommittedRawEqual": true,
+      "savedEqualsCommitted": true
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/CONTACT_SIX_LOCK_NATIVE_20261017.json",
+      "sha256": "88af1deff684ad317e7996123e01f8409357a6b94416d2efcc065783f821f5e4",
+      "bytes": 3159,
+      "parentAndCurrentCommittedRawEqual": true,
+      "savedEqualsCommitted": true
+    },
+    {
+      "file": "supabase/repeatable/15092026_1534_weekly_source_settings_admin_v1.sql",
+      "sha256": "635b635e0e45858c45900ed3976bad9e9794f04a94db4c4b8dcd531fc4d26c4c",
+      "bytes": 73391,
+      "parentAndCurrentCommittedRawEqual": true,
+      "savedEqualsCommitted": true
+    },
+    {
+      "file": "supabase/repeatable/15092026_1534_00_weekly_source_private_classifiers_v1.sql",
+      "sha256": "116b4cab99eddf64663a84865f40bbad18fa486101a93e02d14d23a84cd62bf0",
+      "bytes": 9589,
+      "parentAndCurrentCommittedRawEqual": true,
+      "savedEqualsCommitted": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-actor-native-proof-20261017/build-program.mjs",
+      "sha256": "cbb099f9e238252933204d73da78d792d1afd140aa86fb2d2feb22203e828cae",
+      "bytes": 16157,
+      "parentAndCurrentCommittedRawEqual": true,
+      "savedEqualsCommitted": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-actor-native-proof-20261017/SOURCE_PINS.json",
+      "sha256": "21144bb7647c4ff3d764ae09d23366c6bf21f637392c386481f06b1f1611fb7d",
+      "bytes": 20797,
+      "parentAndCurrentCommittedRawEqual": true,
+      "savedEqualsCommitted": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-actor-native-proof-20261017/NATIVE_DEPENDENCY_DIAG_R1.json",
+      "sha256": "1a140b79364a0d873b03143f9575f64a82dcbe73a2f42b9330b98d2ba1598486",
+      "bytes": 3891,
+      "parentAndCurrentCommittedRawEqual": true,
+      "savedEqualsCommitted": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-actor-native-proof-20261017/fixed-metadata-reader.mjs",
+      "sha256": "8713d13168b49d046f8d85b91352143ccfe283cc04682702366074dc30eaad34",
+      "bytes": 12484,
+      "parentAndCurrentCommittedRawEqual": true,
+      "savedEqualsCommitted": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-actor-native-proof-20261017/control.mjs",
+      "sha256": "1d7fa008cd0945eba92b301d55fcc96be17fff7ffa115f55120b418be5c99ab8",
+      "bytes": 3227,
+      "parentAndCurrentCommittedRawEqual": true,
+      "savedEqualsCommitted": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-actor-native-proof-20261017/timing.mjs",
+      "sha256": "0cc645a9c17fc5340b04adfc7ad79b6f134d655f3d1a959dc6baa526b44b19c9",
+      "bytes": 1313,
+      "parentAndCurrentCommittedRawEqual": true,
+      "savedEqualsCommitted": true
+    },
+    {
+      "file": "scripts/healthroster-install1-full-rehearsal.mjs",
+      "sha256": "8b4ab4113e42cea647dbbd1a22be2eef68806b62f3c8c2f06c58d4c904982cfc",
+      "bytes": 48321,
+      "parentAndCurrentCommittedRawEqual": false,
+      "savedEqualsCommitted": false,
+      "candidateForwardFromSha256": "af2b6b591a8d6c251ad08507130bd2cf0cc9861d966055174e511de9c4102754"
+    },
+    {
+      "file": "scripts/healthroster-live-test-restoration.mjs",
+      "sha256": "a91c1bf04f868ff372b20fb6beca239a7807fe9cc92c0c2682afffcd79554adc",
+      "bytes": 15050,
+      "parentAndCurrentCommittedRawEqual": false,
+      "savedEqualsCommitted": false,
+      "candidateForwardFromSha256": "fb4ffa42acf7cf319cdcb45a233babdb9720bb1bc73e4cb1f6ddcd3be696a4a6"
+    },
+    {
+      "file": "scripts/healthroster-rehearsal-turn.mjs",
+      "sha256": "2a4078b744545a4b4c15a9842947e222ffae75dcadf9b087f49b3c8a30cd36aa",
+      "bytes": 12827,
+      "parentAndCurrentCommittedRawEqual": true,
+      "savedEqualsCommitted": true
+    },
+    {
+      "file": "scripts/healthroster-turn-control.mjs",
+      "sha256": "ae6aa38307faf3fdc7a1c1a0fe20ff6aab3589c420c5bfd5642566e3a0c23ad8",
+      "bytes": 9580,
+      "parentAndCurrentCommittedRawEqual": true,
+      "savedEqualsCommitted": true
+    },
+    {
+      "file": "scripts/cloudtms-managed-release-sql.mjs",
+      "sha256": "ff391fccf7f690d4d476e935870d740667e4dfd92b972bfd5d7d80b1b3bb912b",
+      "bytes": 7853,
+      "parentAndCurrentCommittedRawEqual": true,
+      "savedEqualsCommitted": true
+    },
+    {
+      "file": "supabase/release/export_contract.sql",
+      "sha256": "05a904bd4f7739409b28e0459b9f68d7c54a5e51796aefbe2829b370ce1dfe43",
+      "bytes": 14978,
+      "parentAndCurrentCommittedRawEqual": true,
+      "savedEqualsCommitted": true
+    },
+    {
+      "file": "supabase/release/current-contract.json",
+      "sha256": "da0e0870442c151534c04d108757a0d76a812879aafae71f01486c7077ce674a",
+      "bytes": 7865503,
+      "parentAndCurrentCommittedRawEqual": true,
+      "savedEqualsCommitted": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-pure-native-proof-20261017/build-program.mjs",
+      "sha256": "1ec1bf64e57ec38856a509be1df433a3318a439271eb53cfed2008d8b151d69d",
+      "bytes": 3514,
+      "parentAndCurrentCommittedRawEqual": true,
+      "savedEqualsCommitted": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-pure-native-proof-20261017/SOURCE_MANIFEST.json",
+      "sha256": "d46a4e3da510f5ca2ded9551acc8f8079aa3420f7928d633158f037e0a49b1c6",
+      "bytes": 2917,
+      "parentAndCurrentCommittedRawEqual": true,
+      "savedEqualsCommitted": true
+    },
+    {
+      "file": "supabase/repeatable/includes/nhsp_v6_health_review_context.sqlinc",
+      "sha256": "9c2cc018537e1dacab493dc079903edcfedb959df172f4582d476e4ce30ff346",
+      "bytes": 21633,
+      "parentAndCurrentCommittedRawEqual": true,
+      "savedEqualsCommitted": true
+    },
+    {
+      "file": "supabase/repeatable/includes/nhsp_v6_health_composition_wrappers.sqlinc",
+      "sha256": "a5e50977d1ad2fe957ab3e306e5272d2a181dbf460d8d766c5638d1adc073ab8",
+      "bytes": 13366,
+      "parentAndCurrentCommittedRawEqual": true,
+      "savedEqualsCommitted": true
+    },
+    {
+      "file": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/03_requests.sqlinc",
+      "sha256": "daf9306ef07b5f9a8102ab65be38995e6465e13a433e997265911019eaed1912",
+      "bytes": 4862,
+      "parentAndCurrentCommittedRawEqual": true,
+      "savedEqualsCommitted": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-pure-native-proof-20261017/inputs/health_reason.sqlinc",
+      "sha256": "f305db48ad0c96a578b7ea21937f3bcef98bf3f0b49e15e04f06ff39f4cecc78",
+      "bytes": 1112,
+      "parentAndCurrentCommittedRawEqual": true,
+      "savedEqualsCommitted": true
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-pure-native-proof-20261017/inputs/17102026_0126_daily_health_reason_program.sql",
+      "sha256": "a8891d6a208b39a5603346feb0f48c4638dea277f66049dff43159dc9f91379d",
+      "bytes": 2261,
+      "parentAndCurrentCommittedRawEqual": true,
+      "savedEqualsCommitted": true
+    },
+    {
+      "file": "scripts/cloudtms-db-release-lib.mjs",
+      "sha256": "22b3a5cd4ab5ca93f59f891c03187a6f5214e6f4bb99381e203700c52b413bbf",
+      "bytes": 32174,
+      "parentAndCurrentCommittedRawEqual": true,
+      "savedEqualsCommitted": true
+    },
+    {
+      "file": "scripts/cloudtms-managed-release.mjs",
+      "sha256": "f56267cb889d24da4a605cc7795dba45b65ba1c7a208e885dd1c2b9fe2d2a7a8",
+      "bytes": 48153,
+      "parentAndCurrentCommittedRawEqual": true,
+      "savedEqualsCommitted": true
+    },
+    {
+      "file": "scripts/healthroster-contact-claim-boundary.mjs",
+      "sha256": "505abc1c41cf7adc21aa16c4c7f5f42d6678a58818cd694d992d3d0271fbff0d",
+      "bytes": 8052,
+      "parentAndCurrentCommittedRawEqual": true,
+      "savedEqualsCommitted": true
+    },
+    {
+      "file": "scripts/healthroster-money-predecessor-boundary.mjs",
+      "sha256": "3c49e8aa9e128dfb331d282551c17cc2e12528075ff33866347e51eb2328dbc6",
+      "bytes": 4543,
+      "parentAndCurrentCommittedRawEqual": true,
+      "savedEqualsCommitted": true
+    },
+    {
+      "file": "scripts/healthroster-capability-predecessor-boundary.mjs",
+      "sha256": "e24e16cd1bd0cd8afe28b7e697a5fd7ec0c03a4edeb0e458ca81e1eecd47bbc3",
+      "bytes": 16330,
+      "parentAndCurrentCommittedRawEqual": true,
+      "savedEqualsCommitted": true
+    },
+    {
+      "file": "scripts/bpay-next-final-definers.mjs",
+      "sha256": "51ab7fd6d5c582ee7f4cab612502c4fc7ac11088cb1a996dd2cf1e6561468d09",
+      "bytes": 13611,
+      "parentAndCurrentCommittedRawEqual": true,
+      "savedEqualsCommitted": true
+    },
+    {
+      "file": "scripts/weekly-source-reader-release.mjs",
+      "sha256": "b35b0d8698fbddecfc2b98f9226d5ecc88a076643366533822c3e3178b72e313",
+      "bytes": 2834,
+      "parentAndCurrentCommittedRawEqual": true,
+      "savedEqualsCommitted": true
+    },
+    {
+      "file": "scripts/healthroster-full-rehearsal-protocol.mjs",
+      "sha256": "53c301664b449168b34803ca995eedcfd4cf90df1533c6d78086637df6488550",
+      "bytes": 10596,
+      "parentAndCurrentCommittedRawEqual": true,
+      "savedEqualsCommitted": true
+    },
+    {
+      "file": "scripts/healthroster-install1-verifier-census.mjs",
+      "sha256": "742635a7ed15dfb190d77dda9063fd49315ec3390f573982bc461bfd8f1e862c",
+      "bytes": 11479,
+      "parentAndCurrentCommittedRawEqual": true,
+      "savedEqualsCommitted": true
+    },
+    {
+      "file": "scripts/healthroster-install2-native-gate.mjs",
+      "sha256": "ec3c2eca5b648fdf2996dbeb3c116e39ef37fdc54d1e896cfb4489682cbad9be",
+      "bytes": 7883,
+      "parentAndCurrentCommittedRawEqual": true,
+      "savedEqualsCommitted": true
+    },
+    {
+      "file": "scripts/healthroster-reviewed-managed-envelope.mjs",
+      "sha256": "53b92b41b522851a68126447f88d11862974e70895c829e9e79b1877ea86c19b",
+      "bytes": 6985,
+      "parentAndCurrentCommittedRawEqual": true,
+      "savedEqualsCommitted": true
+    },
+    {
+      "file": "scripts/healthroster-f5-post-verified-gate.mjs",
+      "sha256": "dfd1454e057c27e6693a012aef107382f9bc0479322fd0e3ae09b35bb19e99a3",
+      "bytes": 8425,
+      "parentAndCurrentCommittedRawEqual": true,
+      "savedEqualsCommitted": true
+    },
+    {
+      "file": "scripts/cloudtms-managed-psql.mjs",
+      "sha256": "70e7f4e28c2a4208dd665af2e67e0a429228e66c52017e82d49b758aa3836e4d",
+      "bytes": 5398,
+      "parentAndCurrentCommittedRawEqual": true,
+      "savedEqualsCommitted": true
+    },
+    {
+      "file": "scripts/weekly-source-protected-release-qualification.mjs",
+      "sha256": "0e658eae30dd94363d160dc1193d71b0845ee86a812c2e53503336f743dc52c2",
+      "bytes": 10311,
+      "parentAndCurrentCommittedRawEqual": true,
+      "savedEqualsCommitted": true
+    },
+    {
+      "file": "scripts/weekly-source-protected-prerequisite-evidence.mjs",
+      "sha256": "42717a80f6d60598b99790106e1d9c4e182c1137f7039b97782017da189865cc",
+      "bytes": 17500,
+      "parentAndCurrentCommittedRawEqual": true,
+      "savedEqualsCommitted": true
+    },
+    {
+      "file": "scripts/weekly-source-protected-operational-evidence.mjs",
+      "sha256": "27ca60595eb85faed5b88035d854abaa309d24a8a4fec00b3f5c83da26a715d5",
+      "bytes": 18719,
+      "parentAndCurrentCommittedRawEqual": true,
+      "savedEqualsCommitted": true
+    },
+    {
+      "file": "scripts/weekly-source-protected-test-setup-evidence.mjs",
+      "sha256": "12a4988d8d7626edc8748092b4780cdc881482be288e496f3f464533e959e610",
+      "bytes": 5426,
+      "parentAndCurrentCommittedRawEqual": true,
+      "savedEqualsCommitted": true
+    },
+    {
+      "file": "scripts/cloudtms-managed-execution-policy.mjs",
+      "sha256": "ba1ed5d23cdd639e814c7e009bfa07502dd633511e9e0be265d2a8486fa495d1",
+      "bytes": 11421,
+      "parentAndCurrentCommittedRawEqual": true,
+      "savedEqualsCommitted": true
+    },
+    {
+      "file": "scripts/weekly-source-protected-execution-tree.mjs",
+      "sha256": "ceffa9ec116e724e6bf854e069080b5f220425702d5b251ecd851c679d1adcf2",
+      "bytes": 17345,
+      "parentAndCurrentCommittedRawEqual": true,
+      "savedEqualsCommitted": true
+    },
+    {
+      "file": "scripts/weekly-source-post-verified-evidence-controller.mjs",
+      "sha256": "7c0342fe85df257a28b19f19158f98123bb03d4bb574f913d341fdaac80fd853",
+      "bytes": 15969,
+      "parentAndCurrentCommittedRawEqual": true,
+      "savedEqualsCommitted": true
+    },
+    {
+      "file": "scripts/healthroster-f5-synthetic-fixture.mjs",
+      "sha256": "d9223bcfc5448b9d01636463d60c42312bdd2107ade9881f08d70cfcc9380a66",
+      "bytes": 9442,
+      "parentAndCurrentCommittedRawEqual": true,
+      "savedEqualsCommitted": true
+    },
+    {
+      "file": "scripts/weekly-source-activation-window-binding.mjs",
+      "sha256": "5e91b4df3bc5f963e5d4d870d71933daa3501468c18f651a7a3e1376d465acb2",
+      "bytes": 3778,
+      "parentAndCurrentCommittedRawEqual": true,
+      "savedEqualsCommitted": true
+    },
+    {
+      "file": "scripts/weekly-source-native-fixture-participants.mjs",
+      "sha256": "8a9dec4e027a1967ca07b6aa69ded0156f25a9aca126bff3c7f4bac8ee94d696",
+      "bytes": 6818,
+      "parentAndCurrentCommittedRawEqual": true,
+      "savedEqualsCommitted": true
+    },
+    {
+      "file": "scripts/weekly-source-off-rule-setup-evidence.mjs",
+      "sha256": "5b0392bcd30c0b9b55692c3793a444bb7591aa89a77d22cea3fbb5c0128eb5e8",
+      "bytes": 6862,
+      "parentAndCurrentCommittedRawEqual": true,
+      "savedEqualsCommitted": true
+    },
+    {
+      "file": "scripts/weekly-source-protected-partial-native-evidence.mjs",
+      "sha256": "1f9fb134a93453a5d9bbe569730573c9fc3d68b0232a7f4bf92218a3624d2e42",
+      "bytes": 1718,
+      "parentAndCurrentCommittedRawEqual": true,
+      "savedEqualsCommitted": true
+    },
+    {
+      "file": "scripts/weekly-source-protected-activation-probe-evidence.mjs",
+      "sha256": "8e224faba6dcf6991a50953983165a7176a0d16e741753cec87c90cc08ef335c",
+      "bytes": 9395,
+      "parentAndCurrentCommittedRawEqual": true,
+      "savedEqualsCommitted": true
+    },
+    {
+      "file": "broker/src/weekly-source/upload-staging-adapter.mjs",
+      "sha256": "16b56f734d7a9b52b6aca6873dab15368b621da29d26fd34cfcfc847d5571af3",
+      "bytes": 20759,
+      "parentAndCurrentCommittedRawEqual": true,
+      "savedEqualsCommitted": true
+    },
+    {
+      "file": "broker/src/weekly-source/off-rule-native-proxy.mjs",
+      "sha256": "c46b57f1b923e57674a13a7d0b2d19a0745bd583257174aea0aecf86d0ac4a0c",
+      "bytes": 3851,
+      "parentAndCurrentCommittedRawEqual": true,
+      "savedEqualsCommitted": true
+    },
+    {
+      "file": "scripts/weekly-source-protected-probe-native-evidence.mjs",
+      "sha256": "5f02d8129c762b8b29f52c2b97cd7f9f2c5b58dded38bf8b3a0c9c73e0e2a0a2",
+      "bytes": 5751,
+      "parentAndCurrentCommittedRawEqual": true,
+      "savedEqualsCommitted": true
+    },
+    {
+      "file": "broker/src/weekly-source/report-upload-provenance.mjs",
+      "sha256": "3e20d719bef7954e508f1d66354fe4dce5b965604df25a4437671eba5d308816",
+      "bytes": 12480,
+      "parentAndCurrentCommittedRawEqual": true,
+      "savedEqualsCommitted": true
+    },
+    {
+      "file": "broker/src/weekly-source/coverage-warnings.mjs",
+      "sha256": "d7b705f4126a3c307d89acf8f8e185e610153fbe11ca1f68fcdbf1a8d84ce143",
+      "bytes": 3588,
+      "parentAndCurrentCommittedRawEqual": true,
+      "savedEqualsCommitted": true
+    },
+    {
+      "file": "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/01_complete_helpers.sqlinc",
+      "sha256": "95c35931e723787e4c5258ef704cb1115f0edbd9fd6b34e9ab25c4d0966b355b",
+      "bytes": 15886,
+      "parentAndCurrentCommittedRawEqual": true,
+      "savedEqualsCommitted": true
+    },
+    {
+      "file": "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/99_acl.sqlinc",
+      "sha256": "ec1dae1cab0e44a1713ace86ceaf4d6ae916e5550ba4f204e407450ce73e117a",
+      "bytes": 1358,
+      "parentAndCurrentCommittedRawEqual": true,
+      "savedEqualsCommitted": true
+    },
+    {
+      "file": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "sha256": "8f65ee0c9cf46b5465c920057212e6d2499b119e05c4c1dedd2f0cfecb89eea7",
+      "bytes": 311541,
+      "parentAndCurrentCommittedRawEqual": true,
+      "savedEqualsCommitted": true
+    },
+    {
+      "file": "supabase/baseline/22082026_1503_cloudtms_test_routines_19.sql",
+      "sha256": "114fe1b3f66d44d45a7328e242f859bb1cc561203fd506e596cc9b45f5e8609d",
+      "bytes": 280735,
+      "parentAndCurrentCommittedRawEqual": true,
+      "savedEqualsCommitted": true
+    }
+  ],
+  "rootExistingFilesEdited": 0,
+  "native": "NOT_RUN",
+  "snapshotCandidateNotInstalled": true,
+  "snapshotCandidateNote": "Two expected source rows are proposed postimages; unchanged61 rows equal this committed parent. After root mounts/commits, actual saved/index/HEAD source guards and exact428 predecessor guards must independently pass."
+}

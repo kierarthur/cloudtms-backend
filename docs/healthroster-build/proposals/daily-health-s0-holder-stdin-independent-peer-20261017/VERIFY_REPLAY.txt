@@ -1,0 +1,1 @@
+{"status":"PASS","mode":"ORIGINAL18_RETAINED","frozenFiles":11,"originalImages":18,"native":"NOT_RUN","nativeRetryRequired":false}

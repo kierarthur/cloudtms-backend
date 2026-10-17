@@ -1,0 +1,40 @@
+TAP version 13
+# Subtest: complete protocol and manifest reverse exactly, retaining all16 other manifest rows
+ok 1 - complete protocol and manifest reverse exactly, retaining all16 other manifest rows
+  ---
+  duration_ms: 3.0154
+  type: 'test'
+  ...
+# Subtest: real original class reproduces lingering child with pipe deliberately kept open
+ok 2 - real original class reproduces lingering child with pipe deliberately kept open
+  ---
+  duration_ms: 477.9313
+  type: 'test'
+  ...
+# Subtest: real corrected class exits normally without EOF or forced kill after RELEASE
+ok 3 - real corrected class exits normally without EOF or forced kill after RELEASE
+  ---
+  duration_ms: 98.0166
+  type: 'test'
+  ...
+# Subtest: real corrected failure disposal exits normally with closed nonzero status, without EOF or forced kill
+ok 4 - real corrected failure disposal exits normally with closed nonzero status, without EOF or forced kill
+  ---
+  duration_ms: 89.7863
+  type: 'test'
+  ...
+# Subtest: corrected disposal pauses only its own input and removes the same listeners
+ok 5 - corrected disposal pauses only its own input and removes the same listeners
+  ---
+  duration_ms: 0.9389
+  type: 'test'
+  ...
+1..5
+# tests 5
+# suites 0
+# pass 5
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 792.1347

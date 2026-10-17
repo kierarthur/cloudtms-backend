@@ -1,0 +1,22 @@
+{
+  "version":"CONTACT_ROW_HASH_FENCE_INDEPENDENT_PEER_V1",
+  "reviewer":"GPT-6.1-sol / xhigh",
+  "disposition":"ACCEPT_BOUNDED_SOURCE_FORWARD",
+  "actionableFindings":[],
+  "authorCommit":"e69fca9864d5ad490cfea55e36ca6d183022b037",
+  "authorManifestSha256":"42246d183b1910b39e655cf6df086864b6b517cbca57e73ba00b8c4d7f421d0e",
+  "selectionSha256":"d50d87154517f7eadb215859dce045504e4f29d0d4bb3bb7bffd28964a96b5c8",
+  "authorProofSha256":"a3d3a0173c22722e383d67dcc073ea8ec53f2b3be760e49ccc659f158e9e2404",
+  "parent":"a0e8ef17c45d34b86da43da4adb79804dd1863a2",
+  "selection":{"targets":51,"changed":6,"unchanged":45,"wholeRawParentInverses":6,"runtimeLogicHunks":1,"otherRootPinsUnchanged":62,"completeCanonicalMaps":12,"sourceRelationOrdinals":37,"sourceCteOrdinals":16},
+  "runtimeDelta":"OFFSET 0 inside existing complete per-relation computed-hash subquery only",
+  "preserved":["whole row input/hash algorithm/UTF8/hex","count-star/duplicates/null coalesce","exact aggregate separator and order","all12 relation populations","ledger/catalogue/full background maps","live owner and original WeakMap","reader/diagnostic/programme/setup/result validators","physical/source/saved/index/HEAD/predecessor guards","all control/cleanup/caps"],
+  "replay":{"allAuthorFiles":135,"savedIndexHeadEqual":true,"bagAndAdmissionTests":22,"unchangedProtocolTests":59,"totalPassed":81,"pg17WholeAstCases":4,"completeBeforeInputs":2,"guardBodiesParsed":2,"negativeAstMutations":12,"sourceOrTestBodyAmendments":0,"authorVerifierRecordFlag":false},
+  "semanticsQualification":"whole raw/AST source inverse and explicit synthetic bag model; not native JSON/collation/evaluation-count proof",
+  "native":"NOT_RUN",
+  "actualPostimageSourceAdmission":"NOT_RUN_UNMOUNTED",
+  "performance":"NOT_MEASURED",
+  "cancellationCause":"UNKNOWN",
+  "execution":{"queriesExecuted":0,"psqlOrExplainExecuted":false,"apiOrConnectorCalls":0,"browser":"NOT_RUN","privateActualStateReads":0,"rootOrOfficeWrites":0,"bankSemanticBodiesRead":0},
+  "remaining":"root exact current mount/commit/source/setup admission then separately approved bounded diagnostic; no blind canonical retry or native restoration verdict"
+}

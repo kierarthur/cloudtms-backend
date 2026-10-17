@@ -1,0 +1,9 @@
+// Public source only, no preflight/private state or native action.
+import fs from 'node:fs';import crypto from 'node:crypto';import {execFileSync} from 'node:child_process';import path from 'node:path';import {fileURLToPath} from 'node:url';
+const here=path.dirname(fileURLToPath(import.meta.url)),root='D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026',base='474d819407e7fbf2c2c815d306c584fb30c65811',old='docs/healthroster-build/proposals/daily-health-s0-catalogue-holder-20261017/',hash=b=>crypto.createHash('sha256').update(b).digest('hex');
+const git=(...args)=>execFileSync('git',['-c','gc.auto=0','-c','maintenance.auto=false','-C',root,...args],{maxBuffer:4e6,windowsHide:true,stdio:['ignore','pipe','ignore']});
+const manifest=JSON.parse(fs.readFileSync(here+'/MANIFEST.json'));for(const r of manifest.files){const b=fs.readFileSync(here+'/'+r.file);if(b.length!==r.bytes||hash(b)!==r.sha256)throw Error('S0_STDIN_FROZEN_SOURCE_CHANGED');}
+const original=JSON.parse(fs.readFileSync(here+'/reference/MANIFEST.json')),mounted=process.argv.includes('--mounted'),head=git('rev-parse','HEAD').toString().trim();
+for(const file of ['MANIFEST.json',...original.files.map(r=>r.file)]){const parent=git('show',base+':'+old+file),expected=mounted&&['protocol.mjs','MANIFEST.json'].includes(file)?fs.readFileSync(here+'/payload/'+file):parent,b=fs.readFileSync(root+'/'+old+file);if(!b.equals(expected)||!b.equals(git('show',head+':'+old+file))||!b.equals(git('show',':'+old+file)))throw Error('S0_STDIN_CURRENT_IMAGE_REFUSED');}
+if(git('rev-parse','HEAD').toString().trim()!==head)throw Error('S0_STDIN_HEAD_MOVED');
+console.log(JSON.stringify({status:'PASS',mode:mounted?'MOUNTED_TWO_TARGET_FORWARD':'ORIGINAL18_RETAINED',frozenFiles:manifest.files.length,originalImages:18,native:'NOT_RUN',nativeRetryRequired:false}));

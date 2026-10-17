@@ -51,7 +51,7 @@
         "fixtureObservation": 33,
         "completion": 34
       },
-      "canonicalSqlSha256": "42a76b6e6e25ab8df6d09a47111f2cf0661c2da8fdda882e5079fd7eac2b396f",
+      "canonicalSqlSha256": "5044b4d3821709aecc48d4d955aa6d8109bdf67d447067030e0dad444715e811",
       "snapshotRelations": [
         "private.candidate_daily_batch_receipts",
         "public.audit_events",
@@ -402,7 +402,7 @@
         "fixtureObservation": 63,
         "completion": 64
       },
-      "canonicalSqlSha256": "42a76b6e6e25ab8df6d09a47111f2cf0661c2da8fdda882e5079fd7eac2b396f",
+      "canonicalSqlSha256": "5044b4d3821709aecc48d4d955aa6d8109bdf67d447067030e0dad444715e811",
       "snapshotRelations": [
         "private.candidate_daily_batch_receipts",
         "public.audit_events",
