@@ -1,0 +1,26 @@
+{
+  "version": "HEALTH_CLOSED9_INDEPENDENT_PEER_V1",
+  "subject": "0f80d35ec5e63e4eb44b6c873d08a72acf3bd1cd",
+  "files": [
+    {
+      "file": "AUTHOR_REPLAY_RESULTS.json",
+      "bytes": 929,
+      "sha256": "d95ff2e9d66066846f66fdef803a0eb51d2fafb60742a15b767a3f516ee8e356"
+    },
+    {
+      "file": "README.md",
+      "bytes": 5187,
+      "sha256": "4bad48f2dd10ae18f32a0e97791bc351ca85acc6a1bcdb3881c9d917371bfed8"
+    },
+    {
+      "file": "replay.py",
+      "bytes": 12280,
+      "sha256": "4e7a271acabc0982d9b4b9180013d5f273b79510000eab666d6c754c0da0f6fd"
+    },
+    {
+      "file": "RESULTS.json",
+      "bytes": 5690,
+      "sha256": "6cad2f2d7270c35d9526378244ff2d8e7a28e564d9eb9bb0eee29875b1070416"
+    }
+  ]
+}

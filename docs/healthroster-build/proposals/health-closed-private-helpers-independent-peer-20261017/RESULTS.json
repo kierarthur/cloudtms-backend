@@ -1,0 +1,135 @@
+{
+  "verdict": "ACCEPT_BOUNDED_SOURCE_ONLY",
+  "frozenCommit": "0f80d35ec5e63e4eb44b6c873d08a72acf3bd1cd",
+  "parent": "e5b113e4a985f08574e558844e3e81579faf49e1",
+  "frozenFiles": 42,
+  "selectedTargets": 13,
+  "completeApprovedPages": [
+    {
+      "target": "supabase/repeatable/17102026_1251_health_closed_private_helpers/01_daily_presentation.sqlinc",
+      "sourceCommit": "040bb062b9b0fdf3fa6bb45e400494d65929f40a",
+      "sha256": "a3c7ce4e96fd67395e292752df2274e7464536ce3566b543a23f149de49fafc0"
+    },
+    {
+      "target": "supabase/repeatable/17102026_1251_health_closed_private_helpers/02_daily_review_enrollment.sqlinc",
+      "sourceCommit": "040bb062b9b0fdf3fa6bb45e400494d65929f40a",
+      "sha256": "006dd80653b9156ad1f162b9a2e78bc1e243fa38b5cdc75e123d5bc88119f3e6"
+    },
+    {
+      "target": "supabase/repeatable/17102026_1251_health_closed_private_helpers/03_daily_revision_apply.sqlinc",
+      "sourceCommit": "040bb062b9b0fdf3fa6bb45e400494d65929f40a",
+      "sha256": "90b49c5606b136e95bda3f2d2623a022085ed506df221e2a1201e4a5bab3a61d"
+    },
+    {
+      "target": "supabase/repeatable/17102026_1251_health_closed_private_helpers/04_daily_current_placement.sqlinc",
+      "sourceCommit": "174cf17ff3368b84cbb51d1f57e46d94666105f2",
+      "sha256": "13e2850f6b58006f37fe7905c2e8d277db7dcee65dfa624cd034b654efca4b9b"
+    },
+    {
+      "target": "supabase/repeatable/17102026_1251_health_closed_private_helpers/05_contract_public_assert.sqlinc",
+      "sourceCommit": "2d1c81cf5a6939b8ab05d4b3d8db398037c13ed4",
+      "sha256": "c1856f4f95badb81987b125126f177bbccde0cdbd2eca9b169ab466fd829ff33"
+    },
+    {
+      "target": "supabase/repeatable/17102026_1251_health_closed_private_helpers/06_contract_projection.sqlinc",
+      "sourceCommit": "2d1c81cf5a6939b8ab05d4b3d8db398037c13ed4",
+      "sha256": "bf29e1a342b6556a611717a2c623c27b888c362b46bb690129ae0d9d4fff3414"
+    }
+  ],
+  "privateDefinitions": 9,
+  "inverseProofs": [
+    {
+      "target": "docs/bpay-next/final-definer-closures.json",
+      "parentSha256": "c10ac5fa3aafa9c2def791badd2b647bea2e980cd88a43af81c9a1cba7e7e00c",
+      "postimageSha256": "f357496129f0d1eab1f2a2115a8da788be9c2f4a42f50e4d41baa1c700fc3cc0",
+      "hunks": 1
+    },
+    {
+      "target": "supabase/release/current-release.json",
+      "parentSha256": "1396346c26872e318231f0815594b2efe206eac4180de7b3c9120f14be24726d",
+      "postimageSha256": "b9b045c6038c46238a8a47945bb201e336ffb8dc0afdee86f9524ece9d29cbe2",
+      "hunks": 1
+    },
+    {
+      "target": "supabase/release/migration-lock.json",
+      "parentSha256": "6b0b4a3d518a3d80a2dff6ab9a17dfe347efb6c073574c4cf5014581ada2f250",
+      "postimageSha256": "cc73db6af457e09cce092b70bc3cfcf21c1cb2c0bbf8868ede26f8d454d73c2e",
+      "hunks": 1
+    }
+  ],
+  "originalRegistryChainsPreserved": 1650,
+  "originalMigrationRowsPreserved": 426,
+  "counterexamples": [
+    "service grant",
+    "service revoke omitted",
+    "overload-only namespace",
+    "function-only namespace",
+    "missing exact include",
+    "security function-kind check omitted",
+    "security effective role omitted",
+    "unapproved original body change"
+  ],
+  "actualParent": [
+    {
+      "target": "docs/bpay-next/final-definer-closures.json",
+      "parentState": "CURRENT_SAVED_INDEX_PARENT_EQUAL"
+    },
+    {
+      "target": "supabase/migrations/17102026_1251_health_closed_private_helpers_admission.sql",
+      "parentState": "ABSENT_AT_PARENT"
+    },
+    {
+      "target": "supabase/release/current-release.json",
+      "parentState": "CURRENT_SAVED_INDEX_PARENT_EQUAL"
+    },
+    {
+      "target": "supabase/release/migration-lock.json",
+      "parentState": "CURRENT_SAVED_INDEX_PARENT_EQUAL"
+    },
+    {
+      "target": "supabase/repeatable/17102026_1251_health_closed_private_helpers/01_daily_presentation.sqlinc",
+      "parentState": "ABSENT_AT_PARENT"
+    },
+    {
+      "target": "supabase/repeatable/17102026_1251_health_closed_private_helpers/02_daily_review_enrollment.sqlinc",
+      "parentState": "ABSENT_AT_PARENT"
+    },
+    {
+      "target": "supabase/repeatable/17102026_1251_health_closed_private_helpers/03_daily_revision_apply.sqlinc",
+      "parentState": "ABSENT_AT_PARENT"
+    },
+    {
+      "target": "supabase/repeatable/17102026_1251_health_closed_private_helpers/04_daily_current_placement.sqlinc",
+      "parentState": "ABSENT_AT_PARENT"
+    },
+    {
+      "target": "supabase/repeatable/17102026_1251_health_closed_private_helpers/05_contract_public_assert.sqlinc",
+      "parentState": "ABSENT_AT_PARENT"
+    },
+    {
+      "target": "supabase/repeatable/17102026_1251_health_closed_private_helpers/06_contract_projection.sqlinc",
+      "parentState": "ABSENT_AT_PARENT"
+    },
+    {
+      "target": "supabase/repeatable/17102026_1251_health_closed_private_helpers/99_private_acl.sqlinc",
+      "parentState": "ABSENT_AT_PARENT"
+    },
+    {
+      "target": "supabase/repeatable/17102026_1251_health_closed_private_helpers_v1.sql",
+      "parentState": "ABSENT_AT_PARENT"
+    },
+    {
+      "target": "supabase/verification/17102026_1251_health_closed_private_helpers_security.sql",
+      "parentState": "ABSENT_AT_PARENT"
+    }
+  ],
+  "sourceClassification": "No new raw F23/write/numeric hazards in ten selected SQL inputs; no allowance added.",
+  "qualification": {
+    "native": "NOT_RUN",
+    "effectiveRoleRuntime": "NOT_RUN",
+    "publicComposers": "EXCLUDED",
+    "missingTwoUuidPublisher": "PRESERVED_55000_REFUSAL",
+    "nativeContextFinanceBoundary": "RETAINED_UNQUALIFIED",
+    "fullJoinedRelease": "NOT_PROVED"
+  }
+}
