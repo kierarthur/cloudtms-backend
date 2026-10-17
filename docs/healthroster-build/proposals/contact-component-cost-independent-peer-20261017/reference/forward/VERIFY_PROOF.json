@@ -1,0 +1,125 @@
+{
+  "version": "CONTACT_FIXED_COMPONENT_COST_FINITE_SOURCE_PROOF_V1",
+  "parent": "da95a6a8d105442090910faad4d263229654b3df",
+  "targets": 53,
+  "changedExisting": 5,
+  "newFiles": 2,
+  "unchangedParentReferences": 46,
+  "actualPayloadFiles": 7,
+  "wholeParentReverses": 5,
+  "literalHunks": 11,
+  "all63SourcePinsRawUnchanged": true,
+  "complete12ScopeSnapshotAndWeakMapRawUnchanged": true,
+  "privatePsqlCoordinatorRawUnchanged": true,
+  "legacyReaderOriginWholeReverse": true,
+  "tests": 43,
+  "originalContactTestSha256": "b644b59f663b37cf859137166fbd0dd6dc145887bb1ba0263dc52bab52f8dafd",
+  "ast": {
+    "parser": "v7.20",
+    "postgresql": [
+      17,
+      7
+    ],
+    "cases": [
+      {
+        "case": "CONTACT_CONSTRUCTORS_V1",
+        "component": "AUDIT",
+        "exactExistingBranchAst": true,
+        "exactOriginalFourStatementPrefixAndRollback": true,
+        "closedFourFieldResult": true,
+        "statements": 6,
+        "fullRestorationVerdict": false
+      },
+      {
+        "case": "CONTACT_CONSTRUCTORS_V1",
+        "component": "CATALOGUE",
+        "exactExistingBranchAst": true,
+        "exactOriginalFourStatementPrefixAndRollback": true,
+        "closedFourFieldResult": true,
+        "statements": 6,
+        "fullRestorationVerdict": false
+      },
+      {
+        "case": "CONTACT_CONSTRUCTORS_V1",
+        "component": "BACKGROUND",
+        "exactExistingBranchAst": true,
+        "exactOriginalFourStatementPrefixAndRollback": true,
+        "closedFourFieldResult": true,
+        "statements": 6,
+        "fullRestorationVerdict": false
+      },
+      {
+        "case": "QT_ADMIN_CONTROLS_V1",
+        "component": "AUDIT",
+        "exactExistingBranchAst": true,
+        "exactOriginalFourStatementPrefixAndRollback": true,
+        "closedFourFieldResult": true,
+        "statements": 6,
+        "fullRestorationVerdict": false
+      },
+      {
+        "case": "QT_ADMIN_CONTROLS_V1",
+        "component": "CATALOGUE",
+        "exactExistingBranchAst": true,
+        "exactOriginalFourStatementPrefixAndRollback": true,
+        "closedFourFieldResult": true,
+        "statements": 6,
+        "fullRestorationVerdict": false
+      },
+      {
+        "case": "QT_ADMIN_CONTROLS_V1",
+        "component": "BACKGROUND",
+        "exactExistingBranchAst": true,
+        "exactOriginalFourStatementPrefixAndRollback": true,
+        "closedFourFieldResult": true,
+        "statements": 6,
+        "fullRestorationVerdict": false
+      }
+    ],
+    "actualGuardBodiesParsed": 2,
+    "counterexamples": [
+      "audit skips row",
+      "audit filters population",
+      "audit loses duplicates",
+      "audit changes delimiter",
+      "audit changes order",
+      "audit fabricates count",
+      "audit fabricates digest",
+      "background omits map",
+      "background filters outbox",
+      "background weakens row hash",
+      "catalogue changes exact hash",
+      "guard isolation changed",
+      "rollback changed",
+      "raw result field added"
+    ],
+    "existingHashOverlap": [
+      {
+        "relation": "private.candidate_daily_batch_receipts",
+        "existingBusinessAndMapFullRowHashAstAlphaEqual": true,
+        "completeRowsNoFilter": true,
+        "sameStatementSnapshotRequired": true,
+        "potentialReuseOnly": "DERIVE_COMPLETE_BUSINESS_COUNT_AND_SORTED_HASH_BAG_FROM_SAME_COMPLETE_MAP",
+        "changeAuthored": false,
+        "nativeCostOrEvaluationCountProved": false
+      },
+      {
+        "relation": "public.ts_financials_outbox",
+        "existingBusinessAndMapFullRowHashAstAlphaEqual": true,
+        "completeRowsNoFilter": true,
+        "sameStatementSnapshotRequired": true,
+        "potentialReuseOnly": "DERIVE_COMPLETE_BUSINESS_COUNT_AND_SORTED_HASH_BAG_FROM_SAME_COMPLETE_MAP",
+        "changeAuthored": false,
+        "nativeCostOrEvaluationCountProved": false
+      }
+    ],
+    "native": "NOT_RUN",
+    "queriesExecuted": 0
+  },
+  "native": "NOT_RUN",
+  "queriesExecuted": 0,
+  "psqlOrExplainExecuted": false,
+  "actualPostimageSourceAdmission": "NOT_RUN_UNMOUNTED",
+  "restorationQualified": false,
+  "cancellationCause": "UNKNOWN"
+}

@@ -1,0 +1,87 @@
+{
+  "version": "ROOT_BANKING_NAMED_DEPENDENCY_RECHECK_V4",
+  "recordedAt": "2026-10-17T11:06:50.873546+00:00",
+  "localCheckpointOnlyHead": "c86e9f0b27bc8909cf3cb8e26d466272b650b06b",
+  "freshOriginBranchHead": "40193adc09e55c804b44b76f322b0e08e9533e74",
+  "originIsOlderAncestorOfLocal": true,
+  "noRemoteEqualityClaim": true,
+  "selectedNamedItemRows": [
+    {
+      "Item ID": "DY-02",
+      "Row kind": "ITEM",
+      "BUILT revised deliverable": "[x]",
+      "REVIEWED implementation": "[x]",
+      "INSTALLED revised deliverable": "[ ]",
+      "Current completion with amendments": "BASELINE_COMPLETE",
+      "Implementation commit": "1552e0c97051b48becf4aeb58cd026f15d7792fc",
+      "Implementation evidence": "design/DY-04-completion.md; design/DY-04-successor-provenance.json; reviews/DY-04-source-review.md; reviews/DY-04-authorise-source-review.md"
+    },
+    {
+      "Item ID": "CM-02",
+      "Row kind": "ITEM",
+      "BUILT revised deliverable": "[ ]",
+      "REVIEWED implementation": "[ ]",
+      "INSTALLED revised deliverable": "[ ]",
+      "Current completion with amendments": "OPEN \u2014 original boxes prove prior scope only",
+      "Implementation commit": "",
+      "Implementation evidence": ""
+    },
+    {
+      "Item ID": "CM-16",
+      "Row kind": "ITEM",
+      "BUILT revised deliverable": "[ ]",
+      "REVIEWED implementation": "[ ]",
+      "INSTALLED revised deliverable": "[ ]",
+      "Current completion with amendments": "OPEN \u2014 original boxes prove prior scope only",
+      "Implementation commit": "",
+      "Implementation evidence": ""
+    },
+    {
+      "Item ID": "CM-17",
+      "Row kind": "ITEM",
+      "BUILT revised deliverable": "[ ]",
+      "REVIEWED implementation": "[ ]",
+      "INSTALLED revised deliverable": "[ ]",
+      "Current completion with amendments": "OPEN \u2014 original boxes prove prior scope only",
+      "Implementation commit": "",
+      "Implementation evidence": ""
+    },
+    {
+      "Item ID": "F-17",
+      "Row kind": "ITEM",
+      "BUILT revised deliverable": "[ ]",
+      "REVIEWED implementation": "[ ]",
+      "INSTALLED revised deliverable": "[ ]",
+      "Current completion with amendments": "OPEN_BASELINE",
+      "Implementation commit": "ed1034e49c454f6e0ebfd0cd9d6e8713935b0881",
+      "Implementation evidence": "docs/bpay-next/design/F-17-apply-successor-provenance.json"
+    },
+    {
+      "Item ID": "HR-06",
+      "Row kind": "ITEM",
+      "BUILT revised deliverable": "[ ]",
+      "REVIEWED implementation": "[ ]",
+      "INSTALLED revised deliverable": "[ ]",
+      "Current completion with amendments": "OPEN \u2014 original boxes prove prior scope only",
+      "Implementation commit": "",
+      "Implementation evidence": ""
+    },
+    {
+      "Item ID": "HR-11",
+      "Row kind": "ITEM",
+      "BUILT revised deliverable": "[x]",
+      "REVIEWED implementation": "[x]",
+      "INSTALLED revised deliverable": "[ ]",
+      "Current completion with amendments": "OPEN \u2014 original boxes prove prior scope only",
+      "Implementation commit": "1d9b1a1a2d69b7ae81e3ca5cd47bec849c37127d",
+      "Implementation evidence": "docs/bpay-next/design/HR-11_WORKER_PERMISSION_SITE_MAP.md; twelve exact predicates and unchanged published helper; final source gate PASS1652/43/186/70; HR-06 native consumers remain OPEN"
+    }
+  ],
+  "checklistSavedSha256": "7490311014104b46357bbec529541c9f375f9b28d956a8ee3523341e1829a1e9",
+  "installsSavedSha256": "d7eed66e7a0dde18defa4628fbbbb3137e50017742195b387ab1a817f17cc1ca",
+  "installedRecordUnchangedFromR3": true,
+  "interpretation": "Current local named ITEM records still show CM02/16/17 amendment joins OPEN, HR06 consumer adoption OPEN, HR11 source-only/amendment OPEN and F17 NOT_INSTALLED. Published origin branch is an older ancestor and lacks TEST_INSTALLS at that historical commit; no installation or new joins are inferred. No fetch, pull, branch edit, source-body inspection or Banking message.",
+  "bankingSqlBodiesReviewed": false,
+  "bankingFilesChanged": false,
+  "chatMessageSent": false
+}

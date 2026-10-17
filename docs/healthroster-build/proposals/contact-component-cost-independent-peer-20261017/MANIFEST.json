@@ -1,0 +1,214 @@
+{
+  "version": "CONTACT_COMPONENT_COST_INDEPENDENT_PEER_SEAL_V1",
+  "authorCommit": "d32bfba471279eec64c0f4e45cc78b29faa1a1b7",
+  "authorManifestSha256": "b88bd5aaf21daedc11eec923998f61a6f99bb6ffd338f07dc0efcb3a2190456d",
+  "selectionSha256": "07466002926f1644ca1b7a9d42a2fc04612e791c71c3c7ee65c00adc13ff43a3",
+  "files": [
+    {
+      "file": "CAPTURE.json",
+      "bytes": 20526,
+      "sha256": "37d0262617bf2d978fbc2e161d625cd07ebbf9940004d7d307c3155fd5ef5914"
+    },
+    {
+      "file": "README.md",
+      "bytes": 3887,
+      "sha256": "d33de866594c6a39e4fefafb29c97e86b09979fa8660231ca76c8ad212a5ce43"
+    },
+    {
+      "file": "REVIEW.json",
+      "bytes": 2427,
+      "sha256": "4b78cb0d4fb7f21fb7041931b4da08952224de25e3767371b46b4244502881c9"
+    },
+    {
+      "file": "VERIFY_REPLAY.txt",
+      "bytes": 161,
+      "sha256": "bb31535b70fbf2d17758247000d1808c7fbfe04fd95cdc9a2310fd9a1759bb65"
+    },
+    {
+      "file": "capture.mjs",
+      "bytes": 3159,
+      "sha256": "b4c0f5e95a75a222253ffbdd68ce97bc8ad7872c730857339037f9ff7659adde"
+    },
+    {
+      "file": "freeze.mjs",
+      "bytes": 2232,
+      "sha256": "d9a9d376b4de60d20cf22b8522ee8e414f04f09efc4be87eae8f04b4280a6c03"
+    },
+    {
+      "file": "reference/forward/FULL_PARENT_INVERSES.json",
+      "bytes": 307827,
+      "sha256": "638b94a483390b55940a4d21368ef2893a89e75be822083fad9e3b9e217deb7c"
+    },
+    {
+      "file": "reference/forward/LEGACY_TEST_FORWARD.json",
+      "bytes": 33417,
+      "sha256": "945ed2bf35aa349cc79a69b24d5af79182b52c2beec9271e7583dc0b9a969895"
+    },
+    {
+      "file": "reference/forward/MANIFEST.json",
+      "bytes": 5954,
+      "sha256": "b88bd5aaf21daedc11eec923998f61a6f99bb6ffd338f07dc0efcb3a2190456d"
+    },
+    {
+      "file": "reference/forward/PARENT_PINS.json",
+      "bytes": 12206,
+      "sha256": "d1f43e0bb164852f870451a7d4c1cabcc8b57b88e47a5540a9f8e73a32d47bf6"
+    },
+    {
+      "file": "reference/forward/PAYLOAD_SELECTION.json",
+      "bytes": 22096,
+      "sha256": "07466002926f1644ca1b7a9d42a2fc04612e791c71c3c7ee65c00adc13ff43a3"
+    },
+    {
+      "file": "reference/forward/README.md",
+      "bytes": 5818,
+      "sha256": "c299b2f87873994aed8a0fda20b9ea57610338c4fb7078c5f8837f9b65c6b189"
+    },
+    {
+      "file": "reference/forward/RENDERED_CONTACT_CONSTRUCTORS_V1.json",
+      "bytes": 117646,
+      "sha256": "11d6873016413a3a3fbb06620edc9ecf04fc937755d3e1be6805e9c99772e8bb"
+    },
+    {
+      "file": "reference/forward/RENDERED_QT_ADMIN_CONTROLS_V1.json",
+      "bytes": 117646,
+      "sha256": "11d6873016413a3a3fbb06620edc9ecf04fc937755d3e1be6805e9c99772e8bb"
+    },
+    {
+      "file": "reference/forward/TEST_RESULTS.tap",
+      "bytes": 9859,
+      "sha256": "142dc275579e933a61be916e003ca85b2f1ada2ee7eeb781a1a385b68e6fdbbd"
+    },
+    {
+      "file": "reference/forward/VERIFY_PROOF.json",
+      "bytes": 4110,
+      "sha256": "1a61dddc00099efad039b339c124d1ba22b6999de454c7ce04db3640d0780b74"
+    },
+    {
+      "file": "reference/forward/ast-proof.py",
+      "bytes": 9861,
+      "sha256": "92743c279f5ad49a6f71cf9a02d4d47f5287bdb0c269a9d1d21af4be1667c71a"
+    },
+    {
+      "file": "reference/forward/base.test.mjs",
+      "bytes": 7256,
+      "sha256": "1cf55a611f8ad4f6df8fe3ca688c8fe48005a04ec12e5c80a63732e8df297f86"
+    },
+    {
+      "file": "reference/forward/candidate/docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/MANIFEST.json",
+      "bytes": 8377,
+      "sha256": "5db6662c7166a1841144ae05ca901db2b4a9e4206c690d27fcc3ebbc36e728cc"
+    },
+    {
+      "file": "reference/forward/candidate/docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/READER_PARENT_REVERSE.json",
+      "bytes": 44886,
+      "sha256": "a4f58dda2d9a98d67260e35c7e57626d45c69282fc5677ff1511a16696c67117"
+    },
+    {
+      "file": "reference/forward/candidate/docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/README.md",
+      "bytes": 8799,
+      "sha256": "d494aa1df8825bbc40f6a69221b9f4f5f561156f95796685560870b2e69e6766"
+    },
+    {
+      "file": "reference/forward/candidate/docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/component-source.mjs",
+      "bytes": 4277,
+      "sha256": "fca06c65bf1040d3e583078cedc0ab534e8081d51be93db6ce6ea85f8b8c4872"
+    },
+    {
+      "file": "reference/forward/candidate/docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/diagnose-component.mjs",
+      "bytes": 4532,
+      "sha256": "f7eb3b644b7e4eb1af70701ae3a6aa47e5f841fb98217a5298926f4e011629e3"
+    },
+    {
+      "file": "reference/forward/candidate/docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/fixed-metadata-reader.mjs",
+      "bytes": 19180,
+      "sha256": "38b07e4581edde41359164f31ee39a0ce690484c513ab111e22bddfd2676b6e7"
+    },
+    {
+      "file": "reference/forward/candidate/docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/metadata-progress-diagnostic.mjs",
+      "bytes": 9824,
+      "sha256": "d6aaf6580e733a90dc5e71397cb1e62e0edcae61d8d7b9979cb7d65be879cb35"
+    },
+    {
+      "file": "reference/forward/component-factory.inc",
+      "bytes": 1955,
+      "sha256": "36632399e686212873565e6a62ac8283f9f55566e9eab7dea21b4d6f1eb6e4f6"
+    },
+    {
+      "file": "reference/forward/component-overlay.mjs",
+      "bytes": 896,
+      "sha256": "c7f84cf5ed72286bbf0e455bb768031842cb1557ed3187110ecceb89042c69ac"
+    },
+    {
+      "file": "reference/forward/component-runner.mjs",
+      "bytes": 4532,
+      "sha256": "f7eb3b644b7e4eb1af70701ae3a6aa47e5f841fb98217a5298926f4e011629e3"
+    },
+    {
+      "file": "reference/forward/component-source.mjs",
+      "bytes": 4277,
+      "sha256": "fca06c65bf1040d3e583078cedc0ab534e8081d51be93db6ce6ea85f8b8c4872"
+    },
+    {
+      "file": "reference/forward/component.test.mjs",
+      "bytes": 5589,
+      "sha256": "dafb731d48d696c7f9f3c096e2374d1fceb909e83e43368cb868c0e32fef88d5"
+    },
+    {
+      "file": "reference/forward/compose.mjs",
+      "bytes": 7649,
+      "sha256": "3d07024b1acfee0341739e139ea52b947907aa0b2aeefef837302a9bb66908a0"
+    },
+    {
+      "file": "reference/forward/coordinator.test.mjs",
+      "bytes": 6478,
+      "sha256": "f1e9725150b1cd539ec66fdb300c82123651e7ceb7e2daea1c162e3a68995415"
+    },
+    {
+      "file": "reference/forward/freeze.mjs",
+      "bytes": 1132,
+      "sha256": "de4a28389601fdbdff7c43a079cc2928aa693f9fa692b68a4fb8aceed20d6999"
+    },
+    {
+      "file": "reference/forward/prepare.mjs",
+      "bytes": 2156,
+      "sha256": "28a646e16775a941f207010b3bee1b3788e90c3fa61a38b21a55dbe5c29ec43d"
+    },
+    {
+      "file": "reference/forward/render.mjs",
+      "bytes": 1179,
+      "sha256": "b2b64e0e93dd44e414c5ed15d27e6ebcc29d76dba44bfdc2e9452781a77c1f53"
+    },
+    {
+      "file": "reference/forward/rendered/CONTACT_CONSTRUCTORS_V1.json",
+      "bytes": 126826,
+      "sha256": "cc9ed61ed0e5925a9957c0d262e398653b83b087040be149c6f68138e350f977"
+    },
+    {
+      "file": "reference/forward/rendered/QT_ADMIN_CONTROLS_V1.json",
+      "bytes": 126826,
+      "sha256": "cc9ed61ed0e5925a9957c0d262e398653b83b087040be149c6f68138e350f977"
+    },
+    {
+      "file": "reference/forward/scope.test.mjs",
+      "bytes": 3321,
+      "sha256": "89dd56ad3a183ff8b5fbc6fe080d649fc9308bf5561dd9ba3d2ac12aa38a5018"
+    },
+    {
+      "file": "reference/forward/verify.mjs",
+      "bytes": 5865,
+      "sha256": "3efa1ccd06baeea23ff83e5b7f21cb55aa82a238d3d39bb4b67068345c8c3018"
+    },
+    {
+      "file": "replay-hooks.mjs",
+      "bytes": 1088,
+      "sha256": "50ac0ffc65af6a04b9437e0ce578124f63c9d494b696a02976eb579d8ec290ec"
+    },
+    {
+      "file": "replay.mjs",
+      "bytes": 899,
+      "sha256": "137f8df71cab5cb5df167f92326cd02a4af706ca261fc3a19ba59be954bcfc13"
+    }
+  ],
+  "native": "NOT_RUN"
+}

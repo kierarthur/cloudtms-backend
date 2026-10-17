@@ -17,9 +17,19 @@
       "sha256": "b2fe28a9ea65746167ccf461dc1e30828e250b055719449dcc53a307ec8ca69b"
     },
     {
+      "file": "component-source.mjs",
+      "bytes": 4277,
+      "sha256": "fca06c65bf1040d3e583078cedc0ab534e8081d51be93db6ce6ea85f8b8c4872"
+    },
+    {
       "file": "control.mjs",
       "bytes": 3227,
       "sha256": "1d7fa008cd0945eba92b301d55fcc96be17fff7ffa115f55120b418be5c99ab8"
+    },
+    {
+      "file": "diagnose-component.mjs",
+      "bytes": 4532,
+      "sha256": "f7eb3b644b7e4eb1af70701ae3a6aa47e5f841fb98217a5298926f4e011629e3"
     },
     {
       "file": "diagnose-metadata.mjs",
@@ -28,8 +38,8 @@
     },
     {
       "file": "fixed-metadata-reader.mjs",
-      "bytes": 17150,
-      "sha256": "bcc5ec14313e63e845765a3e3671e4420a49bc8437fda61c2e4be2917b520e04"
+      "bytes": 19180,
+      "sha256": "38b07e4581edde41359164f31ee39a0ce690484c513ab111e22bddfd2676b6e7"
     },
     {
       "file": "freeze.mjs",
@@ -68,8 +78,8 @@
     },
     {
       "file": "metadata-progress-diagnostic.mjs",
-      "bytes": 8184,
-      "sha256": "d6ad3ca5cc9d272da638bfb6b7b4d8df62a8e1898be53e25d0d77532f8bf425f"
+      "bytes": 9824,
+      "sha256": "d6aaf6580e733a90dc5e71397cb1e62e0edcae61d8d7b9979cb7d65be879cb35"
     },
     {
       "file": "native-boundary.mjs",
@@ -113,13 +123,13 @@
     },
     {
       "file": "READER_PARENT_REVERSE.json",
-      "bytes": 40226,
-      "sha256": "4bc5ee66d1d064b938e93fead6e4669afc73da741584aac002d79b563e8d1bbf"
+      "bytes": 44886,
+      "sha256": "a4f58dda2d9a98d67260e35c7e57626d45c69282fc5677ff1511a16696c67117"
     },
     {
       "file": "README.md",
-      "bytes": 8075,
-      "sha256": "7856ce3ec68b774a43141cd8c8738fd6026efd49cec1b50d2a47cd8202ed75aa"
+      "bytes": 8799,
+      "sha256": "d494aa1df8825bbc40f6a69221b9f4f5f561156f95796685560870b2e69e6766"
     },
     {
       "file": "reference/actor/build-program.mjs",
