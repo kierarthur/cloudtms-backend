@@ -1487,3 +1487,14 @@ SEND_7 turn: {"chat":"HealthRoster","task":"DAILY_GENUINE_S0_STAGED_ONLY","statu
 
 
 17 October actual R10 source complete: auth first ready-HOLD beforelogin/browserclosed; currentready200 then fresh actual login/Admin/queryworkspace PASS, receipt23243623; actualReport fourphase5f22/c5b3/7911/K4 6b5ebede pushed with complete originalsource admission PASS. R8 S0 nativeBefore accepted/rollback/fresh/main15:55:17.083/fresh21.133/all11vacant PASS; BEFOREbc9f27ed and SETUPdfe46bfd pushed. Originalsubmit held FRESH_NATIVE_CLOCK at15:55:49, no businessrequest/AFTER/qualifiedprefix. OwnA15:55:00.406-15:55:50.157 explicitlyreleased/closed. Real R8 files/history retained. Source-only R9 successor will batch equivalent Gitimage reads to save bookkeeping time;30s/native/source/caps remain. No unchanged rerun. Install2 NOT_INSTALLED/finalcritics NOT_RUN/noowneranswerpending.
+
+SEND_7 turn: {"chat":"HealthRoster","task":"DAILY_GENUINE_S0_STAGED_ONLY","status":"TAKEN","takenAt":"2026-10-17T16:05:25.639Z","key":[20261013,1]}
+
+SEND_7 turn: {"chat":"HealthRoster","task":"DAILY_GENUINE_S0_STAGED_ONLY","status":"RELEASED","takenAt":"2026-10-17T16:05:25.639Z","releasedAt":"2026-10-17T16:06:43.460Z","explicitUnlockConfirmed":true,"connectionClosed":true,"proved":true,"key":[20261013,1]}
+
+SEND_7 turn: {"chat":"HealthRoster","task":"DAILY_GENUINE_S1_STAGED_ONLY","status":"TAKEN","takenAt":"2026-10-17T16:07:45.353Z","key":[20261013,1]}
+
+SEND_7 turn: {"chat":"HealthRoster","task":"DAILY_GENUINE_S1_STAGED_ONLY","status":"RELEASED","takenAt":"2026-10-17T16:07:45.353Z","releasedAt":"2026-10-17T16:08:40.131Z","explicitUnlockConfirmed":true,"connectionClosed":true,"proved":false,"key":[20261013,1]}
+
+
+17 October actualS0R9 PASS80,847ms with originalclosedchild/explicitownrelease and zeroBusiness; BEFORE804a/SETUP4199/AFTER5e69 pushed. Originalpublicprefixea4f57c and five genuine plans37910 published. S1 then nativeaux+originalBEFORE accepted and BEFORE303b/SETUPd521 pushed, butoriginalsubmit held30sclock beforePOST; main16:08:02.594/fresh05.967, submitclosed39. OwnA16:07:45.353-16:08:40.131 explicitlyreleased/closed. No positiveS1after or businessrequest; no unchangedretry. Current readonlysource timings operator1276/coordinator730/continuation854ms, fourcoordinator+twooperator checks beforefirstclock. Source-only batching/ACL and separateactualprePOSTcurrent-read designs underreview with allguards retained; no newprotocol executed. Independent QTfullauditCTAS candidate8f692348 accepted18root+18peer+PG17proof, exact30-sourcefiles/setupbacked, performance/nativeABI stillunproved; oneboundedchangedtrialnext. Install2 NOT_INSTALLED/finalcritics NOT_RUN.

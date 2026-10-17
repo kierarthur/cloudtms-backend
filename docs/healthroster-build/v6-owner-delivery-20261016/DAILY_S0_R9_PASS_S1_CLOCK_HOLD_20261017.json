@@ -1,0 +1,77 @@
+{
+  "version": "DAILY_S0_R9_PASS_S1_FRESHNESS_HOLD_V1",
+  "sourceCommit": "6b5ebedecf95c8a1adfda5141bbf3eccf5294d23",
+  "actualS0": {
+    "out": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/.codex-tmp/daily-genuine-stages-20261017-05bc9532a9ff8931fac617c11910f274",
+    "summary": {
+      "status": "S0_NATIVE_QUALIFIED_OWN_TURN_RELEASED",
+      "ownedDirectory": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/.codex-tmp/daily-genuine-stages-20261017-05bc9532a9ff8931fac617c11910f274",
+      "operatorSourceCommit": "6b5ebedecf95c8a1adfda5141bbf3eccf5294d23",
+      "stage": "S0",
+      "businessRequests": 0,
+      "elapsedMs": 80847,
+      "publicComposer": "NOT_PROVIDED",
+      "financialSuccess": "NOT_CLAIMED",
+      "sharedTurn": "ORIGINAL_EXPLICIT_UNLOCK_CLOSE_REQUIRED"
+    },
+    "beforeCommit": "804a0e9a3efbb3530f6b20b52966f6d86bcbe857",
+    "setupCommit": "4199e32e20dfc040eff333d6b9bfc6e4ac177239",
+    "afterCommit": "5e69c4a3c1f55a36ddb84a86e5788d7f568f291f",
+    "originalExitCode": 0,
+    "published": {
+      "status": "ACTUAL_S0_PUBLISHED_AND_FIVE_STAGE_PLANS_COMMITTED",
+      "source": "6b5ebedecf95c8a1adfda5141bbf3eccf5294d23",
+      "out": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/.codex-tmp/daily-genuine-stages-20261017-05bc9532a9ff8931fac617c11910f274",
+      "planCommit": "48160414e9a96c2869046fce728ed55431593a67",
+      "prefixCommit": "ea4f57c7b7efb9bb137b64466b6af31af7e9be2e",
+      "stagePlansCommit": "37910ec13d783154842d79a91fd52bbca95333f0",
+      "files": [
+        "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_S1_R10_PLAN_20261017.json",
+        "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_S1_EFFECT_ADMISSION_20261017.json",
+        "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_S1a_R10_PLAN_20261017.json",
+        "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_S1a_EFFECT_ADMISSION_20261017.json",
+        "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_S2_R10_PLAN_20261017.json",
+        "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_S2_EFFECT_ADMISSION_20261017.json",
+        "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_S3_R10_PLAN_20261017.json",
+        "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_S3_EFFECT_ADMISSION_20261017.json",
+        "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_S4_R10_PLAN_20261017.json",
+        "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_S4_EFFECT_ADMISSION_20261017.json"
+      ],
+      "noBusinessRequests": true
+    }
+  },
+  "actualS1": {
+    "out": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/.codex-tmp/daily-genuine-stages-20261017-05bc9532a9ff8931fac617c11910f274",
+    "beforeCommit": "303b4ad7a7ea537d37d5af2527c31e2347ffe58a",
+    "setupCommit": "d521c12f203c41299074d2d989afab7ff8c577f8",
+    "nativeBefore": {
+      "mainObservedAt": "2026-10-17T16:08:02.593763+00:00",
+      "freshObservedAt": "2026-10-17T16:08:05.966573+00:00"
+    },
+    "closedSubmit": {
+      "status": "HOLD",
+      "code": "FIXTURE_FRESH_NATIVE_CLOCK_REQUIRED",
+      "phase": "submit",
+      "stage": "S1",
+      "browserClosed": true
+    },
+    "sourceDisposition": "Both possible BEFORE clock checks precede persistAttempt/network arm/POST in the exact committed worker; this HOLD forwards no business request. Original generic uncertainty label retained. No unchanged retry.",
+    "ownTurn": {
+      "takenAt": "2026-10-17T16:07:45.353Z",
+      "releasedAt": "2026-10-17T16:08:40.131Z",
+      "explicitUnlockConfirmed": true,
+      "connectionClosed": true,
+      "proved": false
+    },
+    "originalExitCode": 1,
+    "positiveAfter": "NOT_CREATED"
+  },
+  "readonlyActualSourceTimingMs": {
+    "operator": 1276,
+    "coordinator": 730,
+    "continuation": 854
+  },
+  "next": "Preserve all existing source/ACL/turn/currentness checks. Finite source batching and separate actual currentness-read design are under review; no new protocol executed.",
+  "install2": "NOT_INSTALLED",
+  "finalCritics": "NOT_RUN"
+}
