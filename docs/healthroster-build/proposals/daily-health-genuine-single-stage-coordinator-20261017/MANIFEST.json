@@ -89,7 +89,7 @@
     {
       "file": "SOURCE_PINS.json",
       "bytes": 4429,
-      "sha256": "3bf2289161ff97febbdf7250c1840e2e76b27c679d94f81cf27389305195f218"
+      "sha256": "1733b31ffdb5495a15bcc92292116351e6376cb0d8bb08d788af1aee98bf4288"
     },
     {
       "file": "source-binding.test.mjs",
