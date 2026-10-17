@@ -1,0 +1,6 @@
+import fs from'node:fs';import path from'node:path';import{fileURLToPath}from'node:url';import{execFileSync}from'node:child_process';import{createHash}from'node:crypto';import assert from'node:assert/strict';
+const here=path.dirname(fileURLToPath(import.meta.url)),sha=b=>createHash('sha256').update(b).digest('hex'),mf=JSON.parse(fs.readFileSync(here+'/MANIFEST.json'));
+for(const r of mf.files){const b=fs.readFileSync(here+'/'+r.file);assert.equal(b.length,r.bytes,r.file);assert.equal(sha(b),r.sha256,r.file);}
+const inv=JSON.parse(fs.readFileSync(here+'/OBSERVER_PARENT_INVERSE.json'));assert.equal(sha(inv.before),inv.beforeSha256);assert.equal(sha(inv.after),inv.afterSha256);const actual=fs.readFileSync(here+'/observer.mjs','utf8');assert.equal(actual,inv.after);assert.equal(actual.replace(inv.after,()=>inv.before),inv.before);
+const env={...process.env,PYTHONDONTWRITEBYTECODE:'1'};for(const[c,a]of[['node',[here+'/capture.mjs']],['node',['--test',here+'/test.mjs']],['python',[here+'/grammar.py']]])process.stdout.write(execFileSync(c,a,{env,maxBuffer:2*1024*1024}));
+console.log(JSON.stringify({verdict:'SOURCE_ONLY_S2_S3_MAP_AND_AUXILIARY_OBSERVER',frozenFiles:mf.files.length+1,productTargets:0,native:'NOT_RUN',completeCallbackEffects:'NOT_PROVED',originalScopes:11,restoration:'NOT_A_RESTORATION_PROGRAMME'}));

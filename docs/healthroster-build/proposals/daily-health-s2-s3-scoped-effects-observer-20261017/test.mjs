@@ -1,0 +1,52 @@
+// Actual selected source, finite synthetic transports. No network/native oracle.
+import test from'node:test';import assert from'node:assert/strict';import fs from'node:fs';import vm from'node:vm';import path from'node:path';import{fileURLToPath}from'node:url';import{build,validateFrame,SCOPES,SEQUENCES,RELATIONS}from'./observer.mjs';
+const here=path.dirname(fileURLToPath(import.meta.url)),requests=JSON.parse(fs.readFileSync(here+'/REQUESTS.json')),copy=x=>JSON.parse(JSON.stringify(x)),body=stage=>copy(requests.find(r=>r.id===stage).body),source=n=>fs.readFileSync(here+'/reference/worker/'+n+'.js.txt','utf8');
+const now='2026-10-17T12:00:00.000Z';class FixedDate extends Date{constructor(...a){super(...a.length?a:[now]);}static now(){return new Date(now).getTime();}}
+const env={SUPABASE_URL:'https://offline.invalid'},reply=(status,body)=>({status,body}),common={Date:FixedDate,console:{warn(){},error(){},log(){}},sbHeaders:()=>({}),nowIso:()=>now,withCORS:(_e,_r,v)=>v,ok:v=>reply(200,v),badRequest:v=>reply(400,v),serverError:v=>reply(500,v),unauthorized:()=>reply(401,{})};
+const fn=(name,globals)=>new vm.Script('('+source(name)+')').runInNewContext({...common,...globals});
+function candidateHarness({jobTitles=false,uniquenessFailure=false,targets=[]}={}){
+ const writes=[],reads=[],rpc=[],worker=[];let settings=0;
+ const drain=fn('tsfinTargetedDrainNow',{loadSettingsDefaults:async()=>{settings++;return{};},sbRpc:async(_e,name,args)=>{rpc.push({name,args:copy(args)});return args._timesheet_ids.length;},runTsfinWorkerOnce:async(_e,args)=>{worker.push(copy(args));return{picked:targets.length,ok:targets.length,fail:0};}});
+ const input=body('S2');if(jobTitles)input.job_titles=['f717d043-0000-4000-8000-000000000098'];
+ const create=fn('handleCreateCandidate',{requireUser:async(_e,_r,roles)=>{assert.deepEqual(copy(roles),['admin']);return{id:'synthetic-actor'};},parseJSONBody:async()=>input,sbGetOne:async(_e,url)=>{reads.push(url);if(uniquenessFailure)throw Error('synthetic unavailable');return null;},sbFetch:async(_e,url)=>{reads.push(url);return{rows:targets.map(timesheet_id=>({timesheet_id}))};},fetch:async(url,args)=>{writes.push({url,args:copy(args)});if(url.endsWith('/candidate_job_titles'))return{ok:false,text:async()=>'synthetic join refusal'};const data=JSON.parse(args.body);return{ok:true,json:async()=>[{...data,tms_ref:'CCR-SYNTHETIC'}]};},tsfinTargetedDrainNow:drain});
+ return{run:()=>create(env,{}),writes,reads,rpc,worker,settings:()=>settings};
+}
+test('actual S2 no job_titles inserts only Candidate then true empty drain',async()=>{
+ const h=candidateHarness(),r=await h.run();assert.equal(r.status,200);assert.equal(h.writes.length,1);const payload=JSON.parse(h.writes[0].args.body);assert.equal(payload.id,body('S2').id);assert.equal(payload.job_title_id,null);assert(!('job_titles'in payload));assert(!('tms_ref'in payload));assert(!('ccr_num'in payload));assert.deepEqual(copy(payload.roles),['RN']);assert.deepEqual(Object.values(r.body.tsfin),[0,0,0,0,0,0]);assert.equal(h.settings(),1);assert.equal(h.rpc.length,0);assert.equal(h.worker.length,0);const q=new URL(h.reads[1]);assert.equal(q.searchParams.get('is_current'),'eq.true');assert.equal(q.searchParams.get('occupant_key_norm'),'eq.'+body('S2').key_norm);assert.equal(q.searchParams.get('limit'),'500');
+});
+test('actual S2 nonempty match reaches priority enqueue/targeted worker, not empty proof',async()=>{
+ const id='f717d043-0000-4000-8000-000000000090',h=candidateHarness({targets:[id]}),r=await h.run();assert.equal(r.status,200);assert.equal(r.body.tsfin.auto_assigned_timesheets,1);assert.equal(h.rpc[0].name,'enqueue_ts_financials_priority');assert.deepEqual(h.rpc[0].args._timesheet_ids,[id]);assert.deepEqual(h.worker[0].onlyTimesheetIds,[id]);assert.equal(h.writes.length,1);
+});
+test('omitted job_titles and native vacancy matter: child join failure/precheck failure need not prevent200',async()=>{
+ const job=candidateHarness({jobTitles:true}),r=await job.run();assert.equal(r.status,200);assert.equal(job.writes.length,2);assert.equal(JSON.parse(job.writes[0].args.body).job_title_id,'f717d043-0000-4000-8000-000000000098');const unavailable=candidateHarness({uniquenessFailure:true});assert.equal((await unavailable.run()).status,200);assert.equal(unavailable.writes.length,1);
+});
+function rateHarness({incumbent=false,exact=false,future=false,financialTargets=[],failPost=false,failOutbox=false}={}){
+ const reads=[],writes=[];let rates=0;
+ const fetch=async(url,args)=>{writes.push({url,args:copy(args)});const outbox=url.includes('/ts_financials_outbox');return{ok:!(outbox?failOutbox:args.method==='POST'&&failPost),text:async()=>'synthetic refusal',json:async()=>[{id:'f717d043-0000-4000-8000-000000000091',...JSON.parse(args.body),disabled_at_utc:null}]};};
+ const sbFetch=async(_e,url)=>{reads.push(url);if(url.includes('/timesheets_financials'))return{rows:financialTargets.map(timesheet_id=>({timesheet_id}))};rates++;return{rows:exact&&rates===1?[{id:'f717d043-0000-4000-8000-000000000092'}]:incumbent&&rates===2?[{id:'f717d043-0000-4000-8000-000000000093',date_from:'2026-09-01',date_to:null}]:future&&rates===3?[{date_from:'2026-10-20'}]:[]};};
+ const enqueue=fn('enqueueTsfinRecomputeForClient',{sbFetch,fetch}),upsert=fn('handleUpsertClientRate',{requireUser:async(_e,_r,roles)=>{assert.deepEqual(copy(roles),['admin']);return{id:'synthetic-actor'};},parseJSONBody:async()=>body('S3'),sbFetch,fetch,enqueueTsfinRecomputeForClient:enqueue});return{run:()=>upsert(env,{}),reads,writes};
+}
+test('actual S3 clean complete-vacancy path performs one POST and empty Client enqueue read',async()=>{
+ const h=rateHarness(),r=await h.run();assert.equal(r.status,200);assert.equal(h.reads.length,4);assert.deepEqual(h.writes.map(w=>w.args.method),['POST']);const rec=JSON.parse(h.writes[0].args.body);for(const[k,v]of Object.entries(body('S3')))assert.deepEqual(rec[k],v);for(const url of h.reads.slice(0,3))assert.equal(new URL(url).searchParams.get('disabled_at_utc'),'is.null');const q=new URL(h.reads[3]);assert.equal(q.searchParams.get('client_id'),'eq.'+body('S3').client_id);assert.equal(q.searchParams.get('is_current'),'eq.true');assert.equal(q.searchParams.get('locked_by_invoice_id'),'is.null');
+});
+test('actual S3 can update existing row or clamp future window; complete history vacancy is stronger',async()=>{
+ const exact=rateHarness({exact:true});assert.equal((await exact.run()).status,200);assert.equal(exact.writes[0].args.method,'PATCH');const future=rateHarness({future:true});assert.equal((await future.run()).status,200);assert.equal(JSON.parse(future.writes[0].args.body).date_to,'2026-10-19');
+});
+test('actual S3 partial failure can follow committed incumbent PATCH; no retry inference',async()=>{
+ const h=rateHarness({incumbent:true,failPost:true}),r=await h.run();assert.equal(r.status,400);assert.deepEqual(h.writes.map(w=>w.args.method),['PATCH','POST']);assert.equal(JSON.parse(h.writes[0].args.body).date_to,'2026-09-30');
+});
+test('actual Client enqueue can POST nonempty targets and ignore HTTP refusal;200 is insufficient',async()=>{
+ const id='f717d043-0000-4000-8000-000000000094',h=rateHarness({financialTargets:[id],failOutbox:true}),r=await h.run();assert.equal(r.status,200);assert.equal(h.writes.length,2);const items=JSON.parse(h.writes[1].args.body);assert.equal(items[0].timesheet_id,id);assert.equal(items[0].reason,'RATE_CHANGED');
+});
+test('actual S2/S3 Admin handler denial emits no mutation',async()=>{
+ for(const name of ['handleCreateCandidate','handleUpsertClientRate']){let parse=0;const f=fn(name,{requireUser:async(_e,_r,roles)=>{assert.deepEqual(copy(roles),['admin']);return null;},parseJSONBody:()=>{parse++;throw Error('unexpected');}});assert.equal((await f(env,{})).status,401);assert.equal(parse,0);}
+});
+const identity={physicalDatabase:'cloudtms_test_clone',databaseOid:123,backendPid:456,key:[20261013,1],turnId:'hr_turn_'+'a'.repeat(32)},context={identity,actorId:'f717d043-0000-4000-8000-000000000099',phase:'BEFORE',stage:'S2'};
+test('fixed auxiliary modes/stages/limits, source-only receipt and exact genuine FK scope',()=>{
+ for(const stage of ['S2','S3'])for(const mode of ['METADATA','EFFECTS']){const{input,receipt}=build(mode,{...context,stage});assert.equal(input.statement_timeout_ms,30000);assert.equal(input.lock_timeout_ms,2000);assert.equal(input.max_rows_per_statement,1);assert.equal(input.continue_on_error,false);assert(input.sql.startsWith('SET LOCAL transaction_read_only=on;\n'));assert.equal(input.verification_sql,input.sql.slice(input.sql.indexOf('\n')+1));assert.equal(receipt.native,'NOT_RUN');assert.equal(receipt.restoration,'NOT_A_RESTORATION_PROGRAMME');assert(Buffer.byteLength(input.sql)<32768);if(mode==='EFFECTS'){assert(input.sql.includes("c.entity_key='candidates' and c.scope_change_tx_token=t.tx_token"));assert(!input.sql.includes('nextval('));}}
+ for(const patch of [{stage:'S4'},{stage:null},{phase:'POST'},{identity:{...identity,key:[20261013,2]}},{actorId:'invalid'}])assert.throws(()=>build('EFFECTS',{...context,...patch}),/S23_OBSERVER_/);
+});
+test('synthetic auxiliary frames refuse stale/extra/rounded/missing/foreign-stage data',()=>{
+ const{receipt}=build('EFFECTS',context),v={version:'S23_SCOPED_EFFECT_OBSERVER_V1',stage:'S2',mode:'EFFECTS',phase:'BEFORE',turnBindingSha256:receipt.turnBindingSha256,database:'cloudtms_test_clone',databaseOid:123,backendPid:789,holderPid:456,holderGranted:true,readOnly:true,noRoleSwitch:true,observedAt:now,testIdentity:true,legacyOne:true,applyingCount:'0',actorAllowed:true,observation:{scope:Object.fromEntries(SCOPES.map(k=>[k,{count:'0',sha256:'b'.repeat(64)}])),sequenceState:Object.fromEntries(SEQUENCES.map(k=>[k,{lastValue:'1',isCalled:false}])),counterSeq:null}};
+ assert.doesNotThrow(()=>validateFrame(v,receipt,{now:Date.parse(now)}));for(const change of [x=>x.stage='S3',x=>x.extra=true,x=>x.readOnly=false,x=>x.holderGranted=false,x=>x.actorAllowed=false,x=>x.observedAt='2020-01-01Z',x=>x.observation.scope.candidatesCounter.count=0,x=>x.observation.scope.candidatesCounter.count='9223372036854775808',x=>delete x.observation.scope.counterTransaction,x=>x.observation.scope.extra={},x=>x.observation.sequenceState[SEQUENCES[0]].isCalled='false']){const bad=copy(v);change(bad);assert.throws(()=>validateFrame(bad,receipt,{now:Date.parse(now)}),/S23_OBSERVER_/);}assert.equal(RELATIONS.length,10);
+});

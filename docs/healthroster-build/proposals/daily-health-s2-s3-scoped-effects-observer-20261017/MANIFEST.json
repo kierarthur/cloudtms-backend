@@ -1,0 +1,117 @@
+{
+  "version": "DAILY_S2_S3_SOURCE_AUX_OBSERVER_PROPOSAL_V1",
+  "runtimeTargets": [],
+  "native": "NOT_RUN",
+  "files": [
+    {
+      "file": "capture.mjs",
+      "bytes": 8245,
+      "sha256": "d905b8a568ea9f6b5da52a370bbf9fcef6ae9db9bf3d396cf17f9f3a2bf9e4f0"
+    },
+    {
+      "file": "GRAMMAR.json",
+      "bytes": 1825,
+      "sha256": "1976602e13ef6ebcb442b420a76845c3f2864ebbc42e2e73886dd8f185d939c0"
+    },
+    {
+      "file": "grammar.py",
+      "bytes": 6629,
+      "sha256": "162b5f48381a60cf132c271ccd05096f08e5e2b1861d85f2df9422a04c7125d0"
+    },
+    {
+      "file": "OBSERVER_PARENT_INVERSE.json",
+      "bytes": 27199,
+      "sha256": "df7e2778b0ac3a39c61c067bde87f2658965f3cda7630de604f1b561483eb0c6"
+    },
+    {
+      "file": "observer.mjs",
+      "bytes": 13051,
+      "sha256": "8cda250e400cd0bffc15cb7ceb3228e74794c22befa5996b1a9bceed28ba080b"
+    },
+    {
+      "file": "README.md",
+      "bytes": 7265,
+      "sha256": "e0740b7308ebd40768aa934b862241112ef88b016a6d9a6bb5f0dfa962f87966"
+    },
+    {
+      "file": "reference/native/public__trg_set_tms_ref.sql",
+      "bytes": 568,
+      "sha256": "6910a1b92d26f6330e906dd273902c07cd4a4e091a7593a7d5fb10dc6df61187"
+    },
+    {
+      "file": "reference/native/public__trg_tsfin_candidates_wakeup.sql",
+      "bytes": 2846,
+      "sha256": "d508547ded756a1fe4be25646eabf8d7340f8c428995d0c041250ccd10583cdd"
+    },
+    {
+      "file": "reference/operator-S2-synthetic-input.json",
+      "bytes": 46335,
+      "sha256": "6c79f43fe3be5854f70b265a26d0830692573f8cc09b1396063f7995a4ad6351"
+    },
+    {
+      "file": "reference/operator-S3-synthetic-input.json",
+      "bytes": 46335,
+      "sha256": "5d0ee5a89ce3fc0ac0235fd1b86da264cf93337db204c8a187be6a7ffe74a75d"
+    },
+    {
+      "file": "reference/worker/enqueueTsfinRecomputeForClient.js.txt",
+      "bytes": 986,
+      "sha256": "787e0be9d2018fb0754462c736fef321a176ad4ba15cd2971b8b77e8dd678827"
+    },
+    {
+      "file": "reference/worker/handleCreateCandidate.js.txt",
+      "bytes": 8415,
+      "sha256": "42642fcfbe70961b2b8276e875e75c69a673a15a3442a04fe3c2d4e6046b4231"
+    },
+    {
+      "file": "reference/worker/handleUpsertClientRate.js.txt",
+      "bytes": 7868,
+      "sha256": "5e6c7f3b1a5dc5302971c91d5cf80a5ea464e76b6119312e6ee9b981bc43d518"
+    },
+    {
+      "file": "reference/worker/loadSettingsDefaults.js.txt",
+      "bytes": 61656,
+      "sha256": "973fc5a6f63ddfdc13b28bf69ad100b9ac0b1cc19a4491842ee5cb8f42d0f3fe"
+    },
+    {
+      "file": "reference/worker/requireUser.js.txt",
+      "bytes": 1385,
+      "sha256": "72cb3dc069bbec6c973eff2e7258f1649b721978c47cd56d75dd8ad81089ca2a"
+    },
+    {
+      "file": "reference/worker/tsfinTargetedDrainNow.js.txt",
+      "bytes": 8426,
+      "sha256": "af80a52b263df6e769d797eaa2a3739512ef594800da9d79a76e26d8fef8c74f"
+    },
+    {
+      "file": "REQUESTS.json",
+      "bytes": 1222,
+      "sha256": "f70fd8a5c54034760ce447fb36adc808e08d736ebb7c8cc091469448d6594746"
+    },
+    {
+      "file": "SOURCE_EFFECT_MAP.md",
+      "bytes": 8751,
+      "sha256": "a87563b314f551fa6d738007746afa984ac19753c157f0667a4d64e16bc48d24"
+    },
+    {
+      "file": "SOURCE_METADATA.json",
+      "bytes": 193689,
+      "sha256": "4d87c39bfeed0aca413ffe661477dcaa6d65516ecf4bf857fbd990f2f123eebf"
+    },
+    {
+      "file": "SOURCE_SELECTION.json",
+      "bytes": 5601,
+      "sha256": "f7dca1d55f0841eb9fd31e0eae912d7fb27be9d76176a77f4b47d4ecf6780f0a"
+    },
+    {
+      "file": "test.mjs",
+      "bytes": 10406,
+      "sha256": "05c22cc8ae7defa6811865dcaa2ab98e31b6df19a4d612835fbac81aa6561c93"
+    },
+    {
+      "file": "verify.mjs",
+      "bytes": 1329,
+      "sha256": "32b326a4ac9da250be604d7bea7c7db8b3302be63e3f8a555b60b85b43b8427a"
+    }
+  ]
+}

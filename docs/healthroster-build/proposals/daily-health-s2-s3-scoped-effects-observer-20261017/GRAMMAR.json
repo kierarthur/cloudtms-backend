@@ -1,0 +1,66 @@
+{
+  "version": "S2_S3_OFFLINE_SOURCE_GRAMMAR_V1",
+  "parser": "pglast7.20/PG17",
+  "inputs": [
+    {
+      "stage": "S2",
+      "mode": "METADATA",
+      "sqlSha256": "e05f3c0e34f1cc96887ab12f845373e393b5ce71dc9d8815c38291c28e969346",
+      "statements": 2,
+      "freshStatements": 1
+    },
+    {
+      "stage": "S2",
+      "mode": "EFFECTS",
+      "sqlSha256": "e6208ec99d43cf508c8443031e6ca0b4afd36f6025528f73787405c7a36b7957",
+      "statements": 2,
+      "freshStatements": 1
+    },
+    {
+      "stage": "S3",
+      "mode": "METADATA",
+      "sqlSha256": "c65f69bd694ddf65e21aef88267111fb8d28015222f860fe7b0f7dd839ef857f",
+      "statements": 2,
+      "freshStatements": 1
+    },
+    {
+      "stage": "S3",
+      "mode": "EFFECTS",
+      "sqlSha256": "b4781a1e0f8778365e10ce0cbf3b00aaa037824bb2dbf1442ac1b128c1e80818",
+      "statements": 2,
+      "freshStatements": 1
+    }
+  ],
+  "originalScopeProof": [
+    {
+      "stage": "S2",
+      "completeScopes": 11,
+      "completeRateAndOverrideHistory": true,
+      "completeFinancialAndTimesheetHistory": true,
+      "noPaginationOrDeduplication": true
+    },
+    {
+      "stage": "S3",
+      "completeScopes": 11,
+      "completeRateAndOverrideHistory": true,
+      "completeFinancialAndTimesheetHistory": true,
+      "noPaginationOrDeduplication": true
+    }
+  ],
+  "healthNativeSourceGrammar": [
+    {
+      "signature": "public.trg_set_tms_ref()",
+      "plGrammar": "PASS",
+      "outboxInsertStatements": 0,
+      "catalogueFieldBinding": "NOT_PROVED"
+    },
+    {
+      "signature": "public.trg_tsfin_candidates_wakeup()",
+      "plGrammar": "PASS",
+      "outboxInsertStatements": 2,
+      "catalogueFieldBinding": "NOT_PROVED"
+    }
+  ],
+  "readonlyNegatives": 6,
+  "nativeExecution": "NOT_RUN"
+}

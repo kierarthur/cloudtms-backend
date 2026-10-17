@@ -1,0 +1,52 @@
+[
+  {
+    "id": "S2",
+    "method": "POST",
+    "path": "/api/candidates",
+    "body": {
+      "id": "f717d043-0000-4000-8000-000000000030",
+      "key_norm": "daily-health-basis-20261017-candidate",
+      "display_name": "DAILY_HEALTH_BASIS_20261017_CANDIDATE",
+      "active": true,
+      "roles": [
+        "RN"
+      ],
+      "pay_method": "PAYE",
+      "umbrella_id": null,
+      "email": null,
+      "account_holder": null,
+      "bank_name": null,
+      "sort_code": null,
+      "account_number": null,
+      "remittance_receive_enabled": false,
+      "remittance_overrides_enabled": false
+    }
+  },
+  {
+    "id": "S3",
+    "method": "POST",
+    "path": "/api/rates/client-defaults",
+    "body": {
+      "client_id": "f717d043-0000-4000-8000-000000000010",
+      "role": "RN",
+      "band": "Band 6",
+      "date_from": "2026-10-01",
+      "date_to": "2026-10-31",
+      "charge_day": 30,
+      "paye_day": 20,
+      "umb_day": 25,
+      "charge_night": 30,
+      "paye_night": 20,
+      "umb_night": 25,
+      "charge_sat": 30,
+      "paye_sat": 20,
+      "umb_sat": 25,
+      "charge_sun": 30,
+      "paye_sun": 20,
+      "umb_sun": 25,
+      "charge_bh": 30,
+      "paye_bh": 20,
+      "umb_bh": 25
+    }
+  }
+]
