@@ -1,0 +1,9 @@
+{
+  "file": "docs/healthroster-build/proposals/daily-health-pure-rollback-adapter-20261017/test.mjs",
+  "beforeSha256": "cbb7e5aaa0e58abac54c77ef7e89319947b6512763d294219228149cc1bf2626",
+  "afterSha256": "7eb5914344ffa5deaae0c3dd40f10a761d715b6dcfb3577e2739a99fc94f8e01",
+  "before": "source(path.resolve(here,'../../../..'))",
+  "after": "source(path.dirname(ROOT))",
+  "reason": "Mounted here resolves four parents to the authorised I2 root; negative fixture must select an actually different existing D directory. Runtime root guard is unchanged.",
+  "nativeCalls": 0
+}

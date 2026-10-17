@@ -5,7 +5,8 @@ import path from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {source,buildInput,requireThat,ROUTE} from './input-builder.mjs';
 import {assertCommittedAdapter} from './source.mjs';
-import {readStage,validateRestoration} from './result-validator.mjs';
+import {readStage,validateRestoration,nativeClockFrames} from './result-validator.mjs';
+import {rootCallTiming,WORK_DEADLINE_CODE} from './timing.mjs';
 import {createFixedMetadataReader} from './fixed-metadata-reader.mjs';
 import {BUDGET,FiniteControls,assertElapsed,assertNoMaps} from './control.mjs';
 const closed=e=>/^[A-Z0-9_]+$/.test(e?.message??'')?e.message:'DAILY_PURE_CLOSED_FAILURE';
@@ -28,17 +29,24 @@ export async function holdPure({root,out,authorisedRootHolder=false}){
  requireThat(path.dirname(path.resolve(out))===parent&&/^daily-health-pure-native-20261017-[a-z0-9-]+$/.test(path.basename(out))
   &&!fs.existsSync(out)&&fs.realpathSync.native(parent)===parent,'PURE_FRESH_ROOT_OUTPUT_DIRECTORY_REQUIRED');
  fs.mkdirSync(out);const native=await import(pathToFileURL(path.join(root,'scripts/healthroster-rehearsal-turn.mjs')).href);
- let sequenceStart;
+ let sequenceStart,localTiming={},callTiming,nativeTimes=[];
  try{
   const result=await native.withSharedRehearsalTurn({task:'DAILY_HEALTH_EXACT_PURE_NATIVE_PROOF',progressPath:path.join(root,'docs/healthroster-build/PROGRESS.md'),
    // Recheck committed/saved source before each shared-turn phase. No root source writes.
    beforePhase:async()=>{assertCommittedAdapter();await source(root);},
    async work(turn){
-    sequenceStart=performance.now();const deadline=new AbortController();
-    const timer=setTimeout(()=>deadline.abort(Error('PURE_SEQUENCE_WORK_BUDGET_HELD')),BUDGET.workMilliseconds);
+    sequenceStart=performance.now();localTiming.sequenceStartedAt=new Date().toISOString();
+    localTiming.workDeadlineAt=new Date(Date.parse(localTiming.sequenceStartedAt)+BUDGET.workMilliseconds).toISOString();
+    const deadline=new AbortController();
+    const timer=setTimeout(()=>{localTiming.workTimerFiredAt=new Date().toISOString();deadline.abort(Error(WORK_DEADLINE_CODE));},BUDGET.workMilliseconds);
     const controls=new FiniteControls(process.stdin,AbortSignal.any([turn.signal,deadline.signal]));
     const owned={...turn,signal:AbortSignal.any([turn.signal,deadline.signal,controls.signal])};
-    const within=()=>{assertElapsed(sequenceStart,performance.now(),BUDGET.workMilliseconds);if(owned.signal.aborted)throw owned.signal.reason;};
+    const within=()=>{
+     if(owned.signal.aborted)throw owned.signal.reason;
+     try{assertElapsed(sequenceStart,performance.now(),BUDGET.workMilliseconds);}catch{
+      localTiming.workElapsedDeadlineObservedAt=new Date().toISOString();throw Error(WORK_DEADLINE_CODE);
+     }
+    };
     let beforePacket,afterPacket,nativeResult;
     try{
      within();const reader=await createFixedMetadataReader({root,turn:owned});
@@ -47,17 +55,24 @@ export async function holdPure({root,out,authorisedRootHolder=false}){
      requireThat(built.receipt.canonicalSqlSha256===reader.sourceDescriptor.canonicalSqlSha256,'PURE_CANONICAL_SOURCE_EQUALITY_REQUIRED');
      await turn.assertHeld('before-pure-mcp-ready');within();
      saveSmall(out,'TURN_IDENTITY.json',turn.identity);saveSmall(out,'INPUT.json',built.input);saveSmall(out,'INPUT_RECEIPT.json',built.receipt);
+     localTiming.readyAt=new Date().toISOString();saveSmall(out,'READY_TIMING.json',{...localTiming,sqlSha256:built.receipt.sqlSha256});
      const ready=controls.wait('PREPARE');
      console.log(JSON.stringify({status:'READY_ROOT_KIER_MCP_B_REQUIRED',out,route:ROUTE,programmeBytes:8029,
+      readyAt:localTiming.readyAt,workDeadlineAt:localTiming.workDeadlineAt,
       remainingWorkMilliseconds:Math.floor(BUDGET.workMilliseconds-(performance.now()-sequenceStart)),canonicalMetadata:'PROCESS_MEMORY_ONLY'}));
      await ready;within();await turn.assertHeld('after-root-pure-mcp-result');
-     nativeResult=readSmall(out,'NATIVE_RESULT.json');const stage=readStage(nativeResult,built.receipt);
+     nativeResult=readSmall(out,'NATIVE_RESULT.json');localTiming.resultReadAt=new Date().toISOString();
+     callTiming=rootCallTiming(readSmall(out,'NATIVE_CALL_TIMING.json'),{sqlSha256:built.receipt.sqlSha256,readyAt:localTiming.readyAt,resultReadAt:localTiming.resultReadAt});
+     saveSmall(out,'ROOT_CALL_TIMING_VALIDATED.json',callTiming);
+     nativeTimes=nativeClockFrames(nativeResult,built.receipt);
+     saveSmall(out,'NATIVE_CLOCK_OBSERVATIONS.json',{status:'ACTUAL_CLOCK_FRAMES_ONLY_NO_SUCCESS_VERDICT',frames:nativeTimes,sqlSha256:built.receipt.sqlSha256});
+     const stage=readStage(nativeResult,built.receipt);
      afterPacket=await reader.after(stage);within();
      const summary=await validateRestoration({root,result:nativeResult,receipt:built.receipt,beforePacket,afterPacket});within();
      // No second SQL input, arbitrary command, Contact case, or copied qualifier.
      const release=controls.wait('RELEASE');
      console.log(JSON.stringify({status:'QUALIFIED_PENDING_ROOT_RELEASE_AND_SHARED_TURN_CLOSE',out,route:ROUTE}));
-     await release;within();return summary;
+     await release;within();return {...summary,rootCallTiming:callTiming,localTiming};
     }finally{clearTimeout(timer);controls.dispose();beforePacket=null;afterPacket=null;nativeResult=null;}
    }},{openTurn:()=>serialized(new native.OwnedTurnConnection(native.agencyChildEnvironment('healthroster_daily_pure_holder')))});
   if(sequenceStart===undefined){
@@ -71,9 +86,11 @@ export async function holdPure({root,out,authorisedRootHolder=false}){
    canonicalSharedTurnUnlockedAndClosed:true,completeMapsPersisted:false};
   saveSmall(out,'SUMMARY.json',final);console.log(JSON.stringify({status:final.status,elapsedMilliseconds:final.elapsedMilliseconds}));return final;
  }catch(error){
-  saveSmall(out,'HOLD.json',{status:'HOLD',code:closed(error),sharedTurnCompletion:'SEE_ORIGINAL_SEND7_JOURNAL_NO_SYNTHETIC_CLOSE_PROOF',
+  const deadlineObserved=!!(localTiming.workTimerFiredAt||localTiming.workElapsedDeadlineObservedAt),code=deadlineObserved?WORK_DEADLINE_CODE:closed(error);
+  saveSmall(out,'HOLD.json',{status:'HOLD',code,observedErrorCode:closed(error),deadlineObserved,localTiming,
+   ...(callTiming?{rootCallTiming:callTiming}:{}),nativeClockFrames:nativeTimes,sharedTurnCompletion:'SEE_ORIGINAL_SEND7_JOURNAL_NO_SYNTHETIC_CLOSE_PROOF',
    dispatchedMcpMustBeReconciledBeforeNextTrial:true,elapsedMilliseconds:sequenceStart===undefined?null:Math.ceil(performance.now()-sequenceStart),completeMapsPersisted:false});
-  throw Error(closed(error));
+  throw Error(code);
  }
 }
 if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.url)){

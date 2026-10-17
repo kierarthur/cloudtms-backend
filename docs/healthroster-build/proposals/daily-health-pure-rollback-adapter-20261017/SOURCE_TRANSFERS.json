@@ -4,8 +4,13 @@
     "ownerCommit": "bf11b6f2c4dbdcba4d381f02a302922ea510b755",
     "ownerFile": "docs/healthroster-build/proposals/v6-contact-local-metadata-mcp-adapter-20261016/control.mjs",
     "beforeSha256": "42d86828a85fcb22606c9e691571424f126e8beafea2af1df4e5e38e108bf548",
-    "afterSha256": "42d86828a85fcb22606c9e691571424f126e8beafea2af1df4e5e38e108bf548",
-    "hunks": [],
+    "afterSha256": "7d12027e918efa6d1d452e8c2de644bd35e974fb01f081f4adb81dfe83f94da9",
+    "hunks": [
+      {
+        "before": "  this.data=chunk=>this.feed(chunk);this.eof=()=>this.abort('CONTROL_EOF_ABORT');this.external=()=>this.abort('CONTROL_OWNED_TURN_LOST');this.interrupt=()=>this.abort('CONTROL_ROOT_ABORT');",
+        "after": "  this.data=chunk=>this.feed(chunk);this.eof=()=>this.abort('CONTROL_EOF_ABORT');\n  this.external=()=>this.abort(signal?.reason?.message==='PURE_SEQUENCE_WORK_BUDGET_HELD'?'PURE_SEQUENCE_WORK_BUDGET_HELD':'CONTROL_OWNED_TURN_LOST');this.interrupt=()=>this.abort('CONTROL_ROOT_ABORT');"
+      }
+    ],
     "wholeParentReverse": true
   },
   {

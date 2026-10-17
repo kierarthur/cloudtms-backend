@@ -1,0 +1,65 @@
+{
+  "version": "DAILY_PURE_RESPONSE_FORWARD_ROOT_REVIEW_V1",
+  "verdict": "ACCEPT_BOUNDED_COMPONENT_SOURCE_ONLY",
+  "reviewedCommit": "4d68a061026f0e62026bb53adb2a534c1b6efe94",
+  "parent": "a20a074114ed84173a56cf34c39e97eb8777101b",
+  "copiedFiles": 27,
+  "runtimeExecutableManifestSha256": "3238d920fccf6532967d2144f323c2f9fe123bb7da5e85b4f961fc06e70076d4",
+  "rootSourcePinsSha256": "54c00b846ca0e0b5ddf9b57eacd3f43deb6f9d59aecc3a0f2e874288920f96e2",
+  "rootPins": 45,
+  "originalProgramme": {
+    "bytes": 8029,
+    "sha256": "779aff554ca8bce78a7e21520a41574beba211503ab1c79d492eccb6b5ad8ab6",
+    "byteUnchanged": true
+  },
+  "wholeParentReverse": {
+    "files": 22,
+    "changed": 13,
+    "currentEvidenceSha256": "b739ffcc66cce0a80ae02854def75f5700850753e8df3e15c9203835baa18462",
+    "guardAndCanonicalQueriesUnchanged": true,
+    "sqlDelta": "Two guard-clock SELECTs and actual clock fields only"
+  },
+  "responseBoundary": {
+    "SET": "GENUINE_R2_OBSERVED_NULL_COUNT_EMPTY_FIELDS_ROWS",
+    "SELECT": "STRICT_INTEGER1_ONE_MATCHING_FIELD_ROW",
+    "DO_CREATE_RESET": "EXACT_CLOSED_INDEX_COMMAND_SOURCE_EXPECTATION_NOT_NATIVE_PROVED"
+  },
+  "rootTests": {
+    "initial": {
+      "passed": 61,
+      "failed": 1,
+      "reason": "Negative test argument resolves to the authorised root after mounting, so its expected rejection is invalid."
+    },
+    "fix": "One literal test argument changed to existing path.dirname(ROOT); runtime guard unchanged; complete before/after reverse retained in DAILY_PURE_ROOT_NEGATIVE_FIXTURE_20261017.json",
+    "final": {
+      "passed": 62,
+      "failed": 0,
+      "outputSha256": "cf4847206a6254114ffd7dd9c371baea87c2989eca38bb004ac4bc1926515201"
+    }
+  },
+  "grammar": {
+    "examples": 5,
+    "parser": "pglast7.20",
+    "postgresql": 17,
+    "unchangedProgrammeAndAllCanonicalQueries": true,
+    "foreignWritesSuppressed": 1,
+    "nativeBodyCompilation": "NOT_PROVED"
+  },
+  "budgets": {
+    "workMilliseconds": 120000,
+    "wholeMilliseconds": 180000
+  },
+  "sourceSafety": {
+    "originalWeakMapQualifierUnchanged": true,
+    "fullCanonicalRowMapsUnchanged": true,
+    "completeBackgroundTables": 2,
+    "originalWriterRecords": 4,
+    "otherSessionCancellation": false,
+    "backgroundPause": false
+  },
+  "rootTiming": "Capture actual ISO instants immediately around exact awaited tool; native clocks only from SQL; no transport-latency inference",
+  "native": "NOT_RUN",
+  "fullRehearsal": "NOT_RUN",
+  "install2": "NOT_INSTALLED",
+  "retainedEvidence": "R2 local protocol/result folder remains required by the optional source reverse checker and is recorded for final retained-folder index."
+}
