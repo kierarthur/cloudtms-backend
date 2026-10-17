@@ -1,0 +1,22 @@
+// Root transport only: read the real sealed holder input; no connection or dispatch.
+import fs from 'node:fs';
+import path from 'node:path';
+import {pathToFileURL} from 'node:url';
+import {createHash} from 'node:crypto';
+const root='D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026';
+const adapter=root+'/docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017';
+const [out,caseId,...extra]=process.argv.slice(2);
+if(extra.length||!['CONTACT_CONSTRUCTORS_V1','QT_ADMIN_CONTROLS_V1'].includes(caseId)
+ ||typeof out!=='string'||path.dirname(out).replaceAll('\\','/')!==root+'/.codex-tmp'
+ ||!/^contact-qt-positive-native-20261017-[a-z0-9-]+$/.test(path.basename(out))
+ ||fs.realpathSync.native(out).replaceAll('\\','/')!==out)throw Error('ROOT_CONTACT_INPUT_LOCATION_REQUIRED');
+const {readSmall}=await import(pathToFileURL(adapter+'/hold-case.mjs').href);
+const input=readSmall(out,'INPUT.json'),receipt=readSmall(out,'INPUT_RECEIPT.json');
+const route='mcp__cloudtms_miget_operations_kier_codex__miget_db_transaction_rollback';
+if(input.database!=='agency_test'||receipt.caseId!==caseId||receipt.route!==route
+ ||createHash('sha256').update(input.sql).digest('hex')!==receipt.sqlSha256
+ ||createHash('sha256').update(input.verification_sql).digest('hex')!==receipt.verificationSqlSha256)
+ throw Error('ROOT_CONTACT_SEALED_INPUT_REQUIRED');
+const packet=JSON.stringify({input,sqlSha256:receipt.sqlSha256,route});
+if(Buffer.byteLength(packet)>98304)throw Error('ROOT_CONTACT_INPUT_TRANSPORT_BOUND');
+process.stdout.write(packet+'\n');

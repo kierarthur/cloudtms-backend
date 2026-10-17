@@ -1,0 +1,14 @@
+{
+  "target": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/docs/healthroster-build/proposals/root-contact-native-input-loader-20261017.mjs",
+  "beforeSha256": "2c599f28ee2a01bd7ee2ed7906157a1093310ef2f4025e4dc76a39888e225350",
+  "afterSha256": "aff52a45b71300e32871e0081a91e59ba07e857ce83c33664ee7978d9ea98101",
+  "hunks": [
+    {
+      "before": "Buffer.byteLength(packet)>98304",
+      "after": "Buffer.byteLength(packet)+1>98304"
+    }
+  ],
+  "completeRawInverse": true,
+  "sourceOnly": true,
+  "native": "NOT_RUN"
+}
