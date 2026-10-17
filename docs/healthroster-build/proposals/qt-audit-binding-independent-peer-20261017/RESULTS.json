@@ -1,0 +1,22 @@
+{
+  "verdict": "ACCEPT_BOUNDED_SOURCE_FORWARD",
+  "authorCommit": "ef3fbd69c5540a8b7b4157da0b72a537a3a033a1",
+  "authorManifestSha256": "db2a391ad6a3ea390bd3757cd63f54b6cc1a99d272672fdaba4b3ab857dece41",
+  "selectionSha256": "efa423b5e008fcd0df8233189f6fa11b107fb38fcdb2619a7b218f235b2bdc17",
+  "frozenFiles": 49,
+  "completeCurrentHistoricalParents": 19,
+  "completeCurrentAdapterImages": 51,
+  "wholeRawTargetInverses": 4,
+  "originalTests": 12,
+  "authorAstCounterexamples": 8,
+  "independentValidAstCounterexamples": 6,
+  "completePlBodyInverse": true,
+  "exactAnonymousTargetDatum": 1,
+  "finalIfAndFollowingAssertionsRawUnchanged": true,
+  "completeAuditDigestsRetained": 2,
+  "actualPlan": "NOT_OBSERVED",
+  "performance": "NOT_PROVED",
+  "native": "NOT_RUN",
+  "privateTargetAccess": "NONE",
+  "reviewer": "GPT-6.1-sol/xhigh"
+}
