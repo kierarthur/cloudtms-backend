@@ -1,0 +1,136 @@
+{
+  "version": "ROOT_STAGE_BOOKKEEPER_SOURCE_FREEZE_V1",
+  "files": [
+    {
+      "file": "bookkeeper.mjs",
+      "bytes": 10331,
+      "sha256": "5121f9d3ac3e087d7153937a64d5d4e0cfef51e1868f681e1cdd5e432fd1943f"
+    },
+    {
+      "file": "core.mjs",
+      "bytes": 10764,
+      "sha256": "0101582d00801709d57c9f518cf17506f457fbd64ff33e965ac4821be9953f25"
+    },
+    {
+      "file": "PARENTS.json",
+      "bytes": 10293,
+      "sha256": "ed204aed5b7ab0d77b981e7a056b38592d667fa381ba6cdae069345992501c9f"
+    },
+    {
+      "file": "plan-template.mjs",
+      "bytes": 1538,
+      "sha256": "4ac69c6246cb8d1fabf5d2a100ba34d8e787f1d3f0ba29e104003f8dd57e9b2e"
+    },
+    {
+      "file": "prepare.mjs",
+      "bytes": 2934,
+      "sha256": "786a07fac6b9224f8517a99fcde18ef373ba4579495ddbd49e04cc012476afde"
+    },
+    {
+      "file": "README.md",
+      "bytes": 8570,
+      "sha256": "9df640d5f47e9507e6fc5675dc83bc7364d66812ae02a5ca3f8b7e22149595a8"
+    },
+    {
+      "file": "reference/continuation/coordinate.mjs",
+      "bytes": 4938,
+      "sha256": "13127c4af70d3fdb32057d8c0a0cceaa58e430bbd22e2ec6accfaab169dcd614"
+    },
+    {
+      "file": "reference/continuation/sequence.mjs",
+      "bytes": 1631,
+      "sha256": "4edfc1a7103dc7eaee854bc1e535e9534fd9acb415ee6e6215dfd5ad494a4c1f"
+    },
+    {
+      "file": "reference/continuation/stage.mjs",
+      "bytes": 2089,
+      "sha256": "b33cd9943a80b87a04af6d0290e22a76549c741aed6666e338cf306ea784b39b"
+    },
+    {
+      "file": "reference/healthroster-rehearsal-turn.mjs",
+      "bytes": 12827,
+      "sha256": "2a4078b744545a4b4c15a9842947e222ffae75dcadf9b087f49b3c8a30cd36aa"
+    },
+    {
+      "file": "reference/operator/contract.mjs",
+      "bytes": 7643,
+      "sha256": "92da72cf00390a629e1cf959db6f2cae30e617c217a7ceca3611b71ce4960d9c"
+    },
+    {
+      "file": "reference/operator/git-image-batch.mjs",
+      "bytes": 17997,
+      "sha256": "25b77b9234a879fd2ca18bca7d8cf10547ad644a83513ccf050dab171a011426"
+    },
+    {
+      "file": "reference/operator/native-read.mjs",
+      "bytes": 18744,
+      "sha256": "b8449f6bc901f41c2d058c6618b11bab70337579133fd99360c6988eb820cf07"
+    },
+    {
+      "file": "reference/operator/source.mjs",
+      "bytes": 1950,
+      "sha256": "01d4acb9309eb71a315f4cc5fbe315b90bf29f69d62742f0152c6ee28ad937b2"
+    },
+    {
+      "file": "reference/operator/stages.mjs",
+      "bytes": 7292,
+      "sha256": "c167833e193d3fac9b9de40c0a9b4447f5a193c024cb4caab19401264440e1f5"
+    },
+    {
+      "file": "reference/operator/worker.mjs",
+      "bytes": 12684,
+      "sha256": "ef082cac41ef6f653d044a33b3801d83eb0b1bc1275a6bb9684d06a46b4d9f60"
+    },
+    {
+      "file": "reference/root-s0-r6-bookkeeper.mjs",
+      "bytes": 6302,
+      "sha256": "0c277dd04a09bc4eb663cba7fe621185233428cfa63e5ebdc38468b09f4ae7df"
+    },
+    {
+      "file": "reference/s0/coordinate.mjs",
+      "bytes": 4630,
+      "sha256": "570ccb26ad180f10909eb13e05dc652efab03f8a67a1b9239a56ec858fcc7f92"
+    },
+    {
+      "file": "reference/s0/owned-worker.mjs",
+      "bytes": 2788,
+      "sha256": "0b0ebce2a60d2958511d3df8d8d472bdbdde688bec13f53aab313996eac20d67"
+    },
+    {
+      "file": "reference/s0/phase-parent.mjs",
+      "bytes": 5111,
+      "sha256": "5d487a9ba1b6f5c742e17d3d2b06bbfc6bb0e2937ea23600694122a3f2ca2c8b"
+    },
+    {
+      "file": "reference/s0/sequence.mjs",
+      "bytes": 1574,
+      "sha256": "f0d1c7e95bb9f81ab064bfc5bcb1145b81b0d991bbe3c584dadc0f74b25981a7"
+    },
+    {
+      "file": "REVIEW.json",
+      "bytes": 646,
+      "sha256": "c2ee8ad9a5b8d7199187c5cccbe0066ab1a471d733a4b01dc2d6d2f72605af09"
+    },
+    {
+      "file": "seal.mjs",
+      "bytes": 1963,
+      "sha256": "4ec286d595b219c4d399bfb348491c04da3489019997a17cba5fe7104e42e407"
+    },
+    {
+      "file": "TEST_RESULTS.txt",
+      "bytes": 3245,
+      "sha256": "1b44f44dee63f817cd564f26245e6a1bc9914134459f7e3c381bb634b38eefcf"
+    },
+    {
+      "file": "test.mjs",
+      "bytes": 12475,
+      "sha256": "8374615aa552be38cf37af867483892ebae4bebd7000b3b72ecfa2bf878c7b44"
+    },
+    {
+      "file": "verify.mjs",
+      "bytes": 1600,
+      "sha256": "b2b85ea6893f0e0ab330a46e85de27d2313e86662fbc1ac15b04051e6975feac"
+    }
+  ],
+  "native": "NOT_RUN"
+}
