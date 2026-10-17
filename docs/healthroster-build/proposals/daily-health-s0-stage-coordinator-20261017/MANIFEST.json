@@ -19,8 +19,8 @@
     },
     {
       "file": "README.md",
-      "bytes": 8923,
-      "sha256": "13c39e6acb334e1c4736321d42aef22c9c9e0a2b24f00106a31d03c6064a56a2"
+      "bytes": 9315,
+      "sha256": "d3ce40915955c31a33571937c5131e3b89a14f08f6330e8ddd5e79f59d913796"
     },
     {
       "file": "SOURCE_PINS.json",
@@ -44,8 +44,8 @@
     },
     {
       "file": "owned-worker.mjs",
-      "bytes": 2635,
-      "sha256": "5e2e0298a27a11bf06652aeee6e3a00cca55ba540d03c5402270e3775e68d95e"
+      "bytes": 2788,
+      "sha256": "0b0ebce2a60d2958511d3df8d8d472bdbdde688bec13f53aab313996eac20d67"
     },
     {
       "file": "phase-parent.mjs",
