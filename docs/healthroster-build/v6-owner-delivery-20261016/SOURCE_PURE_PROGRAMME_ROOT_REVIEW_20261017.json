@@ -1,0 +1,26 @@
+{
+  "version": "ROOT_SOURCE_PURE_PROGRAMME_REVIEW_V1",
+  "authorCommit": "fb235cfae7a6d3f5eb3ef581bebebf7daa68315e",
+  "rootCheckpoint": "b20ffcff83a7d21d7aacaca54e2bd147df71424d",
+  "rawGitExactFiles": 13,
+  "manifestSha256": "b92324116ab90d896b002135c01f84eae79efdb0437ff34678a362f89b729198",
+  "programmeBytes": 20303,
+  "programmeSha256": "ed1eb564947cea75131284ba62967e0654154d7374eebb9bba4a436bc12908a8",
+  "independentChecks": 41,
+  "PG17Statements": 6,
+  "PG17Programs": 4,
+  "newDefinitions": 1,
+  "existingHelperReplaced": false,
+  "catalogueAdmission": "NAME_WIDE_ABSENCE_RAW429_COMPLETE_BODY_REAL_OWNER_ACL_EFFECTIVE_ROLE_CONFIG_PINS",
+  "pureEffectClosure": "EXACT_TWO_COMPLETE_HEALTH_BODIES_NO_APPLICATION_RELATION_OR_SIDE_EFFECT",
+  "syntheticBoundaryVectors": {
+    "positive": 4,
+    "negative": 12,
+    "financialProducerSuccess": false
+  },
+  "reviewFindings": 0,
+  "executionAdapter": "UNSEALED_NOT_REVIEWED",
+  "native": "NOT_RUN",
+  "restoration": "NOT_RUN",
+  "verdict": "PASS_SCOPED_PROGRAMME_SOURCE_ONLY"
+}

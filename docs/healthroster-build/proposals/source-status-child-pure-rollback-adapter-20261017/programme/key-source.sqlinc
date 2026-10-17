@@ -1,0 +1,14 @@
+create or replace function private.weekly_exceptional_json_keys_exact_v1(
+  p_value jsonb,
+  p_allowed_keys text[]
+) returns boolean
+language sql immutable
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+  select pg_catalog.jsonb_typeof(p_value)='object'
+    and not exists(
+      select 1
+      from pg_catalog.jsonb_object_keys(p_value) supplied(key)
+      where not (supplied.key=any(p_allowed_keys))
+    );
+$function$;

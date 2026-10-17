@@ -1,0 +1,16 @@
+{
+  "version": "ROOT_DAILY_CURRENT0910_SOURCE_BINDING_REVIEW_V1",
+  "authorCommit": "4b1067c859f921855989eb7f147636cebf9286c3",
+  "rootCheckpoint": "b20ffcff83a7d21d7aacaca54e2bd147df71424d",
+  "rawGitExactFiles": 70,
+  "currentSavedInputsEqualPinnedBb6252": true,
+  "independentTests": 23,
+  "eightComposerBodiesChanged": false,
+  "wholeCurrentMetadataInverses": 2,
+  "originalCurrentContextInverse": "COMPLETE0858_DECLARATION_PLUS_EXACT_ONE_LF",
+  "retainedSixDailyChains": 6,
+  "runtimeMounted": false,
+  "native": "NOT_RUN",
+  "technicalPlacementMapping": "INVALID_BILLING_COUNTER_AWAITING_SOURCE_SUCCESSOR_NOT_OWNER_DECISION",
+  "verdict": "PASS_CURRENT_SOURCE_BINDING_ONLY"
+}
