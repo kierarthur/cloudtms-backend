@@ -1,0 +1,58 @@
+{
+  "integrationParent": "84738fe4057d9d693ccd723eb1835106f1091f57",
+  "requiredReadCommit": "083f144b3fa1658fc9296c9fd7f8bd4afcd20f6f",
+  "files": [
+    {
+      "target": "docs/bpay-next/final-definer-closures.json",
+      "sourcePath": "payload/docs/bpay-next/final-definer-closures.json",
+      "bytes": 1745976,
+      "sha256": "d436e0a3512e7c29b85657f257100a5f6bbc44cc44bd4fcffada04a561e3cc39"
+    },
+    {
+      "target": "supabase/release/current-release.json",
+      "sourcePath": "payload/supabase/release/current-release.json",
+      "bytes": 36484,
+      "sha256": "6f3a4b39d686f440c8488e2d8233b6a00ec4d8e3d67ef080e586ddf28a0156bd"
+    },
+    {
+      "target": "supabase/repeatable/17102026_0741_weekly_source_complete_classification_v1.sql",
+      "sourcePath": "payload/supabase/repeatable/17102026_0741_weekly_source_complete_classification_v1.sql",
+      "bytes": 211,
+      "sha256": "4e220b43f3759f2f3644d85673a42c556debffd6a600b9d35483bbb96da9ac75"
+    },
+    {
+      "target": "supabase/repeatable/17102026_0741_weekly_source_complete_classification/01_complete_current_classification.sqlinc",
+      "sourcePath": "payload/supabase/repeatable/17102026_0741_weekly_source_complete_classification/01_complete_current_classification.sqlinc",
+      "bytes": 94520,
+      "sha256": "d6ea8fd40e152bb9038a300274be39c63be1a451e300e9f4ad3eb1bb12f208e7"
+    },
+    {
+      "target": "supabase/repeatable/17102026_0741_weekly_source_complete_classification/99_exact_acl.sqlinc",
+      "sourcePath": "payload/supabase/repeatable/17102026_0741_weekly_source_complete_classification/99_exact_acl.sqlinc",
+      "bytes": 22221,
+      "sha256": "42ca54a71e7dfb0165b22e3285c6173efc7b5494079ae1fd360ef9f849cd9cc5"
+    },
+    {
+      "target": "supabase/verification/15092026_1534_weekly_source_acl_contract_v1.sql",
+      "sourcePath": "payload/supabase/verification/15092026_1534_weekly_source_acl_contract_v1.sql",
+      "bytes": 102517,
+      "sha256": "78d97ce6a540356b07039e2dc6a0748ff322ce0eb571dce2db0b441b5f3ae152"
+    },
+    {
+      "target": "supabase/verification/17102026_0741_source_complete_security.sql",
+      "sourcePath": "payload/supabase/verification/17102026_0741_source_complete_security.sql",
+      "bytes": 10668,
+      "sha256": "07c1240b1b3acbb7fd3f81f97b5904d4ce66443e84aaec0cfabfc8ed141461bf"
+    }
+  ],
+  "managedRoot": "supabase/repeatable/17102026_0741_weekly_source_complete_classification_v1.sql",
+  "classifierDefinitions": 6,
+  "businessBodiesChanged": 0,
+  "newSignatures": 0,
+  "expectedDelta": {
+    "private": 48,
+    "service": 13
+  },
+  "independentExistingRoleLiterals": 81,
+  "native": "NOT_RUN"
+}

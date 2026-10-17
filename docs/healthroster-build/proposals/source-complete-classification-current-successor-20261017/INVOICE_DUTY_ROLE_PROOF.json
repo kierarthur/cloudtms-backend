@@ -1,0 +1,40 @@
+{
+  "latestDefiner": {
+    "root": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health_v1.sql",
+    "physical": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_13_private_weekly_source_invoice_duty_v1.sqlinc",
+    "wholeSha256": "7b5fc79cd832be5057ab838df3a0fb65ac11b758d6a0a594a1b3bcf2fadf7636",
+    "definitionSha256": "ad0d930f2f32d7e9b4676a2c0d319a404fd88c06d069b09b719ca491713e4a73",
+    "header": "private.weekly_source_invoice_duty_v1(p_root_timesheet_id uuid) returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'",
+    "securityDefiner": true,
+    "volatility": "s",
+    "searchPath": "pg_catalog,pg_temp"
+  },
+  "explicitLatestAcl": [
+    {
+      "path": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/99_acl.sqlinc",
+      "sha256": "cadf699aecd2f1aa2af93f37c22cede7c3af55ddadf87e624570d501d519f247",
+      "sql": "alter function private.weekly_source_invoice_duty_v1(uuid) owner to postgres;"
+    },
+    {
+      "path": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/99_acl.sqlinc",
+      "sha256": "cadf699aecd2f1aa2af93f37c22cede7c3af55ddadf87e624570d501d519f247",
+      "sql": "revoke all on function private.weekly_source_invoice_duty_v1(uuid) from public,anon,authenticated,service_role;"
+    }
+  ],
+  "originalAclOwner": "private helper, explicit revoke all browser/service roles in05102026_0710",
+  "callers": [
+    {
+      "signature": "private.weekly_source_operational_empty_v1(uuid,uuid)",
+      "physical": "supabase/repeatable/05102026_0512_weekly_source_operational_category_v2.sql",
+      "wholeSourceSha256": "602db4edb834be6a6b3428b5d47828b62f4c7ff3589738bc36d756b30a1b8700",
+      "header": "private.weekly_source_operational_empty_v1( p_root_timesheet_id uuid,p_expected_origin_id uuid ) returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'",
+      "statements": [
+        "v_invoice_duty:=private.weekly_source_invoice_duty_v1(p_root_timesheet_id);"
+      ]
+    }
+  ],
+  "role": "PRIVATE_HELPER",
+  "inheritedGrantAssumption": false,
+  "bodyChanged": false,
+  "native": "NOT_RUN"
+}

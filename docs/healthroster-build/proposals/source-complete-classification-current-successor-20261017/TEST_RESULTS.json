@@ -1,0 +1,21 @@
+{
+  "passed": 10,
+  "failed": 0,
+  "checks": [
+    "whole-current-owner-reverse:supabase/repeatable/17102026_0741_weekly_source_complete_classification/01_complete_current_classification.sqlinc",
+    "whole-current-owner-reverse:supabase/verification/15092026_1534_weekly_source_acl_contract_v1.sql",
+    "whole-current-owner-reverse:supabase/release/current-release.json",
+    "exact81-explicit-role-proofs-no-schema-inference",
+    "six-complete-classifier-owners-only61-new-role-literals",
+    "all-original-classifier-literals-and-Same-Daily-Keep-Entry-read-retained",
+    "independent-mandatory-exact-delta-and-all-old-literals-retained",
+    "exact81-catalogue-verifier-owner-definer-volatility-path-ACL-literals",
+    "six-only-managed-chain-forwards-full-raw-inverse",
+    "invoice-duty-latest-explicit-owner-only-proof-and-native-callers"
+  ],
+  "businessBodiesChanged": 0,
+  "newSignatures": 0,
+  "sourceOnly": true,
+  "native": "NOT_RUN",
+  "dbConnections": 0
+}
