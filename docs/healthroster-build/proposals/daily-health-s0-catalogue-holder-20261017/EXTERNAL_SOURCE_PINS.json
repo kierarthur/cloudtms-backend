@@ -1,9 +1,9 @@
 [
   {
     "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/contract.mjs",
-    "commit": "48c361b3cdc0724023971a68a6a203099a4cd9af",
+    "commit": "57beec7e349ab394306c73ae8fdbda5f23a25eab",
     "bytes": 7643,
-    "sha256": "28ba627c497817f4524bda0fb99a39875e84c9d71a7b8ecc10bff093aae2c923"
+    "sha256": "a02f4e8c6e9f26c0b780490bcc09f9c860ffbb534095b0f10857fb149e297801"
   },
   {
     "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/mapping/stage.mjs",
