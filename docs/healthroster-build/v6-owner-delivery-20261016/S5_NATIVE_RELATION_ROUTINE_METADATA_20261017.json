@@ -1,0 +1,441 @@
+{
+  "version": "S5_FIXED_NATIVE_RELATION_ROUTINE_METADATA_SUMMARY_V1",
+  "recordedAt": "2026-10-17T08:21:58.377Z",
+  "observation": "FIXED_CATALOGUE_ONLY_NO_BUSINESS_ROWS_OR_INVOCATION",
+  "completePages": {
+    "relations": 15,
+    "policies": 15,
+    "rules": 0,
+    "privileges": [
+      {
+        "offset": 0,
+        "total": 276,
+        "returned": 100,
+        "eof": false
+      },
+      {
+        "offset": 100,
+        "total": 276,
+        "returned": 100,
+        "eof": false
+      },
+      {
+        "offset": 200,
+        "total": 276,
+        "returned": 76,
+        "eof": true
+      }
+    ],
+    "routines": 4
+  },
+  "relations": [
+    {
+      "relation": "audit_events",
+      "kind": "table",
+      "owner": "dee50tht",
+      "rls": true,
+      "forced": false,
+      "select": {
+        "anon": false,
+        "authenticated": false,
+        "service_role": true,
+        "dee50tht": true
+      }
+    },
+    {
+      "relation": "candidate_submission_components",
+      "kind": "table",
+      "owner": "dee50tht",
+      "rls": true,
+      "forced": true,
+      "select": {
+        "anon": false,
+        "authenticated": false,
+        "service_role": true,
+        "dee50tht": true
+      }
+    },
+    {
+      "relation": "candidate_submission_workflows",
+      "kind": "table",
+      "owner": "dee50tht",
+      "rls": true,
+      "forced": true,
+      "select": {
+        "anon": false,
+        "authenticated": false,
+        "service_role": true,
+        "dee50tht": true
+      }
+    },
+    {
+      "relation": "candidates",
+      "kind": "table",
+      "owner": "dee50tht",
+      "rls": true,
+      "forced": false,
+      "select": {
+        "anon": false,
+        "authenticated": false,
+        "service_role": true,
+        "dee50tht": true
+      }
+    },
+    {
+      "relation": "clients",
+      "kind": "table",
+      "owner": "dee50tht",
+      "rls": true,
+      "forced": false,
+      "select": {
+        "anon": false,
+        "authenticated": false,
+        "service_role": true,
+        "dee50tht": true
+      }
+    },
+    {
+      "relation": "contract_weeks",
+      "kind": "table",
+      "owner": "dee50tht",
+      "rls": true,
+      "forced": false,
+      "select": {
+        "anon": false,
+        "authenticated": false,
+        "service_role": true,
+        "dee50tht": true
+      }
+    },
+    {
+      "relation": "contracts",
+      "kind": "table",
+      "owner": "dee50tht",
+      "rls": true,
+      "forced": false,
+      "select": {
+        "anon": false,
+        "authenticated": false,
+        "service_role": true,
+        "dee50tht": true
+      }
+    },
+    {
+      "relation": "manual_timesheet_queue",
+      "kind": "table",
+      "owner": "dee50tht",
+      "rls": true,
+      "forced": false,
+      "select": {
+        "anon": false,
+        "authenticated": false,
+        "service_role": true,
+        "dee50tht": true
+      }
+    },
+    {
+      "relation": "settings_defaults",
+      "kind": "table",
+      "owner": "dee50tht",
+      "rls": true,
+      "forced": false,
+      "select": {
+        "anon": false,
+        "authenticated": false,
+        "service_role": true,
+        "dee50tht": true
+      }
+    },
+    {
+      "relation": "timesheet_evidence",
+      "kind": "table",
+      "owner": "dee50tht",
+      "rls": true,
+      "forced": false,
+      "select": {
+        "anon": false,
+        "authenticated": false,
+        "service_role": true,
+        "dee50tht": true
+      }
+    },
+    {
+      "relation": "timesheet_financial_retention",
+      "kind": "table",
+      "owner": "dee50tht",
+      "rls": true,
+      "forced": false,
+      "select": {
+        "anon": false,
+        "authenticated": false,
+        "service_role": false,
+        "dee50tht": true
+      }
+    },
+    {
+      "relation": "timesheets",
+      "kind": "table",
+      "owner": "dee50tht",
+      "rls": true,
+      "forced": false,
+      "select": {
+        "anon": false,
+        "authenticated": false,
+        "service_role": true,
+        "dee50tht": true
+      }
+    },
+    {
+      "relation": "timesheets_financials",
+      "kind": "table",
+      "owner": "dee50tht",
+      "rls": true,
+      "forced": false,
+      "select": {
+        "anon": false,
+        "authenticated": false,
+        "service_role": true,
+        "dee50tht": true
+      }
+    },
+    {
+      "relation": "weekly_exceptional_pay_target_families",
+      "kind": "table",
+      "owner": "dee50tht",
+      "rls": true,
+      "forced": true,
+      "select": {
+        "anon": false,
+        "authenticated": false,
+        "service_role": false,
+        "dee50tht": true
+      }
+    },
+    {
+      "relation": "weekly_source_row_timesheet_lineages",
+      "kind": "table",
+      "owner": "dee50tht",
+      "rls": true,
+      "forced": true,
+      "select": {
+        "anon": false,
+        "authenticated": false,
+        "service_role": false,
+        "dee50tht": true
+      }
+    }
+  ],
+  "policies": {
+    "count": 15,
+    "everyPolicyName": "cloudtms_miget_service_owner_all",
+    "everyUsing": "true",
+    "everyCheck": "true",
+    "everyRoleList": [
+      "dee50tht",
+      "service_role"
+    ],
+    "everyCommand": "all",
+    "everyPermissive": true
+  },
+  "routines": [
+    {
+      "schema": "public",
+      "name": "timesheet_lifecycle_guard_signature_v1",
+      "arguments": "p_timesheet_id uuid, p_contract_week_id uuid, p_include_payload boolean",
+      "owner": "dee50tht",
+      "securityDefiner": true,
+      "volatility": "volatile",
+      "acl": [
+        {
+          "grantee": "dee50tht",
+          "grantor": "dee50tht",
+          "execute": "EXECUTE",
+          "grantable": false
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "dee50tht",
+          "execute": "EXECUTE",
+          "grantable": false
+        }
+      ],
+      "effective": [
+        {
+          "role": "anon",
+          "execute": false,
+          "schemaUsage": true,
+          "callable": false
+        },
+        {
+          "role": "authenticated",
+          "execute": false,
+          "schemaUsage": true,
+          "callable": false
+        },
+        {
+          "role": "service_role",
+          "execute": true,
+          "schemaUsage": true,
+          "callable": true
+        },
+        {
+          "role": "dee50tht",
+          "execute": true,
+          "schemaUsage": true,
+          "callable": true
+        }
+      ]
+    },
+    {
+      "schema": "private",
+      "name": "_candidate_feature_enabled_current_v1",
+      "arguments": "p_feature_key text",
+      "owner": "dee50tht",
+      "securityDefiner": true,
+      "volatility": "stable",
+      "acl": [
+        {
+          "grantee": "dee50tht",
+          "grantor": "dee50tht",
+          "execute": "EXECUTE",
+          "grantable": false
+        }
+      ],
+      "effective": [
+        {
+          "role": "anon",
+          "execute": false,
+          "schemaUsage": false,
+          "callable": false
+        },
+        {
+          "role": "authenticated",
+          "execute": false,
+          "schemaUsage": false,
+          "callable": false
+        },
+        {
+          "role": "service_role",
+          "execute": false,
+          "schemaUsage": true,
+          "callable": false
+        },
+        {
+          "role": "dee50tht",
+          "execute": true,
+          "schemaUsage": true,
+          "callable": true
+        }
+      ]
+    },
+    {
+      "schema": "private",
+      "name": "_candidate_signature_component_v1",
+      "arguments": "p_timesheet_id uuid, p_contract_week_id uuid",
+      "owner": "dee50tht",
+      "securityDefiner": true,
+      "volatility": "stable",
+      "acl": [
+        {
+          "grantee": "dee50tht",
+          "grantor": "dee50tht",
+          "execute": "EXECUTE",
+          "grantable": false
+        }
+      ],
+      "effective": [
+        {
+          "role": "anon",
+          "execute": false,
+          "schemaUsage": false,
+          "callable": false
+        },
+        {
+          "role": "authenticated",
+          "execute": false,
+          "schemaUsage": false,
+          "callable": false
+        },
+        {
+          "role": "service_role",
+          "execute": false,
+          "schemaUsage": true,
+          "callable": false
+        },
+        {
+          "role": "dee50tht",
+          "execute": true,
+          "schemaUsage": true,
+          "callable": true
+        }
+      ]
+    },
+    {
+      "schema": "private",
+      "name": "_candidate_record_capabilities_v1",
+      "arguments": "p_timesheet_id uuid, p_contract_week_id uuid, p_proposed_claim jsonb",
+      "owner": "dee50tht",
+      "securityDefiner": true,
+      "volatility": "stable",
+      "acl": [
+        {
+          "grantee": "dee50tht",
+          "grantor": "dee50tht",
+          "execute": "EXECUTE",
+          "grantable": false
+        }
+      ],
+      "effective": [
+        {
+          "role": "anon",
+          "execute": false,
+          "schemaUsage": false,
+          "callable": false
+        },
+        {
+          "role": "authenticated",
+          "execute": false,
+          "schemaUsage": false,
+          "callable": false
+        },
+        {
+          "role": "service_role",
+          "execute": false,
+          "schemaUsage": true,
+          "callable": false
+        },
+        {
+          "role": "dee50tht",
+          "execute": true,
+          "schemaUsage": true,
+          "callable": true
+        }
+      ]
+    }
+  ],
+  "inputValidationCorrection": {
+    "initialLimit": 100,
+    "toolValidationMaximum": 50,
+    "correctedLimit": 50,
+    "initialDatabaseQueryExecuted": false
+  },
+  "physicalOwner": "dee50tht",
+  "sourceLogicalOwner": "postgres",
+  "sourceMetadataUnchanged": true,
+  "nativeInvocation": "NOT_RUN",
+  "fixtureAndActor": "UNBOUND",
+  "builtinIdentity": "NOT_YET_QUALIFIED",
+  "rawBusinessMapsSaved": false,
+  "nativeRoleBoundaryReview": {
+    "ownerSelectAll15": true,
+    "browserSelectAll15Denied": true,
+    "serviceDirectSelectDeniedRelations": [
+      "timesheet_financial_retention",
+      "weekly_exceptional_pay_target_families",
+      "weekly_source_row_timesheet_lineages"
+    ],
+    "serviceRoleDoesNotNeedDirectHeapGrantForOwnerDefiner": "Existing exact owner-bound SECURITY DEFINER route; no grant change",
+    "initialRootExpectationCorrected": "An overbroad local assertion expected service_role direct SELECT on all15; actual metadata shows3 existing denied heaps. This was a check assumption, not an observed product failure. Receipt retains actual values.",
+    "nativeExecution": "NOT_RUN"
+  }
+}
