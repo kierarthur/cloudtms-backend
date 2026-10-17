@@ -1,0 +1,17 @@
+{
+  "version": "DAILY_REGISTRY_SOURCE_BRIDGE_ROOT_REVIEW_V1",
+  "reviewedReportParent": "8d2ef953c927ad5bc2a5787b8da6a3891565a8e3",
+  "rootSource": "91b0614a47cb734190b4dbd015b3a9141de52fb6",
+  "peerCommit": "cfbb2bde57b13912ede2b2cbf576a7deaa857076",
+  "peerVerdict": "ACCEPT_BOUNDED_SOURCE_BINDING_FORWARD",
+  "rootControllerTests": 23,
+  "registryTests": 19,
+  "bookkeeperTests": 11,
+  "allPacketVerifiers": "PASS",
+  "change": "Exact one-Later-chain registry inverse and one bookkeeper runtime pin; four actual source commits with complete unchanged guards.",
+  "review": "Root read controller full source/negative tests and coupling full raw inverse; replayed all source packet tests/verifiers.",
+  "runtimeMounted": false,
+  "authInvoked": false,
+  "nativeInvoked": false,
+  "businessInvoked": false
+}

@@ -1,0 +1,54 @@
+{
+  "verdict": "ACCEPT_BOUNDED_SOURCE_BINDING_FORWARD",
+  "packets": [
+    {
+      "path": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026/.codex-tmp/daily-later-registry-forward-20261017-665ee7fa4561b1009138894890990e68",
+      "manifestSha256": "9c22d99e17de18714a4774d736ad52e834e685d613fc82339833bffbf733765d"
+    },
+    {
+      "path": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026/.codex-tmp/daily-bookkeeper-registry-pin-forward-20261017-de49aebf0894ab7528549a76238d6424",
+      "manifestSha256": "93f7ac96b7fa4312a5e9e45627c0518061c7b1fa3fe4f068a1de9d81b2c76b95"
+    }
+  ],
+  "filesVerified": 49,
+  "currentSavedIndexHeadHistoricalParents": 24,
+  "bookkeeperMetadataParents": 2,
+  "approvedRootImages": 5,
+  "sourceHunks": 3,
+  "registryTargets": 6,
+  "bookkeeperTargets": 2,
+  "holderTargets": 0,
+  "retainedBookkeeperRuntimePins": 11,
+  "ownHistoricalSubstitutionRefusals": [
+    {
+      "file": "docs/bpay-next/final-definer-closures.json",
+      "ref": "91b0614a47cb734190b4dbd015b3a9141de52fb6",
+      "refused": true
+    },
+    {
+      "file": "docs/bpay-next/final-definer-closures.json",
+      "ref": "69dde78cd4d26d863cb7aa1f3aeb53d61bbc088f",
+      "refused": true
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/LATER_REPLY_INT63_ROOT_SOURCE_MOUNT_20261017.json",
+      "ref": "91b0614a47cb734190b4dbd015b3a9141de52fb6",
+      "refused": true
+    },
+    {
+      "file": "scripts/bpay-next-final-definers.mjs",
+      "ref": "51177b9abcdc9f089e680c9e7e9ef5285f09ff57",
+      "refused": true
+    },
+    {
+      "file": "supabase/release/current-release.json",
+      "ref": "69dde78cd4d26d863cb7aa1f3aeb53d61bbc088f",
+      "refused": true
+    }
+  ],
+  "privateTargetAccess": "NONE",
+  "liveSourceAdmission": "NOT_RUN",
+  "native": "NOT_RUN",
+  "auth": "NOT_RUN",
+  "mutationsToOtherWorktrees": 0
+}

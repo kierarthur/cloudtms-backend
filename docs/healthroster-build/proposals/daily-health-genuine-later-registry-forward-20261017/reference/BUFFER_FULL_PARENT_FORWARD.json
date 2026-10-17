@@ -1,0 +1,17 @@
+{
+  "parent": "69dde78cd4d26d863cb7aa1f3aeb53d61bbc088f",
+  "target": "scripts/bpay-next-final-definers.mjs",
+  "beforeSha256": "51ab7fd6d5c582ee7f4cab612502c4fc7ac11088cb1a996dd2cf1e6561468d09",
+  "afterSha256": "b6a8143f2bae077a4b72857419b4f8fab9f7652181f6ad3bf1fdcfbd4b77bafa",
+  "hunks": [
+    {
+      "before": "  const result = spawnSync('git', args, { cwd: repoRoot, encoding: 'utf8', windowsHide: true });",
+      "after": "  const result = spawnSync('git', args, { cwd: repoRoot, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024, windowsHide: true });"
+    }
+  ],
+  "wholeRawInverse": true,
+  "sourceChanges": 1,
+  "unchangedReleaseBaseCommit": "a6f7423eb71e6e7cd173e705c2290e5408a1d077",
+  "newMaxBufferBytes": 8388608,
+  "sqlRuntimePolicyChanges": 0
+}

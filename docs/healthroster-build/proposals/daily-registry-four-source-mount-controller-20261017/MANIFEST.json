@@ -1,0 +1,40 @@
+{
+  "version": "FOUR_SOURCE_MOUNT_CONTROLLER_SOURCE_MANIFEST_V1",
+  "files": [
+    {
+      "file": "BOOKKEEPER_GUARD_SOURCE_PROOF.json",
+      "bytes": 453,
+      "sha256": "0605a8514e3439c43cf9cf6c9e53c6b4013421b28417ec5b836c72c22ca0d129"
+    },
+    {
+      "file": "README.md",
+      "bytes": 4413,
+      "sha256": "8de4e16ee4866b566f74b52dd3eb44266894d83c991a8912ea0d78bade0f2126"
+    },
+    {
+      "file": "RESULTS.json",
+      "bytes": 355,
+      "sha256": "680e69c13ec8973156c6283d316088b7bed99b06eb3a161ae35290e481e72aa8"
+    },
+    {
+      "file": "run.mjs",
+      "bytes": 12840,
+      "sha256": "45abd7b91e322b31f613b16b292127dcb93f4c3b4a09d81023374bf9a176a05f"
+    },
+    {
+      "file": "SOURCE_PINS.json",
+      "bytes": 2353,
+      "sha256": "edce318e09fcc81e663d55e4e07f629a0ef48daff9f641e2322d5df173caffea"
+    },
+    {
+      "file": "test.mjs",
+      "bytes": 4357,
+      "sha256": "06cc30a0953bdaf9c357b2c2da69c5169e0acc8219e94f614fcc63efbcc543a3"
+    },
+    {
+      "file": "verify.mjs",
+      "bytes": 820,
+      "sha256": "f2d52ae1a81217ed87d792bfb389f9fd24cfbb9a5fe344501a0649a4da4e6cf0"
+    }
+  ]
+}

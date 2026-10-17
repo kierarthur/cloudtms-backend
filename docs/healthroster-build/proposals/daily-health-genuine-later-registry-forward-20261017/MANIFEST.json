@@ -1,0 +1,190 @@
+{
+  "version": "LATER_EXACT_REGISTRY_SOURCE_FORWARD_MANIFEST_V1",
+  "files": [
+    {
+      "file": "BINDING.json",
+      "bytes": 5896,
+      "sha256": "7979445683dba3ca6b8f09de06c0b6c569b74862e1977ac937631a45437fefe7"
+    },
+    {
+      "file": "dry-run.mjs",
+      "bytes": 6336,
+      "sha256": "5252b31bd60e189be14b7fa83d95919e8beff926ffe8ce9d120d100db9cbd164"
+    },
+    {
+      "file": "FULL_SOURCE_FORWARD.json",
+      "bytes": 6797,
+      "sha256": "e70fcf17e30dddc035a83dfaea30f62b542cb49d946e1f7ac63b7b450fb5613e"
+    },
+    {
+      "file": "materialize.mjs",
+      "bytes": 5646,
+      "sha256": "3c3d13d2fe4746bb8fd6b13a154df129c04fb10cf7aa5ceb19d1adf4cb5fe2d4"
+    },
+    {
+      "file": "MATERIALIZER_FULL_PARENT_FORWARD.json",
+      "bytes": 11641,
+      "sha256": "56470b32d8ac7e033c2085fd66af400f0f6b46f26e234669a16c416602cf9945"
+    },
+    {
+      "file": "PARENTS.json",
+      "bytes": 10858,
+      "sha256": "f312985e2887b66f96df88c17e51da33c570fe7869af8ae30f0dbdc2d9637db4"
+    },
+    {
+      "file": "payload/operator/git-image-batch.mjs",
+      "bytes": 23257,
+      "sha256": "ae3053a74df75781fdf155c1c94fd3bd55bbd617d59336ed6f414732bdf0eaec"
+    },
+    {
+      "file": "README.md",
+      "bytes": 3965,
+      "sha256": "c9091028d090bc857b109d2759b373edcdfa32e936edde25df46d9e667cb28d5"
+    },
+    {
+      "file": "recipe.mjs",
+      "bytes": 4273,
+      "sha256": "e20096a45c4309138d8cc2eb5877ecd78ddcef56942e1f1a729079d43dfe98a4"
+    },
+    {
+      "file": "reference/BUFFER_FULL_PARENT_FORWARD.json",
+      "bytes": 759,
+      "sha256": "48aa1a207637aa27846ea22a146fa57991af585a821bad3e754c89d6da847fcb"
+    },
+    {
+      "file": "reference/continuation/MANIFEST.json",
+      "bytes": 3559,
+      "sha256": "b10d11e5c914731ebe9c784456a97985b59dd79cb23d3cf3496440dec8dc9462"
+    },
+    {
+      "file": "reference/continuation/SOURCE_PINS.json",
+      "bytes": 4429,
+      "sha256": "1733b31ffdb5495a15bcc92292116351e6376cb0d8bb08d788af1aee98bf4288"
+    },
+    {
+      "file": "reference/continuation/source.mjs",
+      "bytes": 2362,
+      "sha256": "ae5269fca44137189e5f813d9a4159be65dbb235711a5523d80a0281a39123f6"
+    },
+    {
+      "file": "reference/coordinator/MANIFEST.json",
+      "bytes": 2417,
+      "sha256": "3d1a8fe2033dda5bed2b93ece6bbbac2d675197902a42291c4eec00f96bd0044"
+    },
+    {
+      "file": "reference/coordinator/SOURCE_PINS.json",
+      "bytes": 45300,
+      "sha256": "66287db0e27610bc0d58603e91e8576567196919f40a6ec2082e6a17ee6c71c3"
+    },
+    {
+      "file": "reference/coordinator/source.mjs",
+      "bytes": 2056,
+      "sha256": "fc7de33f9e40ab9429692127b466444195f6894fc03aef700a0fc255a773363d"
+    },
+    {
+      "file": "reference/HELPER_FULL_METADATA_EDITS.json",
+      "bytes": 44524,
+      "sha256": "1962b70f40a65c3beb20ea70e234da2d8a60846f1f6b6f734f4ef3e187e06cb5"
+    },
+    {
+      "file": "reference/holder/EXTERNAL_SOURCE_PINS.json",
+      "bytes": 2057,
+      "sha256": "5cc37b170fabf96e31d187cd951533705b4eb7e9a3b7fa8767782582acf8db8c"
+    },
+    {
+      "file": "reference/holder/MANIFEST.json",
+      "bytes": 2880,
+      "sha256": "91549113312cc19b092b205b00f6ed1d049aa72cd948c2bb3326fb11ab00faab"
+    },
+    {
+      "file": "reference/holder/source.mjs",
+      "bytes": 4069,
+      "sha256": "9bcf873383794c3195ba51cf07b8246ca966b83b8a3a7e8b70106035f0dd4c88"
+    },
+    {
+      "file": "reference/operator/contract.mjs",
+      "bytes": 7643,
+      "sha256": "7a9ee854c214ccbc3b8851ceae32dd0bb7ceb5e90aa6f41f44f585d858b2f4db"
+    },
+    {
+      "file": "reference/operator/git-image-batch.mjs",
+      "bytes": 17997,
+      "sha256": "25b77b9234a879fd2ca18bca7d8cf10547ad644a83513ccf050dab171a011426"
+    },
+    {
+      "file": "reference/operator/MANIFEST.json",
+      "bytes": 24285,
+      "sha256": "e973886a39a594ca8886286ac74aeb72039458bb9fe1a127bb05740d928bbdda"
+    },
+    {
+      "file": "reference/operator/reference/audit/CURRENT_SOURCE_CENSUS.json",
+      "bytes": 17945,
+      "sha256": "ea394b58e75dfdc19d704a685b07ea05ac6dba028c10f1a040ec55c1aa9f96b4"
+    },
+    {
+      "file": "reference/operator/reference/mapping/SOURCE_PINS.json",
+      "bytes": 6541,
+      "sha256": "233c9bf7140bdd0b1bb14a8b60da98335042d7be87afa20792dc90b98e9a555c"
+    },
+    {
+      "file": "reference/operator/SOURCE_PINS.json",
+      "bytes": 4362,
+      "sha256": "95cd9f9f54ff0f548bf49dba26b4f3304d304bea97cde4de31a74f7ba175946a"
+    },
+    {
+      "file": "reference/operator/source.mjs",
+      "bytes": 1950,
+      "sha256": "01d4acb9309eb71a315f4cc5fbe315b90bf29f69d62742f0152c6ee28ad937b2"
+    },
+    {
+      "file": "reference/originalBatch/git-image-batch.mjs",
+      "bytes": 9138,
+      "sha256": "4dd8842ca35206870d3a410b43f4358433cb67aee6f50dc586401f4049973e20"
+    },
+    {
+      "file": "reference/parent-dry-run.mjs",
+      "bytes": 6336,
+      "sha256": "5252b31bd60e189be14b7fa83d95919e8beff926ffe8ce9d120d100db9cbd164"
+    },
+    {
+      "file": "reference/parent-materialize.mjs",
+      "bytes": 5607,
+      "sha256": "b50f190fb535e847b87e0ce1b7392e3d1855f0754816f08b435e0595d03875d8"
+    },
+    {
+      "file": "reference/parent-recipe.mjs",
+      "bytes": 4273,
+      "sha256": "54adbc79f5a8bc5d5f843f1f75298ad7d7a223e2968f7eb812f53e1bda4edf57"
+    },
+    {
+      "file": "reference/prior-materialize.mjs",
+      "bytes": 5607,
+      "sha256": "b50f190fb535e847b87e0ce1b7392e3d1855f0754816f08b435e0595d03875d8"
+    },
+    {
+      "file": "reference/ROOT_BUFFER_REVIEW.json",
+      "bytes": 1356,
+      "sha256": "fc7a0a9492fd101f894520b0f97c91a59fc2b3ce1bbe05a7cfc1d4843761ea40"
+    },
+    {
+      "file": "reference/ROOT_HELPER_REVIEW.json",
+      "bytes": 6781,
+      "sha256": "0658771b97e9ba5c50340980969bb3b02e3a36a655d9f0b6884e23a8bafe58f9"
+    },
+    {
+      "file": "RESULTS.json",
+      "bytes": 678,
+      "sha256": "02241de3c77043d6af70cbbcddaf21fccd6d28cf0c2fdaba106e53745b513cf2"
+    },
+    {
+      "file": "test.mjs",
+      "bytes": 5254,
+      "sha256": "fcf5386d656efe2dee8ee75d459c3a9369dd221984a0fddb0b1d8d6e8c5373ce"
+    },
+    {
+      "file": "verify.mjs",
+      "bytes": 1432,
+      "sha256": "fd07f92cb76620ba2a3f12726f7097eeeab90d2af1b44e7610490579159ba0c7"
+    }
+  ]
+}

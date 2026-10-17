@@ -1,0 +1,55 @@
+{
+  "version": "BOOKKEEPER_EXACT_REGISTRY_PIN_SOURCE_MANIFEST_V1",
+  "files": [
+    {
+      "file": "BINDING.json",
+      "bytes": 1279,
+      "sha256": "8ef4ba1f6438b5442c38ff8f77bfa5b403fad771723046ad299be1a68e79d855"
+    },
+    {
+      "file": "materialize.mjs",
+      "bytes": 3839,
+      "sha256": "94714b97fd9eadff4d44ff59c1b7d6fa4b97ea901e3f13a1117f6a0485de57c1"
+    },
+    {
+      "file": "README.md",
+      "bytes": 2423,
+      "sha256": "24ee3393848a71f6aa6096ef802081b09a4cf56652e75d04a3ae8c067e9b4fb2"
+    },
+    {
+      "file": "recipe.mjs",
+      "bytes": 2662,
+      "sha256": "db3075847f86da4d99de6692174b974cac389b78e1bc2108551c288ef3631960"
+    },
+    {
+      "file": "reference/MANIFEST.json",
+      "bytes": 4219,
+      "sha256": "b737600654f64127a47eb0fd6af759e16de8c30625ad465e86bbc960c1ba5c0e"
+    },
+    {
+      "file": "reference/PARENTS.json",
+      "bytes": 10293,
+      "sha256": "ed204aed5b7ab0d77b981e7a056b38592d667fa381ba6cdae069345992501c9f"
+    },
+    {
+      "file": "reference/proposed-git-image-batch.mjs",
+      "bytes": 23257,
+      "sha256": "ae3053a74df75781fdf155c1c94fd3bd55bbd617d59336ed6f414732bdf0eaec"
+    },
+    {
+      "file": "RESULTS.json",
+      "bytes": 377,
+      "sha256": "5d3d6b1e7415542b169b363898c3ec029a1704f64d87c1068ff1c340a14e03c2"
+    },
+    {
+      "file": "test.mjs",
+      "bytes": 3066,
+      "sha256": "0b5e87670ae61cac3a3403377e05a16de2a4a339f1a3c998e0da7521fafffea2"
+    },
+    {
+      "file": "verify.mjs",
+      "bytes": 934,
+      "sha256": "3ce6be2e7669e5ab95bed0bb3d5465fc86ef5585104403c5f381bb4705d15431"
+    }
+  ]
+}

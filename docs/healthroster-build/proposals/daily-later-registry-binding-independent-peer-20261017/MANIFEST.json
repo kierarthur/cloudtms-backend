@@ -1,0 +1,20 @@
+{
+  "version": "LATER_EXACT_REGISTRY_AND_BOOKKEEPER_INDEPENDENT_PEER_V1",
+  "files": [
+    {
+      "file": "peer.mjs",
+      "bytes": 6963,
+      "sha256": "bc7d6d4c041670c19ae5abf231c5f9050bc5eb16cb4b37f24422d339d487f64c"
+    },
+    {
+      "file": "RESULTS.json",
+      "bytes": 1907,
+      "sha256": "66ecbaf7586efab534cd0d327874986af2cabcbb8c0d6f1ea462e2ea20398a55"
+    },
+    {
+      "file": "REVIEW.md",
+      "bytes": 3868,
+      "sha256": "bd20f6170c0cd74998ccdccdef118d3acd11c8026fb1e5b4ea10b8bb3f45ee7f"
+    }
+  ]
+}

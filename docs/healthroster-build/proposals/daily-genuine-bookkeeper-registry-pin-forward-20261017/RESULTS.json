@@ -1,0 +1,14 @@
+{
+  "version": "BOOKKEEPER_EXACT_REGISTRY_PIN_SOURCE_CHECKS_V1",
+  "tests": 11,
+  "passed": 11,
+  "failed": 0,
+  "metadataTargets": 2,
+  "retainedOtherRuntimePins": 11,
+  "allHistoricalRowsUnchanged": true,
+  "wholeRawMetadataInverses": true,
+  "sourceOnly": true,
+  "actualAuthNativeBrowserIpcOrStage": false,
+  "privateAccess": false,
+  "reportRuntimeOrHeadChanged": false
+}

@@ -1,0 +1,47 @@
+{
+  "version": "FOUR_SOURCE_MOUNT_CONTROLLER_PUBLIC_OWNER_PINS_V1",
+  "rows": [
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+      "file": "docs/healthroster-build/proposals/daily-genuine-stage-root-bookkeeper-20261017/bookkeeper.mjs",
+      "commit": "8d2ef953c927ad5bc2a5787b8da6a3891565a8e3",
+      "bytes": 10331,
+      "sha256": "5121f9d3ac3e087d7153937a64d5d4e0cfef51e1868f681e1cdd5e432fd1943f"
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+      "file": "docs/healthroster-build/proposals/daily-genuine-stage-root-bookkeeper-20261017/core.mjs",
+      "commit": "8d2ef953c927ad5bc2a5787b8da6a3891565a8e3",
+      "bytes": 10764,
+      "sha256": "0101582d00801709d57c9f518cf17506f457fbd64ff33e965ac4821be9953f25"
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/source.mjs",
+      "commit": "8d2ef953c927ad5bc2a5787b8da6a3891565a8e3",
+      "bytes": 1950,
+      "sha256": "01d4acb9309eb71a315f4cc5fbe315b90bf29f69d62742f0152c6ee28ad937b2"
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+      "file": "docs/healthroster-build/proposals/daily-health-s0-stage-coordinator-20261017/source.mjs",
+      "commit": "8d2ef953c927ad5bc2a5787b8da6a3891565a8e3",
+      "bytes": 2056,
+      "sha256": "fc7de33f9e40ab9429692127b466444195f6894fc03aef700a0fc255a773363d"
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-single-stage-coordinator-20261017/source.mjs",
+      "commit": "8d2ef953c927ad5bc2a5787b8da6a3891565a8e3",
+      "bytes": 2362,
+      "sha256": "ae5269fca44137189e5f813d9a4159be65dbb235711a5523d80a0281a39123f6"
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+      "file": "docs/healthroster-build/proposals/daily-genuine-root-stage-bookkeeper-20261017.mjs",
+      "commit": "3e416b7085b596ca85331bbbc3f662988a6a8cf7",
+      "bytes": 11251,
+      "sha256": "f1f77eb5222ddea37357f14fe6eb2b44ea1c0079fd6c5e42d3286d945dcd5e08"
+    }
+  ]
+}

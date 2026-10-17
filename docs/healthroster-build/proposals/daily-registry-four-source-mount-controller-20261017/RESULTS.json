@@ -1,0 +1,12 @@
+{
+  "version": "FOUR_SOURCE_MOUNT_CONTROLLER_SOURCE_TEST_RESULTS_V1",
+  "tests": 23,
+  "pass": 23,
+  "fail": 0,
+  "syntax": "PASS",
+  "actualControllerRun": "NOT_RUN",
+  "commitsOrPushesByAuthor": 0,
+  "privateContentOrPathMetadataAccessByTests": 0,
+  "actualAuthNativeBrowserIpc": 0,
+  "reportHeadUnchanged": "8d2ef953c927ad5bc2a5787b8da6a3891565a8e3"
+}

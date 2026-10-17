@@ -1,0 +1,8 @@
+{
+  "version": "UNCHANGED_BOOKKEEPER_PUBLIC_IMAGE_AND_FIXED_OWNER_GUARD_V1",
+  "originalPredicate": "b.length===row.bytes&&sha(b)===row.sha256&&b.equals(git(report,'show',row.commit+':'+row.file))",
+  "controllerPredicate": "b.length===row.bytes&&sha(b)===row.sha256&&b.equals(g(REPORT,'show',row.commit+':'+row.file))",
+  "onlyIdentifierAliasesChanged": true,
+  "actualAssertReviewedImageCalled": true,
+  "privateJournalOrBusinessPhaseCalled": false
+}

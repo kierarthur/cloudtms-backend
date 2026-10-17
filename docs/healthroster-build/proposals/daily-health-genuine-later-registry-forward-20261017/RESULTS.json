@@ -1,0 +1,20 @@
+{
+  "version": "LATER_EXACT_REGISTRY_SOURCE_FORWARD_RESULTS_V1",
+  "tests": 19,
+  "pass": 19,
+  "fail": 0,
+  "sourceHunks": 3,
+  "completeRawSourceInverse": true,
+  "allPriorQualifiersByteIdentical": true,
+  "chainChanged": 1,
+  "otherChainsPreserved": 1658,
+  "currentReleaseUnchanged": true,
+  "sourceOnly": true,
+  "actualAuth": false,
+  "actualPrivatePathLookup": false,
+  "actualNativeApiBrowserIpc": false,
+  "originalWholePreflight": "ACTUAL_PUBLIC_ROOT_IMAGES_OFFLINE_ONLY_3_SYNTHETIC_PRIVATE_METADATA",
+  "sourceChain": "LABELLED_VIRTUAL_POSTIMAGES_ONLY_NOT_LIVE_ADMISSION",
+  "reportHead": "8d2ef953c927ad5bc2a5787b8da6a3891565a8e3",
+  "reportRuntimeChanged": false
+}
