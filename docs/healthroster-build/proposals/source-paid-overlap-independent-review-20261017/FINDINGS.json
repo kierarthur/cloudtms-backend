@@ -1,0 +1,231 @@
+{
+  "frozenFunctional": "9c791fa971c97a198c09c4e3579c01b589486c14",
+  "findings": [
+    {
+      "id": "F1",
+      "priority": "P1",
+      "title": "Correction native counters reject valid requests",
+      "commit": "9c791fa971c97a198c09c4e3579c01b589486c14",
+      "source": "forward/broker/src/weekly-source/correct-final-source-orchestrator.mjs",
+      "rawSha256": "905e51fa2c36587650b6afea2246d6cd5039abda075531a5673e7acb9585a8a5",
+      "line": 633,
+      "trigger": "Request scope is a canonical decimal string; native006 emits a JSON number. Even3 versus string3 fails strict comparison. A ready-session counter9007199254740993 then fails integer/Number safe-range admission. Actual exported callback reproduces both failures.",
+      "status": "CONFIRMED_IN_ORIGINAL_CORRECTED_SOURCE_ONLY",
+      "databaseConnections": 0,
+      "native": "NOT_RUN",
+      "disposition": {
+        "commit": "a7e4522cb87ae6961cb40efcb83e4e69b12fbd6c",
+        "verdict": "ACCEPT_BOUNDED_SOURCE_ONLY",
+        "sources": [
+          {
+            "path": "docs/healthroster-build/proposals/same-separate-counter-forward-20261017/payload/broker/src/weekly-source/correct-final-source-orchestrator.mjs",
+            "target": "broker/src/weekly-source/correct-final-source-orchestrator.mjs",
+            "sha256": "e7d251bb5a93cdab7f50c76d8cccf87635d0a2a39565459e2723a7bd7bfe2672"
+          },
+          {
+            "path": "docs/healthroster-build/proposals/same-separate-counter-forward-20261017/payload/broker/src/weekly-source/upload-publication-owner.mjs",
+            "target": "broker/src/weekly-source/upload-publication-owner.mjs",
+            "sha256": "6a086ab44449c9173c0b62e9c9e3a23bd63bf8bbd0bd39bf433e56cdf9bd5e33"
+          },
+          {
+            "path": "docs/healthroster-build/proposals/same-separate-counter-forward-20261017/payload/supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/009_public_weekly_source_upload_context_v1.sqlinc",
+            "target": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/009_public_weekly_source_upload_context_v1.sqlinc",
+            "sha256": "bca137c5d0f189082d0ea609f7410c7eb393b7db0106395b8898e708a739d633"
+          },
+          {
+            "path": "docs/healthroster-build/proposals/same-separate-counter-forward-20261017/payload/supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/034_public_weekly_source_correct_final_prepare_atomic_v1.sqlinc",
+            "target": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/034_public_weekly_source_correct_final_prepare_atomic_v1.sqlinc",
+            "sha256": "2caeef10311fe59dd6376ef4566c3d9fa6ba2007e565f48a1f66c3192fcc2f2f"
+          },
+          {
+            "path": "docs/healthroster-build/proposals/same-separate-counter-forward-20261017/payload/supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/035_public_weekly_source_correct_final_apply_atomic_v1.sqlinc",
+            "target": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/035_public_weekly_source_correct_final_apply_atomic_v1.sqlinc",
+            "sha256": "da7d8d23edff6441d4f94c3da635437506efa176d8094e3053337385a06c4223"
+          },
+          {
+            "path": "docs/healthroster-build/proposals/same-separate-counter-forward-20261017/payload/supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/04_complete_current_review.sqlinc",
+            "target": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/04_complete_current_review.sqlinc",
+            "sha256": "4e5918839b4a0ab8f17ff026ea66773d1f91fa3bbf07c66d5c2c7693e41c2b85"
+          }
+        ],
+        "native": "NOT_RUN",
+        "qualification": "Complete source/control-flow, exact full inverses and bounded offline tests; no native/database/catalogue/installation claim."
+      }
+    },
+    {
+      "id": "F2",
+      "priority": "P1",
+      "title": "Correction callback loses NHSP report identity",
+      "commit": "9c791fa971c97a198c09c4e3579c01b589486c14",
+      "source": "forward/broker/src/weekly-source/correct-final-source-orchestrator.mjs",
+      "rawSha256": "905e51fa2c36587650b6afea2246d6cd5039abda075531a5673e7acb9585a8a5",
+      "line": 639,
+      "trigger": "Native006 frame lacks authority kind/report ID, while callback hardcodes CYCLE/null. A genuine NHSP correction cannot preserve its scope in the resulting review/apply contexts. Actual callback output reproduced with controlled native RPC response.",
+      "status": "CONFIRMED_IN_ORIGINAL_CORRECTED_SOURCE_ONLY",
+      "databaseConnections": 0,
+      "native": "NOT_RUN",
+      "disposition": {
+        "commit": "a7e4522cb87ae6961cb40efcb83e4e69b12fbd6c",
+        "verdict": "ACCEPT_BOUNDED_SOURCE_ONLY",
+        "sources": [
+          {
+            "path": "docs/healthroster-build/proposals/same-separate-counter-forward-20261017/payload/supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/006_public_weekly_source_office_recheck_begin_v1.sqlinc",
+            "target": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/006_public_weekly_source_office_recheck_begin_v1.sqlinc",
+            "sha256": "2aa0ea9059b7226134f0778f37fa5dc90ace78ce5e80af6e6e08a1aafdc5ccbd"
+          },
+          {
+            "path": "docs/healthroster-build/proposals/same-separate-counter-forward-20261017/payload/broker/src/weekly-source/correct-final-source-orchestrator.mjs",
+            "target": "broker/src/weekly-source/correct-final-source-orchestrator.mjs",
+            "sha256": "e7d251bb5a93cdab7f50c76d8cccf87635d0a2a39565459e2723a7bd7bfe2672"
+          },
+          {
+            "path": "docs/healthroster-build/proposals/same-separate-counter-forward-20261017/payload/broker/src/weekly-source/upload-publication-owner.mjs",
+            "target": "broker/src/weekly-source/upload-publication-owner.mjs",
+            "sha256": "6a086ab44449c9173c0b62e9c9e3a23bd63bf8bbd0bd39bf433e56cdf9bd5e33"
+          }
+        ],
+        "native": "NOT_RUN",
+        "qualification": "Complete source/control-flow, exact full inverses and bounded offline tests; no native/database/catalogue/installation claim."
+      }
+    },
+    {
+      "id": "F3",
+      "priority": "P1",
+      "title": "NHSP correction paid questions cannot become reachable",
+      "commit": "9c791fa971c97a198c09c4e3579c01b589486c14",
+      "source": "forward/026_private_weekly_source_paid_match_question_v1.sqlinc",
+      "rawSha256": "f4c4e4bd4585951b38d0e0b720b181af5382ad40f07e166fc69203887395096f",
+      "line": 45,
+      "trigger": "Correction replacement remains CORRECTION_READY and prior publication remains scope CURRENT until APPLY, so this ordinary-only predicate returns UNAVAILABLE. Actual039 also restricts question assembly to CYCLE/ROSTER; both boundaries require correction-specific native identity guards.",
+      "status": "CONFIRMED_IN_ORIGINAL_CORRECTED_SOURCE_ONLY",
+      "databaseConnections": 0,
+      "native": "NOT_RUN",
+      "disposition": {
+        "commit": "a7e4522cb87ae6961cb40efcb83e4e69b12fbd6c",
+        "verdict": "ACCEPT_BOUNDED_SOURCE_ONLY",
+        "sources": [
+          {
+            "path": "docs/healthroster-build/proposals/same-separate-counter-forward-20261017/payload/supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/026_private_weekly_source_paid_match_question_v1.sqlinc",
+            "target": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/026_private_weekly_source_paid_match_question_v1.sqlinc",
+            "sha256": "9fc6cc1c6b34fe5f240766cf3987f83a25a1e8c67a5609bd8b13a61b1559caf2"
+          },
+          {
+            "path": "docs/healthroster-build/proposals/same-separate-counter-forward-20261017/payload/supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/039_private_weekly_source_correct_final_office_preview_v1.sqlinc",
+            "target": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/039_private_weekly_source_correct_final_office_preview_v1.sqlinc",
+            "sha256": "c7dcd26f34a6472d7ebafd59bf03c8078cfffad2fde1182a3bbe1bf45c5549ae"
+          }
+        ],
+        "native": "NOT_RUN",
+        "qualification": "Complete source/control-flow, exact full inverses and bounded offline tests; no native/database/catalogue/installation claim."
+      }
+    },
+    {
+      "id": "F4",
+      "priority": "P1",
+      "title": "Legacy Same is hidden by shared self-bill selector",
+      "commit": "9c791fa971c97a198c09c4e3579c01b589486c14",
+      "source": "forward/019_private_weekly_source_shift_on_self_bill_v1.sqlinc",
+      "rawSha256": "ee2ec48bd7a7b7988701f614124166c2c28a906c30ee7921ffcc5b71e568e1aa",
+      "line": 104,
+      "trigger": "005/007/025 admit genuine SETTLED_LEGACY_SOURCE_COMPONENT Same evidence, but019 hides its NONE-only current companion. Existing Health unprotected_not_finalised_close cancels and retires Contact state when both report-selected facts are false. Preserve all joins/hash/audit guards and exactly the two admitted evidence states.",
+      "status": "CONFIRMED_IN_ORIGINAL_CORRECTED_SOURCE_ONLY",
+      "databaseConnections": 0,
+      "native": "NOT_RUN",
+      "disposition": {
+        "commit": "a7e4522cb87ae6961cb40efcb83e4e69b12fbd6c",
+        "verdict": "ACCEPT_BOUNDED_SOURCE_ONLY",
+        "sources": [
+          {
+            "path": "docs/healthroster-build/proposals/same-separate-counter-forward-20261017/payload/supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/019_private_weekly_source_shift_on_self_bill_v1.sqlinc",
+            "target": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/019_private_weekly_source_shift_on_self_bill_v1.sqlinc",
+            "sha256": "26e2186e4b2026f6aa2576ec3145e56ff2823214c8bbbf7f80a98545e3ad58e2"
+          }
+        ],
+        "native": "NOT_RUN",
+        "qualification": "Complete source/control-flow, exact full inverses and bounded offline tests; no native/database/catalogue/installation claim."
+      }
+    },
+    {
+      "id": "F5",
+      "priority": "P1",
+      "title": "Payable uniqueness rejects approved Same companion rows",
+      "commit": "9c791fa971c97a198c09c4e3579c01b589486c14",
+      "source": "forward/011_private_weekly_source_finalise_engine_v1.sqlinc",
+      "rawSha256": "29d612601c8e9a60d0f1edb46c37126d2a57b9fdbaf04766ab30ef40835bbd52",
+      "line": 409,
+      "trigger": "Complete non-NHSP prebody counts all effects. Approved old-key-present + new-key Same produces one NORMAL plus NONE for the same event, but fails before new current_normal_lines/none_basis processing. Keep full resolution census, require NORMAL uniqueness, and independently bind every NONE row/choice/event/Candidate/client/Contract.",
+      "status": "CONFIRMED_IN_ORIGINAL_CORRECTED_SOURCE_ONLY",
+      "databaseConnections": 0,
+      "native": "NOT_RUN",
+      "disposition": {
+        "commit": "a7e4522cb87ae6961cb40efcb83e4e69b12fbd6c",
+        "verdict": "ACCEPT_BOUNDED_SOURCE_ONLY",
+        "sources": [
+          {
+            "path": "docs/healthroster-build/proposals/same-separate-counter-forward-20261017/payload/supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/011_private_weekly_source_finalise_engine_v1.sqlinc",
+            "target": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/011_private_weekly_source_finalise_engine_v1.sqlinc",
+            "sha256": "56333dc5ea10704bd6532b96845ae2f9931a6769ed96e02385e1118e29acfc28"
+          }
+        ],
+        "native": "NOT_RUN",
+        "qualification": "Complete source/control-flow, exact full inverses and bounded offline tests; no native/database/catalogue/installation claim."
+      }
+    },
+    {
+      "id": "F6",
+      "priority": "P1",
+      "title": "Valid invoice-only window companions fail admission",
+      "commit": "9c791fa971c97a198c09c4e3579c01b589486c14",
+      "source": "forward/018_public_weekly_source_invoice_admit_atomic_v1.sqlinc",
+      "rawSha256": "3eacf88d26ccac85435b6b9331748d9537f75dba274a144de59198fa8859eec5",
+      "line": 176,
+      "trigger": "013/031 create genuine NONE rebill and expense companions in the actual invoice window;016 returns it, but complete018 only admits correction/rounding for a different window. Narrowly allow exact validated NONE origins while preserving zero-pay/window/group checks.",
+      "status": "CONFIRMED_IN_ORIGINAL_CORRECTED_SOURCE_ONLY",
+      "databaseConnections": 0,
+      "native": "NOT_RUN",
+      "disposition": {
+        "commit": "a7e4522cb87ae6961cb40efcb83e4e69b12fbd6c",
+        "verdict": "ACCEPT_BOUNDED_SOURCE_ONLY",
+        "sources": [
+          {
+            "path": "docs/healthroster-build/proposals/same-separate-counter-forward-20261017/payload/supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/018_public_weekly_source_invoice_admit_atomic_v1.sqlinc",
+            "target": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/018_public_weekly_source_invoice_admit_atomic_v1.sqlinc",
+            "sha256": "cd08f0a936d330a5491c9a51b03ee9f2c390bfb497f70357bd85ea09ae3c25fa"
+          }
+        ],
+        "native": "NOT_RUN",
+        "qualification": "Complete source/control-flow, exact full inverses and bounded offline tests; no native/database/catalogue/installation claim."
+      }
+    },
+    {
+      "id": "F7",
+      "priority": "P2",
+      "title": "Genuine NONE Source hours are overwritten with zero",
+      "commit": "9c791fa971c97a198c09c4e3579c01b589486c14",
+      "source": "forward/018_public_weekly_source_invoice_admit_atomic_v1.sqlinc",
+      "rawSha256": "3eacf88d26ccac85435b6b9331748d9537f75dba274a144de59198fa8859eec5",
+      "line": 544,
+      "trigger": "New NONE rebill and NHSP branches set actual Source display hours, then unconditional canonical PAY aggregation overwrites them with the correctly-zero invoice-only pay vector. Final presentation and native invoice lines lose actual hours. Restore validated NONE hours after aggregation; retain zero pay/rates/total and zero expense hours.",
+      "status": "CONFIRMED_IN_ORIGINAL_CORRECTED_SOURCE_ONLY",
+      "databaseConnections": 0,
+      "native": "NOT_RUN",
+      "disposition": {
+        "commit": "a7e4522cb87ae6961cb40efcb83e4e69b12fbd6c",
+        "verdict": "ACCEPT_BOUNDED_SOURCE_ONLY",
+        "sources": [
+          {
+            "path": "docs/healthroster-build/proposals/same-separate-counter-forward-20261017/payload/supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/018_public_weekly_source_invoice_admit_atomic_v1.sqlinc",
+            "target": "supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/018_public_weekly_source_invoice_admit_atomic_v1.sqlinc",
+            "sha256": "cd08f0a936d330a5491c9a51b03ee9f2c390bfb497f70357bd85ea09ae3c25fa"
+          }
+        ],
+        "native": "NOT_RUN",
+        "qualification": "Complete source/control-flow, exact full inverses and bounded offline tests; no native/database/catalogue/installation claim."
+      }
+    }
+  ],
+  "native": "NOT_RUN",
+  "API": "NOT_RUN",
+  "correctedCommit": "a7e4522cb87ae6961cb40efcb83e4e69b12fbd6c",
+  "correctedSelectionSha256": "8b2c91e61a262f592d7ecae6b437f23d7277a5e565c7e4cc70076c0e21719c74"
+}

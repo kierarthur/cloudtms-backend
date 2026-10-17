@@ -1,0 +1,34 @@
+{
+  "functionalCommit": "9c791fa971c97a198c09c4e3579c01b589486c14",
+  "manifestSha256": "8750b4fc696cebce4e767266fa0f35f704d4140b0482026685b1b15a2fdba429",
+  "checks": [
+    "72 exact payload hashes and bytes",
+    "61 Health definitions and seven excluded bodies",
+    "31 complete current owner reversals and 34 new definitions",
+    "31 curated inputs are exact actual committed current owners",
+    "managed include and ACL sets exactly match Health selection",
+    "guard precedes exactly thirteen added columns and no history DML",
+    "source-tests.mjs: 18 checks (writes suppressed)",
+    "command-tests.mjs: 26 checks (writes suppressed)"
+  ],
+  "authorScriptResults": [
+    {
+      "path": "TEST_RESULTS.json",
+      "sha256": "159764ba0a590de1e6edfc9d050fe78aeb8984e0b95d9875821ac0404e6b88b5",
+      "passed": 18,
+      "failed": 0
+    },
+    {
+      "path": "COMMAND_TEST_RESULTS.json",
+      "sha256": "2ce587dcaab3cf2f8dab82e4895d64f54e3f9b5a98ba5915aa9a71c783ed7d7a",
+      "passed": 26,
+      "failed": 0
+    }
+  ],
+  "actualGitBytes": true,
+  "foreignWrites": 0,
+  "excludedBankBodyReads": 0,
+  "native": "NOT_RUN",
+  "API": "NOT_RUN",
+  "databaseConnections": 0
+}
