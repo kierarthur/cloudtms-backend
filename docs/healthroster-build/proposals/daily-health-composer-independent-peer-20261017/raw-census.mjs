@@ -1,0 +1,9 @@
+// Actual committed raw gate only; no allowances or joined-template admission.
+import fs from 'node:fs';import path from 'node:path';import cp from 'node:child_process';import crypto from 'node:crypto';import assert from 'node:assert/strict';import {fileURLToPath,pathToFileURL} from 'node:url';
+const here=path.dirname(fileURLToPath(import.meta.url)),root='D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026',commit='a321f8166310a114f60f31c15ff3aaa14fbae96f',file='scripts/bpay-next-source-gates.mjs',sha=b=>crypto.createHash('sha256').update(b).digest('hex');
+const git=cp.spawnSync('git',['-c','gc.auto=0','-c','maintenance.auto=false','-C',root,'show',commit+':'+file],{maxBuffer:4e6});assert.equal(git.status,0);assert(git.stdout.equals(fs.readFileSync(path.join(root,file))));
+const {specialConstructViolations}=await import(pathToFileURL(path.join(root,file)).href);
+const files=['health/00_presentation.sqlinc','health/05_review_enrollment.sqlinc','health/10_revision_apply.sqlinc','templates/01_review.sql.tmpl','templates/02_accept.sql.tmpl','templates/03_result.sql.tmpl','health/99_acl.sqlinc','admission/ONE_TIME_ADMISSION.sqlinc','verification/mandatory_security.sql','ADDITIVE_REVERSE.sqlinc'];
+const inputs=files.map(file=>{const bytes=fs.readFileSync(path.join(here,'frozen',file));return {file,bytes:bytes.length,sha256:sha(bytes),heldTemplate:file.startsWith('templates/'),rawOccurrences:specialConstructViolations(bytes.toString(),file)};});
+const hazards=inputs.reduce((n,r)=>n+r.rawOccurrences.length,0);assert.equal(hazards,0);
+fs.writeFileSync(path.join(here,'RAW_F23_REPLAY.json'),JSON.stringify({commit,gate:{file,sha256:sha(git.stdout)},inputs,hazards,allowancesAdded:0,joinedF23:'NOT_PROVED_UNPROVIDED_BANK_JOINS',native:'NOT_RUN'},null,2)+'\n');console.log(JSON.stringify({inputs:inputs.length,hazards,allowancesAdded:0}));

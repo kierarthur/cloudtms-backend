@@ -1,0 +1,11 @@
+create or replace function private.timesheet_contract_move_context_commit_guard_v1()
+returns trigger language plpgsql security definer set search_path='pg_catalog','private','pg_temp'
+as $function$
+begin
+ if exists(select 1 from private.timesheet_contract_move_execution_contexts c where c.id=new.id)
+  or exists(select 1 from private.timesheet_contract_move_capabilities c where c.execution_context_id=new.id) then
+  raise exception 'CONTRACT_MOVE_LIVE_AUTHORITY_AT_COMMIT' using errcode='23514';
+ end if;
+ return null;
+end;
+$function$;

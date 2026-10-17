@@ -1,0 +1,68 @@
+{
+  "commit": "4b1067c859f921855989eb7f147636cebf9286c3",
+  "manifestSha256": "4eb6407252c0d6f9ccc5d5cbcca421c06ef73775f2ca56deaff53f0cc286293c",
+  "sourceTests": 23,
+  "eightHealthDefinitionsUnchanged": true,
+  "grammarInputs": 3,
+  "retainedNativeGuards": [
+    {
+      "name": "private.timesheet_contract_move_operation_guard_v1",
+      "file": "supabase/repeatable/includes/nhsp_v6_health_review_context.sqlinc",
+      "commit": "bb6252f46597cf15a6450adfb2af27c1e615fb3d",
+      "bytes": 2285,
+      "sha256": "b8406cafd855096a071f85c3be83855859eda25ea8852b062571b17f71122cd8",
+      "startLine": 155
+    },
+    {
+      "name": "private.timesheet_contract_move_request_guard_v1",
+      "file": "supabase/repeatable/includes/nhsp_v6_health_review_context.sqlinc",
+      "commit": "bb6252f46597cf15a6450adfb2af27c1e615fb3d",
+      "bytes": 491,
+      "sha256": "d682e08bd1fadccaaeb88f54a3856acc1326b785fe67645efc16316f26f84f1a",
+      "startLine": 187
+    },
+    {
+      "name": "private.timesheet_contract_move_member_guard_v1",
+      "file": "supabase/repeatable/includes/nhsp_v6_health_review_context.sqlinc",
+      "commit": "bb6252f46597cf15a6450adfb2af27c1e615fb3d",
+      "bytes": 1849,
+      "sha256": "b9df033e11f7031fd2d9371b8d6db1cf84b68673bf3ce15bdbde29be313872a9",
+      "startLine": 199
+    },
+    {
+      "name": "private.timesheet_contract_move_commit_guard_v1",
+      "file": "supabase/repeatable/includes/nhsp_v6_health_review_context.sqlinc",
+      "commit": "bb6252f46597cf15a6450adfb2af27c1e615fb3d",
+      "bytes": 1741,
+      "sha256": "c86b2ddbe50934dbe977e39e725bf8a26b6a8eee89bd5e6b6ae84480198b11d3",
+      "startLine": 248
+    },
+    {
+      "name": "private.timesheet_contract_move_context_guard_v1",
+      "file": "supabase/repeatable/includes/nhsp_v6_health_native_apply.sqlinc",
+      "commit": "bb6252f46597cf15a6450adfb2af27c1e615fb3d",
+      "bytes": 3122,
+      "sha256": "946bc2d409e341917107359cf7d3a6850a86d0b9606a1af7851c2239fa2c592a",
+      "startLine": 53
+    },
+    {
+      "name": "private.timesheet_contract_move_context_commit_guard_v1",
+      "file": "supabase/repeatable/includes/nhsp_v6_health_native_apply.sqlinc",
+      "commit": "bb6252f46597cf15a6450adfb2af27c1e615fb3d",
+      "bytes": 537,
+      "sha256": "24a92e8742b204af4595d0836f8cbf4c21212ee07e83840b5d5d7e2f35703fb5",
+      "startLine": 103
+    },
+    {
+      "name": "private.timesheet_contract_move_capability_cleanup_v1",
+      "file": "supabase/repeatable/includes/nhsp_v6_health_native_apply.sqlinc",
+      "commit": "bb6252f46597cf15a6450adfb2af27c1e615fb3d",
+      "bytes": 694,
+      "sha256": "156f2eebf11a6f8839b51f40b7cf07264c745970bc6a9327c3e2e2bb19f33f5c",
+      "startLine": 323
+    }
+  ],
+  "metadataMountPayloads": 0,
+  "runtimeTargets": 0,
+  "native": "NOT_RUN"
+}

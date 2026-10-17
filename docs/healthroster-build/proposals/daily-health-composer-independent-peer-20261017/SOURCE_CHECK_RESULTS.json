@@ -1,0 +1,412 @@
+{
+  "checks": 100,
+  "results": [
+    {
+      "name": "raw frozen saved/Git/captured equality ADDITIVE_REVERSE.sqlinc",
+      "result": "PASS"
+    },
+    {
+      "name": "raw frozen saved/Git/captured equality ASSEMBLY_STATE.json",
+      "result": "PASS"
+    },
+    {
+      "name": "raw frozen saved/Git/captured equality CURRENT_SOURCE_BINDING.json",
+      "result": "PASS"
+    },
+    {
+      "name": "raw frozen saved/Git/captured equality FORWARD_REVERSE.json",
+      "result": "PASS"
+    },
+    {
+      "name": "raw frozen saved/Git/captured equality GRAMMAR_RESULTS.json",
+      "result": "PASS"
+    },
+    {
+      "name": "raw frozen saved/Git/captured equality MANIFEST.json",
+      "result": "PASS"
+    },
+    {
+      "name": "raw frozen saved/Git/captured equality MOUNT_REQUIREMENTS.md",
+      "result": "PASS"
+    },
+    {
+      "name": "raw frozen saved/Git/captured equality OWNER_BLOCKS.json",
+      "result": "PASS"
+    },
+    {
+      "name": "raw frozen saved/Git/captured equality PLACEMENT_HISTORY_QUALIFICATION.md",
+      "result": "PASS"
+    },
+    {
+      "name": "raw frozen saved/Git/captured equality RAW_F23_CENSUS.json",
+      "result": "PASS"
+    },
+    {
+      "name": "raw frozen saved/Git/captured equality README.md",
+      "result": "PASS"
+    },
+    {
+      "name": "raw frozen saved/Git/captured equality SOURCE_PROOF.json",
+      "result": "PASS"
+    },
+    {
+      "name": "raw frozen saved/Git/captured equality SOURCE_SELECTION.json",
+      "result": "PASS"
+    },
+    {
+      "name": "raw frozen saved/Git/captured equality TEST_RESULTS.json",
+      "result": "PASS"
+    },
+    {
+      "name": "raw frozen saved/Git/captured equality admission/ONE_TIME_ADMISSION.sqlinc",
+      "result": "PASS"
+    },
+    {
+      "name": "raw frozen saved/Git/captured equality capture-current-source.mjs",
+      "result": "PASS"
+    },
+    {
+      "name": "raw frozen saved/Git/captured equality census-source.mjs",
+      "result": "PASS"
+    },
+    {
+      "name": "raw frozen saved/Git/captured equality check-source.mjs",
+      "result": "PASS"
+    },
+    {
+      "name": "raw frozen saved/Git/captured equality freeze.mjs",
+      "result": "PASS"
+    },
+    {
+      "name": "raw frozen saved/Git/captured equality grammar-source.py",
+      "result": "PASS"
+    },
+    {
+      "name": "raw frozen saved/Git/captured equality health/00_presentation.sqlinc",
+      "result": "PASS"
+    },
+    {
+      "name": "raw frozen saved/Git/captured equality health/05_review_enrollment.sqlinc",
+      "result": "PASS"
+    },
+    {
+      "name": "raw frozen saved/Git/captured equality health/10_revision_apply.sqlinc",
+      "result": "PASS"
+    },
+    {
+      "name": "raw frozen saved/Git/captured equality health/99_acl.sqlinc",
+      "result": "PASS"
+    },
+    {
+      "name": "raw frozen saved/Git/captured equality prepare.mjs",
+      "result": "PASS"
+    },
+    {
+      "name": "raw frozen saved/Git/captured equality reference/invoice/invoice_contract_move_billing_read_v1.sqlinc",
+      "result": "PASS"
+    },
+    {
+      "name": "raw frozen saved/Git/captured equality reference/invoice/invoice_contract_move_inspect_v1.sqlinc",
+      "result": "PASS"
+    },
+    {
+      "name": "raw frozen saved/Git/captured equality reference/invoice/invoice_contract_move_preflight_v1.sqlinc",
+      "result": "PASS"
+    },
+    {
+      "name": "raw frozen saved/Git/captured equality reference/invoice/invoice_contract_move_prepare_v1.sqlinc",
+      "result": "PASS"
+    },
+    {
+      "name": "raw frozen saved/Git/captured equality reference/invoice/invoice_daily_rate_actual_revision_assert_v1.sqlinc",
+      "result": "PASS"
+    },
+    {
+      "name": "raw frozen saved/Git/captured equality reference/policy/DAILY_RATE_CORRECTION_CONTRACT.md",
+      "result": "PASS"
+    },
+    {
+      "name": "raw frozen saved/Git/captured equality reference/policy/MOVE_STAGE_CONTRACT.md",
+      "result": "PASS"
+    },
+    {
+      "name": "raw frozen saved/Git/captured equality reference/report/templates/01_review.sql.tmpl",
+      "result": "PASS"
+    },
+    {
+      "name": "raw frozen saved/Git/captured equality reference/root/supabase/migrations/16102026_0159_nhsp_v6_01_physical_source_review_schema.sql",
+      "result": "PASS"
+    },
+    {
+      "name": "raw frozen saved/Git/captured equality reference/root/supabase/release/migration-lock.json",
+      "result": "PASS"
+    },
+    {
+      "name": "raw frozen saved/Git/captured equality reference/root/supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/01_context.sqlinc",
+      "result": "PASS"
+    },
+    {
+      "name": "raw frozen saved/Git/captured equality reference/root/supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/02_admission.sqlinc",
+      "result": "PASS"
+    },
+    {
+      "name": "raw frozen saved/Git/captured equality reference/root/supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/03_requests.sqlinc",
+      "result": "PASS"
+    },
+    {
+      "name": "raw frozen saved/Git/captured equality reference/root/supabase/repeatable/16102026_1342_nhsp_v6_daily_public_services/01_public_services.sqlinc",
+      "result": "PASS"
+    },
+    {
+      "name": "raw frozen saved/Git/captured equality reference/root/supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/01_complete_helpers.sqlinc",
+      "result": "PASS"
+    },
+    {
+      "name": "raw frozen saved/Git/captured equality source.test.mjs",
+      "result": "PASS"
+    },
+    {
+      "name": "raw frozen saved/Git/captured equality templates/01_review.sql.tmpl",
+      "result": "PASS"
+    },
+    {
+      "name": "raw frozen saved/Git/captured equality templates/02_accept.sql.tmpl",
+      "result": "PASS"
+    },
+    {
+      "name": "raw frozen saved/Git/captured equality templates/03_result.sql.tmpl",
+      "result": "PASS"
+    },
+    {
+      "name": "raw frozen saved/Git/captured equality verification/mandatory_security.sql",
+      "result": "PASS"
+    },
+    {
+      "name": "raw frozen saved/Git/captured equality verifier-template.sql",
+      "result": "PASS"
+    },
+    {
+      "name": "complete original raw transfer health/00_presentation.sqlinc",
+      "result": "PASS"
+    },
+    {
+      "name": "complete original raw transfer health/05_review_enrollment.sqlinc",
+      "result": "PASS"
+    },
+    {
+      "name": "complete original raw transfer health/10_revision_apply.sqlinc",
+      "result": "PASS"
+    },
+    {
+      "name": "complete original raw transfer templates/01_review.sql.tmpl",
+      "result": "PASS"
+    },
+    {
+      "name": "complete original raw transfer templates/02_accept.sql.tmpl",
+      "result": "PASS"
+    },
+    {
+      "name": "complete original raw transfer templates/03_result.sql.tmpl",
+      "result": "PASS"
+    },
+    {
+      "name": "complete original raw transfer OWNER_BLOCKS.json",
+      "result": "PASS"
+    },
+    {
+      "name": "complete original raw transfer FORWARD_REVERSE.json",
+      "result": "PASS"
+    },
+    {
+      "name": "complete original raw transfer reference/report/templates/01_review.sql.tmpl",
+      "result": "PASS"
+    },
+    {
+      "name": "original complete native parent supabase/repeatable/16102026_1342_nhsp_v6_daily_public_services/01_public_services.sqlinc",
+      "result": "PASS"
+    },
+    {
+      "name": "original complete native parent supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/01_complete_helpers.sqlinc",
+      "result": "PASS"
+    },
+    {
+      "name": "original complete native parent supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/01_context.sqlinc",
+      "result": "PASS"
+    },
+    {
+      "name": "original complete native parent supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/02_admission.sqlinc",
+      "result": "PASS"
+    },
+    {
+      "name": "original complete native parent supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/03_requests.sqlinc",
+      "result": "PASS"
+    },
+    {
+      "name": "original complete native parent supabase/migrations/16102026_0159_nhsp_v6_01_physical_source_review_schema.sql",
+      "result": "PASS"
+    },
+    {
+      "name": "original complete native parent supabase/release/migration-lock.json",
+      "result": "PASS"
+    },
+    {
+      "name": "complete Review raw inverse two finite hunks",
+      "result": "PASS"
+    },
+    {
+      "name": "current a321 complete original retained supabase/repeatable/16102026_1342_nhsp_v6_daily_public_services/01_public_services.sqlinc",
+      "result": "PASS"
+    },
+    {
+      "name": "current a321 complete original retained supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/01_complete_helpers.sqlinc",
+      "result": "PASS"
+    },
+    {
+      "name": "current a321 complete original retained supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/01_context.sqlinc",
+      "result": "PASS"
+    },
+    {
+      "name": "current a321 complete original retained supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/02_admission.sqlinc",
+      "result": "PASS"
+    },
+    {
+      "name": "current a321 complete original retained supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/03_requests.sqlinc",
+      "result": "PASS"
+    },
+    {
+      "name": "current a321 complete original retained supabase/migrations/16102026_0159_nhsp_v6_01_physical_source_review_schema.sql",
+      "result": "PASS"
+    },
+    {
+      "name": "actual current complete0955 owner private.invoice_contract_move_inspect_v1(jsonb,jsonb,uuid,boolean)",
+      "result": "PASS"
+    },
+    {
+      "name": "actual current complete0955 owner private.invoice_contract_move_preflight_v1(uuid,uuid,boolean)",
+      "result": "PASS"
+    },
+    {
+      "name": "actual current complete0955 owner private.invoice_contract_move_prepare_v1(uuid,bigint,uuid,timestamp with time zone)",
+      "result": "PASS"
+    },
+    {
+      "name": "actual current complete0955 owner private.invoice_contract_move_billing_read_v1(uuid,uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "actual current complete0955 owner private.invoice_daily_rate_actual_revision_assert_v1(uuid)",
+      "result": "PASS"
+    },
+    {
+      "name": "current genuine Health producer retained createClientWithSettingsAtomic",
+      "result": "PASS"
+    },
+    {
+      "name": "current genuine Health producer retained handleCreateCandidate",
+      "result": "PASS"
+    },
+    {
+      "name": "current genuine Health producer retained handleUpsertClientRate",
+      "result": "PASS"
+    },
+    {
+      "name": "current genuine Health producer retained handleTimesheetCreateManualDaily",
+      "result": "PASS"
+    },
+    {
+      "name": "current genuine Health producer retained saveAndRecalculateCanonicalDaily",
+      "result": "PASS"
+    },
+    {
+      "name": "current genuine Health producer retained runTsfinWorkerOnce",
+      "result": "PASS"
+    },
+    {
+      "name": "current genuine Health producer retained handleTimesheetAuthoriseGeneric",
+      "result": "PASS"
+    },
+    {
+      "name": "actual current Worker/module/test byte equality broker/src/daily-rate-correction.js",
+      "result": "PASS"
+    },
+    {
+      "name": "actual current Worker/module/test byte equality broker/src/daily-canonical-authority.js",
+      "result": "PASS"
+    },
+    {
+      "name": "actual current Worker/module/test byte equality broker/src/contract-correction-v3.mjs",
+      "result": "PASS"
+    },
+    {
+      "name": "actual current Worker/module/test byte equality tests/daily-rate-http.test.mjs",
+      "result": "PASS"
+    },
+    {
+      "name": "actual current Worker/module/test byte equality tests/daily-rate-calculator.test.mjs",
+      "result": "PASS"
+    },
+    {
+      "name": "unchanged grammar input health/00_presentation.sqlinc",
+      "result": "PASS"
+    },
+    {
+      "name": "unchanged grammar input health/05_review_enrollment.sqlinc",
+      "result": "PASS"
+    },
+    {
+      "name": "unchanged grammar input health/10_revision_apply.sqlinc",
+      "result": "PASS"
+    },
+    {
+      "name": "unchanged grammar input health/99_acl.sqlinc",
+      "result": "PASS"
+    },
+    {
+      "name": "unchanged grammar input admission/ONE_TIME_ADMISSION.sqlinc",
+      "result": "PASS"
+    },
+    {
+      "name": "unchanged grammar input verification/mandatory_security.sql",
+      "result": "PASS"
+    },
+    {
+      "name": "unchanged grammar input ADDITIVE_REVERSE.sqlinc",
+      "result": "PASS"
+    },
+    {
+      "name": "unchanged grammar input grammar-source.py",
+      "result": "PASS"
+    },
+    {
+      "name": "actual raw census gate retained in a321",
+      "result": "PASS"
+    },
+    {
+      "name": "current metadata saved/Git equality docs/bpay-next/final-definer-closures.json",
+      "result": "PASS"
+    },
+    {
+      "name": "current metadata saved/Git equality supabase/release/current-release.json",
+      "result": "PASS"
+    },
+    {
+      "name": "current metadata saved/Git equality supabase/release/migration-lock.json",
+      "result": "PASS"
+    },
+    {
+      "name": "eight composer definitions have no live chain",
+      "result": "PASS"
+    },
+    {
+      "name": "current role successor is reviewed exact complete leaf",
+      "result": "PASS"
+    }
+  ],
+  "additionalUnreportedFindings": 0,
+  "knownHeldScalarMappingDefects": 1,
+  "qualifiedRuntime": false,
+  "native": "NOT_RUN",
+  "rootWrites": 0,
+  "OfficeWrites": 0,
+  "bankBodySemanticReads": 0
+}

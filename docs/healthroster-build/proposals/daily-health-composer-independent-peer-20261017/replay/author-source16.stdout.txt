@@ -1,0 +1,24 @@
+✔ all complete parents transfer raw bytes from immutable Git, including the six untouched helpers (600.0364ms)
+✔ Review forward reverses the entire original parent literally and only once (0.7073ms)
+✔ real native and actor locks precede metadata FK enrollment; replay occurs on both sides of waits (0.2358ms)
+✔ enrollment response union rejects extra keys and never substitutes a Ready preview (0.1162ms)
+✔ immutable request replay after waits precedes Accept stale checks and business effects (0.1527ms)
+✔ native revision admits genuine cut, approved immutable row and exactly one declared publisher before Invoice (0.4271ms)
+✔ five actual Invoice owners bind exact signatures, including the genuine four-argument Daily overload (197.9916ms)
+✔ billing disposition comes from real selected slices and denies group identifiers to non-full readers (0.4373ms)
+✔ Result uses actual current Office reader rather than mutation Admin, compares full readers and basis after join (0.1778ms)
+✔ denied financial fields are NULL/REDACTED, explicit visibility required, actions dedupe semantic target not captions (0.1742ms)
+✔ eight exact new private names have explicit owner/revoke, one-time collision check and finite reverse (0.5687ms)
+✔ independent fifteen-row verifier checks catalogue/ACL without invoking private helpers or role switches (0.3534ms)
+✔ all three original Bank blocks lack actual ABI/contract pins and no nominal success can be emitted (85.0438ms)
+✔ operation-local placement scalar/history is explicitly unqualified and not state_revision/native-counter authority (0.4751ms)
+✔ grammar explicitly excludes all unprovided templates and uses no Banking substitutions (2.0422ms)
+✔ changed Health/Invoice/security source and flipped owner/approval metadata refuse before any runtime output (448.5551ms)
+ℹ tests 16
+ℹ suites 0
+ℹ pass 16
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1450.453

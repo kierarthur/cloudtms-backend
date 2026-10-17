@@ -1,0 +1,11 @@
+create or replace function private.timesheet_contract_move_capability_cleanup_v1()
+returns integer language plpgsql volatile security definer set search_path='pg_catalog','private','pg_temp'
+as $function$
+declare c private.timesheet_contract_move_execution_contexts%rowtype; n integer;
+begin
+ c:=private.timesheet_contract_move_context_v1();if c.id is null then return 0; end if;
+ -- Cleanup never hides an unused expected event or expired authority. Its DELETE guard proves completeness.
+ delete from private.timesheet_contract_move_execution_contexts where id=c.id;get diagnostics n=row_count;
+ perform set_config('cloudtms.contract_move_execution_context','',true);return n;
+end;
+$function$;

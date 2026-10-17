@@ -1,0 +1,115 @@
+{
+  "parser": "v7.20",
+  "sourceSha256": "006dd80653b9156ad1f162b9a2e78bc1e243fa38b5cdc75e123d5bc88119f3e6",
+  "paths": [
+    {
+      "case": "saved_identical",
+      "events": [
+        "request_assert",
+        "actor_from_request",
+        "replay_1",
+        "return_replay"
+      ],
+      "outcome": "RETURNED",
+      "nativeExecution": false
+    },
+    {
+      "case": "concurrent_identical_after_native_wait",
+      "events": [
+        "request_assert",
+        "actor_from_request",
+        "replay_1",
+        "actor_initial",
+        "native_context_true",
+        "replay_2",
+        "return_replay"
+      ],
+      "outcome": "RETURNED",
+      "nativeExecution": false
+    },
+    {
+      "case": "fresh_locked_enrollment",
+      "events": [
+        "request_assert",
+        "actor_from_request",
+        "replay_1",
+        "actor_initial",
+        "native_context_true",
+        "replay_2",
+        "actor_locked",
+        "locked_basis",
+        "metadata_initializer",
+        "actor_locked",
+        "return_prepared"
+      ],
+      "outcome": "RETURNED",
+      "nativeExecution": false
+    },
+    {
+      "case": "non_RC_refusal",
+      "events": [
+        "request_assert",
+        "actor_from_request",
+        "replay_1",
+        "actor_initial"
+      ],
+      "outcome": "DAILY_RATE_LOCKED_CONTEXT_ISOLATION_REQUIRED",
+      "nativeExecution": false
+    },
+    {
+      "case": "postwait_actor_loss",
+      "events": [
+        "request_assert",
+        "actor_from_request",
+        "replay_1",
+        "actor_initial",
+        "native_context_true",
+        "replay_2",
+        "actor_locked"
+      ],
+      "outcome": "ACTOR_NOT_ALLOWED",
+      "nativeExecution": false
+    },
+    {
+      "case": "locked_context_stale",
+      "events": [
+        "request_assert",
+        "actor_from_request",
+        "replay_1",
+        "actor_initial",
+        "native_context_true",
+        "replay_2",
+        "actor_locked",
+        "locked_basis"
+      ],
+      "outcome": "REVIEW_STALE",
+      "nativeExecution": false
+    },
+    {
+      "case": "initializer_changed_basis_rolls_back",
+      "events": [
+        "request_assert",
+        "actor_from_request",
+        "replay_1",
+        "actor_initial",
+        "native_context_true",
+        "replay_2",
+        "actor_locked",
+        "locked_basis",
+        "metadata_initializer"
+      ],
+      "outcome": "REVIEW_STALE",
+      "nativeExecution": false
+    },
+    {
+      "case": "invalid_request_before_locks",
+      "events": [
+        "request_assert"
+      ],
+      "outcome": "REQUEST_INVALID",
+      "nativeExecution": false
+    }
+  ],
+  "native": "NOT_RUN",
+  "proofLimit": "Actual AST paths with controlled dependency outcomes; not native lock, FK or race execution."
+}
