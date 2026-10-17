@@ -1,0 +1,15 @@
+{
+  "version": "QT_R7_LABEL_ONLY_ROOT_CONTROLLER_V1",
+  "parent": "docs/healthroster-build/proposals/qt-keyed-row-comparison-r6-tools-orchestration-20261017.js.txt",
+  "beforeSha256": "2a0b043c034a5bcdef5101c8d397c3a5b63fd289bbe84a1e5d9bd54656a03c27",
+  "file": "docs/healthroster-build/proposals/qt-record-sha256-r7-tools-orchestration-20261017.js.txt",
+  "sha256": "0a1584d870916d29c812c1b51531fea3d67def7b3e6f69cc489f682600d62fac",
+  "changes": [
+    "fresh output suffix",
+    "function-store label"
+  ],
+  "wholeInverse": true,
+  "allControlsDispatchTimingCapsSourceRestorationUnchanged": true,
+  "sourceAdmission": "Original committedAdapter and actual source() PASS at0ae654682a07b0522e4c066a59858d9e625ed47d",
+  "native": "NOT_RUN"
+}

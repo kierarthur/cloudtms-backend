@@ -1,0 +1,35 @@
+const root='D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026',adapter=root+'/docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017',out=root+'/.codex-tmp/contact-qt-positive-native-20261017-qt-admin-record-sha256-r7',key='quietTimeNativeR7';
+const state={root,out,caseId:'QT_ADMIN_CONTROLS_V1',dispatched:false,releaseSent:false,ended:false,output:''};store(key,state);
+const strip=s=>s.replace(/\x1B\[[0-?]*[ -/]*[@-~]/g,'').replace(/\x1B\][^\x07]*(?:\x07)/g,'');
+const frames=()=>strip(state.output).split(/\r?\n/).flatMap(line=>{try{return[JSON.parse(line)];}catch{return[];}});
+const absorb=r=>{state.output+=r.output??'';if(r.exit_code!==undefined){state.exitCode=r.exit_code;state.ended=true;}if(r.session_id)state.sessionId=r.session_id;store(key,state);};
+try{
+ const launch=await tools.exec_command({cmd:'node '+adapter+'/hold-case.mjs '+root+' '+out+' QT_ADMIN_CONTROLS_V1 --authorised-root-holder',workdir:root,tty:true,yield_time_ms:1000,max_output_tokens:3000});absorb(launch);notify({phase:'HOLDER_STARTED',sessionId:state.sessionId,out});
+ for(let poll=0;poll<40&&!state.ended;poll++){
+  const ready=frames().find(x=>x.status==='READY_ROOT_KIER_MCP_B_REQUIRED');
+  if(ready&&!state.dispatched){
+   if(ready.out!==out||ready.caseId!==state.caseId||ready.route!=='mcp__cloudtms_miget_operations_kier_codex__miget_db_transaction_rollback')throw Error('ROOT_ACTUAL_READY_REFUSED');
+   const loaded=await tools.exec_command({cmd:'node docs/healthroster-build/proposals/root-contact-native-input-loader-20261017.mjs '+out+' '+state.caseId,workdir:root,max_output_tokens:30000});
+   if(loaded.exit_code!==0||loaded.output.length>98304)throw Error('ROOT_PRETESTED_LOADER_REFUSED');const packet=JSON.parse(loaded.output);
+   state.dispatched=true;state.callStartedAt=new Date().toISOString();store(key,state);
+   const result=await tools.mcp__cloudtms_miget_operations_kier_codex__miget_db_transaction_rollback(packet.input);state.callReturnedAt=new Date().toISOString();
+   if(!result.structuredContent)throw Error('ROOT_ACTUAL_STRUCTURED_RESULT_REQUIRED');
+   store(key+'RawNativeResult',result.structuredContent);
+   const timing={version:'ROOT_OBSERVED_MCP_CALL_TIMING_V1',route:packet.route,sqlSha256:packet.sqlSha256,callStartedAt:state.callStartedAt,callReturnedAt:state.callReturnedAt},raw=JSON.stringify(result.structuredContent,null,2)+'\n',t=JSON.stringify(timing,null,2)+'\n';
+   if(raw.length>262144||raw.includes("\n'@")||t.includes("\n'@"))throw Error('ROOT_NATIVE_RESULT_BOUND');
+   const save=await tools.exec_command({cmd:"$n=@'\n"+raw+"'@\n$t=@'\n"+t+"'@\n$enc=[Text.UTF8Encoding]::new($false)\nforeach($row in @(@('NATIVE_RESULT.json',$n),@('NATIVE_CALL_TIMING.json',$t))){$b=$enc.GetBytes($row[1]+[Environment]::NewLine);$f=[IO.File]::Open('"+out+"/'+$row[0],[IO.FileMode]::CreateNew);try{$f.Write($b,0,$b.Length)}finally{$f.Dispose()}}",workdir:root,max_output_tokens:1000});if(save.exit_code!==0)throw Error('ROOT_NATIVE_RESULT_SAVE_REQUIRED');
+   state.nativeSaved=true;store(key,state);notify({phase:'ACTUAL_NATIVE_RESULT_SAVED',readyAt:ready.readyAt,callStartedAt:state.callStartedAt,callReturnedAt:state.callReturnedAt});
+   absorb(await tools.write_stdin({session_id:state.sessionId,chars:'PREPARE\n',yield_time_ms:1000,max_output_tokens:3000}));
+  }
+  if(frames().some(x=>x.status==='QUALIFIED_PENDING_ROOT_RELEASE_AND_SHARED_TURN_CLOSE')&&!state.releaseSent&&!state.ended){
+   state.releaseSent=true;store(key,state);absorb(await tools.write_stdin({session_id:state.sessionId,chars:'RELEASE\n',yield_time_ms:1000,max_output_tokens:3000}));notify({phase:'QUALIFIED_AND_RELEASE_SENT'});
+  }
+  if(!state.ended)absorb(await tools.write_stdin({session_id:state.sessionId,chars:'',yield_time_ms:1000,max_output_tokens:3000}));
+ }
+ if(!state.ended)throw Error('ROOT_ORIGINAL_CLOSE_NOT_OBSERVED');
+ text({status:'ACTUAL_HOLDER_EXIT_OBSERVED',exitCode:state.exitCode,dispatched:state.dispatched,releaseSent:state.releaseSent,out,closedFrames:frames().filter(x=>['PASS_EXACT_CONTACT_QT_CASE_AND_ORIGINAL_CANONICAL_RESTORATION','HOLD'].includes(x.status))});
+}catch(error){
+ state.rootError=/^[A-Z0-9_]+$/.test(error?.message??'')?error.message:'ROOT_ORCHESTRATION_FAILURE';store(key,state);
+ if(state.sessionId&&!state.ended){try{absorb(await tools.write_stdin({session_id:state.sessionId,chars:'ABORT\n',yield_time_ms:1000,max_output_tokens:2000}));for(let n=0;n<12&&!state.ended;n++)absorb(await tools.write_stdin({session_id:state.sessionId,chars:'',yield_time_ms:1000,max_output_tokens:2000}));}catch{state.closeReadError=true;store(key,state);}}
+ text({status:'ROOT_ORCHESTRATION_HOLD',code:state.rootError,dispatched:state.dispatched,ended:state.ended,exitCode:state.exitCode,out,reconciliationRequired:state.dispatched&&!state.nativeSaved});
+}
