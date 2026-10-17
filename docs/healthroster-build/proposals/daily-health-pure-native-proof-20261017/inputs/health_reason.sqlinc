@@ -1,0 +1,20 @@
+create or replace function private.daily_rate_correction_health_reason_note_v1(p_stored_reason text)
+returns text language plpgsql immutable security definer
+set search_path=pg_catalog,private,pg_temp
+as $function$
+declare prefix text:='Applying updated rates'; note text;
+begin
+ if p_stored_reason=prefix then note:='';
+ elsif left(p_stored_reason,char_length(prefix)+3)=prefix||' — ' then
+  note:=substr(p_stored_reason,char_length(prefix)+4);
+ else raise exception 'DAILY_RATE_STORED_REASON_INVALID' using errcode='23514';end if;
+ -- The stored reason is canonical, not a raw Details note. Recover exactly
+ -- one prefix then prove the actual native Unicode normalizer round-trips it.
+ -- This admits the full1969-character note even when the stored reason is longer.
+ if private.timesheet_contract_move_reason_v1(note,'DAILY_RATE_CORRECTION') is distinct from p_stored_reason then
+  raise exception 'DAILY_RATE_STORED_REASON_INVALID' using errcode='23514';end if;
+ return note;
+exception when sqlstate '22023' then
+ raise exception 'DAILY_RATE_STORED_REASON_INVALID' using errcode='23514';
+end;
+$function$;

@@ -1,0 +1,12 @@
+{
+  "status": "PASS_GRAMMAR_ONLY",
+  "parser": "v7.20",
+  "statements": 7,
+  "parserPrograms": 6,
+  "sqlBytes": 8029,
+  "sqlSha256": "779aff554ca8bce78a7e21520a41574beba211503ab1c79d492eccb6b5ad8ab6",
+  "native": "REQUIRED_NOT_RUN",
+  "restoration": "REQUIRED_NOT_RUN",
+  "databaseConnections": 0,
+  "sourceWrites": 0
+}

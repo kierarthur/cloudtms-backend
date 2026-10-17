@@ -1,0 +1,64 @@
+{
+  "version": "DAILY_HEALTH_PURE_NATIVE_PROOF_INPUTS_V1",
+  "runtimeCommit": "acee28f5b4d862bdf7e4425a65566dd2d060be35",
+  "helperSourceCommit": "e938e54f81bb2416d4a281fa025fc8e714c8eb35",
+  "rootInputs": [
+    {
+      "file": "supabase/repeatable/includes/nhsp_v6_health_review_context.sqlinc",
+      "name": "private.timesheet_contract_move_row_hash_v1",
+      "fileSha256": "9c2cc018537e1dacab493dc079903edcfedb959df172f4582d476e4ce30ff346",
+      "definitionSha256": "fd0e50a3f5288a106540bd4fcd0900df94b6707496f94d71b3f7e4835a703eef",
+      "definitionBytes": 270
+    },
+    {
+      "file": "supabase/repeatable/includes/nhsp_v6_health_composition_wrappers.sqlinc",
+      "name": "private.timesheet_contract_move_reason_v1",
+      "fileSha256": "a5e50977d1ad2fe957ab3e306e5272d2a181dbf460d8d766c5638d1adc073ab8",
+      "definitionSha256": "fdd0828b61397e8e542a8a8644c3d12b7b1f654c0b926f359ac2333839d136c3",
+      "definitionBytes": 997
+    },
+    {
+      "file": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/03_requests.sqlinc",
+      "name": "private.daily_rate_correction_request_assert_v1",
+      "fileSha256": "daf9306ef07b5f9a8102ab65be38995e6465e13a433e997265911019eaed1912",
+      "definitionSha256": "be5b79f7b84f6d5f11df9f79dd20cd6cf30d8efd3a77ee651cec53072678e076",
+      "definitionBytes": 2698
+    },
+    {
+      "file": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/03_requests.sqlinc",
+      "name": "private.daily_rate_correction_request_hash_v1",
+      "fileSha256": "daf9306ef07b5f9a8102ab65be38995e6465e13a433e997265911019eaed1912",
+      "definitionSha256": "a302d9311fcd4b3d41e9af53d018c6816b64e682455986b6dabd0e0fa248c18f",
+      "definitionBytes": 681
+    }
+  ],
+  "helper": {
+    "file": "inputs/health_reason.sqlinc",
+    "name": "private.daily_rate_correction_health_reason_note_v1",
+    "sha256": "f305db48ad0c96a578b7ea21937f3bcef98bf3f0b49e15e04f06ff39f4cecc78",
+    "bytes": 1112,
+    "originalModuleSha256": "4bffb6f0c4493abfd159149dd671ec4e72450a214ca4b224a9f4509d82cdf55a"
+  },
+  "program": {
+    "file": "inputs/17102026_0126_daily_health_reason_program.sql",
+    "sha256": "a8891d6a208b39a5603346feb0f48c4638dea277f66049dff43159dc9f91379d",
+    "bytes": 2261,
+    "positiveUnicodeVectors": 6,
+    "malformedStoredReasonRefusals": 8
+  },
+  "privateDependencyClosure": [
+    "private.timesheet_contract_move_row_hash_v1",
+    "private.timesheet_contract_move_reason_v1",
+    "private.daily_rate_correction_request_assert_v1",
+    "private.daily_rate_correction_request_hash_v1",
+    "private.daily_rate_correction_health_reason_note_v1"
+  ],
+  "extensionDependency": "extensions.digest(text,text)",
+  "businessRelationsReadOrWritten": [],
+  "businessFixtureRows": 0,
+  "externalEffects": false,
+  "native": "REQUIRED_NOT_RUN",
+  "restoration": "REQUIRED_NOT_RUN",
+  "executionAdapter": "NOT_IMPLEMENTED",
+  "fullInstallRehearsal": false
+}
