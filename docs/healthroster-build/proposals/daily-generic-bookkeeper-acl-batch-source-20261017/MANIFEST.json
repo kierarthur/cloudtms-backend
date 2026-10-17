@@ -1,0 +1,65 @@
+{
+  "version": "GENERIC_BOOKKEEPER_AND_EXACT_TWO_ACL_INVOCATION_SOURCE_FREEZE_V1",
+  "files": [
+    {
+      "file": "FULL_PARENT_FORWARD.json",
+      "bytes": 4948,
+      "sha256": "9ca70cdb230476c7cf9a5a2de12c3dad36797ada0311ee74e24b76f24537bfec"
+    },
+    {
+      "file": "measure-readonly.mjs",
+      "bytes": 2408,
+      "sha256": "5378a117fd56f9780c0eeb9f55db42e439bfb33856eeadc0072fee5af1deb47b"
+    },
+    {
+      "file": "payload/phase-parent.mjs",
+      "bytes": 5129,
+      "sha256": "e77e1753e43039a9862e40dc4ba3bc487480356a20805991a036d852f77e97a2"
+    },
+    {
+      "file": "payload/stage-bookkeeper.mjs",
+      "bytes": 11508,
+      "sha256": "7e90f2ccb4ef993891a09d616b8458dee0125a6c4414b38501714ae460d4a590"
+    },
+    {
+      "file": "README.md",
+      "bytes": 3720,
+      "sha256": "5762539203a8e22f40de3b1fec696fc296d3be8abcd835351794b3b73b56c6bb"
+    },
+    {
+      "file": "READONLY_TIMING.json",
+      "bytes": 650,
+      "sha256": "b1de13191d763978f1744ef7b0104073499306283a10b82fc04dd59e6e774c86"
+    },
+    {
+      "file": "reference/phase-parent.mjs",
+      "bytes": 5111,
+      "sha256": "5d487a9ba1b6f5c742e17d3d2b06bbfc6bb0e2937ea23600694122a3f2ca2c8b"
+    },
+    {
+      "file": "reference/stage-bookkeeper.mjs",
+      "bytes": 11251,
+      "sha256": "f1f77eb5222ddea37357f14fe6eb2b44ea1c0079fd6c5e42d3286d945dcd5e08"
+    },
+    {
+      "file": "reference/verify-owned.ps1",
+      "bytes": 1183,
+      "sha256": "523e18c92b3c81c9d2bea7420d7ec6a4594fc7c23b727b279a2fba4bc97dfc3f"
+    },
+    {
+      "file": "RESULTS.json",
+      "bytes": 515,
+      "sha256": "64bc0a7c926e80d43281cf88cb0a9a7bfaae979526ba9e7a5abbcade4a263730"
+    },
+    {
+      "file": "test.mjs",
+      "bytes": 8163,
+      "sha256": "c855ba9b63912de784735d85c6fba00bc25ecb075036246e45874a4a51776028"
+    },
+    {
+      "file": "verify.mjs",
+      "bytes": 1417,
+      "sha256": "6498b56fa96eb69cb7964150da49a750c5a96fb385d0b2db997e777651cd0726"
+    }
+  ]
+}

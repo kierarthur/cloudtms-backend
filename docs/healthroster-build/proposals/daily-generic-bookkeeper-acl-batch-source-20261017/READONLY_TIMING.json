@@ -1,0 +1,22 @@
+{
+  "scope": "PUBLIC_FIXED_SOURCE_PINS_AND_HELPER_TRANSPORT_ONLY",
+  "rootHead": "d521c12f203c41299074d2d989afab7ff8c577f8",
+  "reportHead": "6b5ebedecf95c8a1adfda5141bbf3eccf5294d23",
+  "samples": [
+    {
+      "prior15ShowsMs": 701,
+      "twoBatchesMs": 106,
+      "savedMs": 595,
+      "all15ImagesRawEqual": true
+    },
+    {
+      "prior15ShowsMs": 745,
+      "twoBatchesMs": 109,
+      "savedMs": 636,
+      "all15ImagesRawEqual": true
+    }
+  ],
+  "perActualPublicReadAdditionalProcessReduction": "2 Git shows to1 fresh batch",
+  "wholeStageTimingGuarantee": false,
+  "nativeActualStageRecordPrivateAclAccess": "NONE"
+}

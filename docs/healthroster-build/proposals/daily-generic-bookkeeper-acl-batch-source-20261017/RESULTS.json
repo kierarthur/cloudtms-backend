@@ -1,0 +1,19 @@
+{
+  "tests": 13,
+  "pass": 13,
+  "fail": 0,
+  "wholeRawParents": 2,
+  "literalEdits": [
+    4,
+    1
+  ],
+  "unchangedExactAclScript": true,
+  "syntaxInputs": 5,
+  "sourceParentSavedIndexHeadHistoricalEqual": true,
+  "realPowerShellSyntheticCallbackCases": 3,
+  "realAclVerifierExecuted": false,
+  "bookkeeperOrSourcePreflightExecuted": false,
+  "nativeAuthPrivateAccess": false,
+  "wholeStageSpeedOr30SecondSuccessClaimed": false,
+  "originalBeforeLocalCommitSetupPushAllCommitAndPublishSemanticsRetained": true
+}

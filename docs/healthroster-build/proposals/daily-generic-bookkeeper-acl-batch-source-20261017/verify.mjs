@@ -1,0 +1,7 @@
+import fs from 'node:fs';import {fileURLToPath} from 'node:url';import assert from 'node:assert/strict';import {createHash} from 'node:crypto';import cp from 'node:child_process';
+const read=f=>fs.readFileSync(new URL(f,import.meta.url)),sha=b=>createHash('sha256').update(b).digest('hex'),m=JSON.parse(read('MANIFEST.json')),p=JSON.parse(read('FULL_PARENT_FORWARD.json'));
+const git=(r,...a)=>cp.execFileSync('git',['-c','gc.auto=0','-c','maintenance.auto=false','-c','core.longpaths=true','-C',r,...a],{windowsHide:true,maxBuffer:8e6,stdio:['ignore','pipe','pipe'],env:{...process.env,GIT_OPTIONAL_LOCKS:'0',GIT_NO_LAZY_FETCH:'1'}});
+for(const r of m.files){const b=read(r.file);assert.equal(b.length,r.bytes);assert.equal(sha(b),r.sha256);}
+for(const r of [...p.targets,p.unchangedAclScript]){const b=fs.readFileSync(r.root+'/'+r.file);assert.equal(sha(b),r.beforeSha256??r.sha256);for(const ref of[r.commit,'HEAD',''])assert(b.equals(git(r.root,'show',ref+':'+r.file)));}
+for(const file of['payload/stage-bookkeeper.mjs','payload/phase-parent.mjs','test.mjs','measure-readonly.mjs','verify.mjs'])cp.execFileSync(process.execPath,['--check',fileURLToPath(new URL(file,import.meta.url))],{windowsHide:true,stdio:['ignore','pipe','pipe']});
+console.log(JSON.stringify({status:'PASS_BOUNDED_SOURCE_ONLY',files:m.files.length+1,wholeParents:2,unchangedVerifier:1,grammar:5,realBookkeeperAclNativePrivate:'NOT_RUN'}));

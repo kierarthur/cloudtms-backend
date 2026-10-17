@@ -15,17 +15,18 @@ export async function run(env=process.env){
  }
  must(git(report,'rev-parse','HEAD').toString().trim()===source,'BOOKKEEPER_FIXED_REPORT_HEAD_REQUIRED');must(git(root,'diff','--cached','--name-only','-z').length===0,'BOOKKEEPER_UNRELATED_STAGING_REFUSED');
  // Public image check only, deliberately NOT sourcePreflight() (no auth path metadata).
- const {reviewedImage}=await import(pathToFileURL(report+'/'+operator+'/git-image-batch.mjs').href),ownRelative=path.relative(report,here).replaceAll('\\','/');
+ const {reviewedImage,blobImages}=await import(pathToFileURL(report+'/'+operator+'/git-image-batch.mjs').href),ownRelative=path.relative(report,here).replaceAll('\\','/');
  const current=JSON.parse(fs.readFileSync(report+'/'+operator+'/MANIFEST.json')),own=JSON.parse(fs.readFileSync(here+'/MANIFEST.json'));
  reviewedImage(report,source,[operator+'/MANIFEST.json',...current.files.map(r=>operator+'/'+r.file),ownRelative+'/MANIFEST.json',...own.files.map(r=>ownRelative+'/'+r.file)]);
- const pins=JSON.parse(fs.readFileSync(here+'/PARENTS.json'));for(const row of pins.fixedRuntime){const b=fs.readFileSync(report+'/'+row.file);must(b.length===row.bytes&&sha(b)===row.sha256&&b.equals(git(report,'show',row.commit+':'+row.file)),'BOOKKEEPER_ORIGINAL_RUNTIME_OWNER_CHANGED');}
+ const pins=JSON.parse(fs.readFileSync(here+'/PARENTS.json')),fixedImages=blobImages(report,pins.fixedRuntime.map(row=>({ref:row.commit,file:row.file})));for(const row of pins.fixedRuntime){const b=fs.readFileSync(report+'/'+row.file);must(b.length===row.bytes&&sha(b)===row.sha256&&b.equals(fixedImages.get(row.commit,row.file)),'BOOKKEEPER_ORIGINAL_RUNTIME_OWNER_CHANGED');}
  const rootHead=git(root,'rev-parse','HEAD').toString().trim();
  const helperCommit=env.HR_ROOT_HELPER_COMMIT;
  must(/^[0-9a-f]{40}$/.test(helperCommit??'')&&physical(helperFile)===root+'/'+helperRelative,'BOOKKEEPER_COMMITTED_ROOT_HELPER_REQUIRED');
  const helperBytes=fs.readFileSync(helperFile);
- must([rootHead,'',helperCommit].every(ref=>helperBytes.equals(git(root,'show',ref+':'+helperRelative))),'BOOKKEEPER_EXACT_ROOT_HELPER_IMAGES_REQUIRED');
+ const helperImages=blobImages(root,[rootHead,null,helperCommit].map(ref=>({ref,file:helperRelative})));
+ must([rootHead,null,helperCommit].every(ref=>helperBytes.equals(helperImages.get(ref,helperRelative))),'BOOKKEEPER_EXACT_ROOT_HELPER_IMAGES_REQUIRED');
  git(root,'merge-base','--is-ancestor',helperCommit,rootHead);
- const readPublic=file=>{publicPath(file);must(physical(root+'/'+file)===root+'/'+file,'BOOKKEEPER_PHYSICAL_PUBLIC_FILE_REQUIRED');const b=small(root+'/'+file,2e6);must([rootHead,''].every(ref=>b.equals(git(root,'show',ref+':'+file))),'BOOKKEEPER_COMMITTED_PUBLIC_EVIDENCE_REQUIRED');return b;};
+ const readPublic=file=>{publicPath(file);must(physical(root+'/'+file)===root+'/'+file,'BOOKKEEPER_PHYSICAL_PUBLIC_FILE_REQUIRED');const b=small(root+'/'+file,2e6),images=blobImages(root,[rootHead,null].map(ref=>({ref,file})));must([rootHead,null].every(ref=>b.equals(images.get(ref,file))),'BOOKKEEPER_COMMITTED_PUBLIC_EVIDENCE_REQUIRED');return b;};
  const read=file=>{
   const exact=new Set([stage+'_BEFORE_INPUT.json',stage+'_BEFORE_NATIVE.json',stage+'_AFTER_INPUT.json',stage+'_AFTER_NATIVE.json',stage+'_RESPONSE.json',stage+'_ENTRY_BINDING.json',stage+'_SETUP_ENTRY.md',stage+'_COORDINATOR_SUMMARY.json']);
   must(exact.has(file)||phase==='PUBLISH'&&file===env.HR_ROOT_QUALIFY_RESULT&&new RegExp('^CLOSED_qualify_'+stage+'_[a-f0-9]{16}\\.json$').test(file),'BOOKKEEPER_CLOSED_PUBLIC_PHASE_FILE_REQUIRED');return small(out+'/'+file,2e6);
