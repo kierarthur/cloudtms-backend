@@ -133,8 +133,8 @@
     },
     {
       "file": "README.md",
-      "bytes": 9652,
-      "sha256": "c0c1df6afda90e2574dbc698753243262e7f038cb32291aadb20939099fe693d"
+      "bytes": 10500,
+      "sha256": "56dc3b4246700b05b182959e938d60e6c1613e54dda0ebdeddb7db2ecb09f2fd"
     },
     {
       "file": "reference/actor/build-program.mjs",
@@ -243,8 +243,8 @@
     },
     {
       "file": "source.mjs",
-      "bytes": 7176,
-      "sha256": "6512932d124af8fb109e1840822af512820c52d10b8c7bdb225637050a00c886"
+      "bytes": 9879,
+      "sha256": "33bfe952c5d8c32eafbbd75709587e5da573cfac735ddc3b467644c52d8d4056"
     },
     {
       "file": "TEST_RESULTS.txt",

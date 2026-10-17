@@ -1,0 +1,24 @@
+{
+  "version": "CONTACT_SOURCE_BATCH_ROOT_REVIEW_V1",
+  "status": "ACCEPT_EXACT_THREE_POSTIMAGES_FOR_BOUNDED_TRIAL",
+  "authorCommit": "ca286b25e0dae032955bc80a8267210083c9d53b",
+  "authorFiles": 21,
+  "authorManifestSha256": "cc1e7752802fa31a8ecc0aae0ad0531b151b10aac5ce13b17894f44e994f22a3",
+  "peerCommit": "036593c88f591ee66fd044ac18e2ec512ebdc5be",
+  "peerFiles": 25,
+  "peerManifestSha256": "661e1e3b34d600d75a1ecff3c08e8abde6794f8e5bcb8e5d480dbf1a65804661",
+  "peerVerdict": "ACCEPT_BOUNDED_SOURCE_FORWARD",
+  "peerResultsSha256": "5111f758656a748bb1add3426ee94d8f3a9b1c7c561719fdac6a53d0c763384d",
+  "rootReview": "Complete binary parser/grouping/source reviewed;47unamended tests/54actualparents/3wholeinverses8hunks/51unchanged PASS. Complete189source/104adapter images freshlycompared; original24MB cap and finitegroups/fallback. Allphysical/index/current/historical/ancestry/programme/setup/writer predicates and every beforePhase/ownership invocation retained; canonical/nativeSQL/reader/WeakMap/control/timers unchanged. Earlier34nativeBassertionPASS/CafterHOLD preserved; no nativefit guarantee.",
+  "exactCopiedFiles": 46,
+  "measuredBeforePhase": {
+    "originalMs": 8406,
+    "postimageOverlayMs": 867,
+    "qualification": "Offline actualfunction/moduleoverlay only; not nativephase or futurefit proof"
+  },
+  "fixesApplied": 1,
+  "fixesRejected": 0,
+  "nativeRetry": "NOT_RUN",
+  "install2": "NOT_INSTALLED",
+  "finalPartBCritics": "NOT_RUN"
+}

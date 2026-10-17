@@ -1,0 +1,81 @@
+{
+  "version": "CONTACT_ORIGINAL_SOURCE_ADMISSION_OFFLINE_MEASUREMENTS_V1",
+  "measuredAt": "2026-10-17T11:47:04.107Z",
+  "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+  "head": "ddc77250c634e19017f7e6d7c34b2ad7a8744c52",
+  "sourceSha256": "6512932d124af8fb109e1840822af512820c52d10b8c7bdb225637050a00c886",
+  "caseId": "CONTACT_CONSTRUCTORS_V1",
+  "identity": "SYNTHETIC_SOURCE_ONLY_NO_NATIVE",
+  "phases": [
+    {
+      "name": "assertCommittedAdapter",
+      "elapsedMilliseconds": 5209.0426,
+      "gitCalls": 106,
+      "gitMilliseconds": 5191.264400000001,
+      "gitCommands": {
+        "rev-parse": 2,
+        "show": 104
+      }
+    },
+    {
+      "name": "assertManifestedFixtureEntry",
+      "elapsedMilliseconds": 221.8729999999996,
+      "gitCalls": 5,
+      "gitMilliseconds": 219.91899999999987,
+      "gitCommands": {
+        "rev-parse": 3,
+        "show": 2
+      }
+    },
+    {
+      "name": "sourceCold",
+      "elapsedMilliseconds": 10395.133699999998,
+      "gitCalls": 195,
+      "gitMilliseconds": 10150.384800000002,
+      "gitCommands": {
+        "rev-parse": 4,
+        "merge-base": 1,
+        "diff": 1,
+        "show": 189
+      }
+    },
+    {
+      "name": "sourceWarm",
+      "elapsedMilliseconds": 503.45889999999963,
+      "gitCalls": 5,
+      "gitMilliseconds": 399.6392999999971,
+      "gitCommands": {
+        "rev-parse": 4,
+        "diff": 1
+      }
+    },
+    {
+      "name": "actualBeforePhaseWarm",
+      "elapsedMilliseconds": 8406.2758,
+      "gitCalls": 111,
+      "gitMilliseconds": 8322.732699999979,
+      "gitCommands": {
+        "rev-parse": 6,
+        "show": 104,
+        "diff": 1
+      }
+    },
+    {
+      "name": "buildInputWarm",
+      "elapsedMilliseconds": 380.80159999999887,
+      "gitCalls": 5,
+      "gitMilliseconds": 275.9167999999954,
+      "gitCommands": {
+        "rev-parse": 4,
+        "diff": 1
+      }
+    }
+  ],
+  "wallTimesAreLocalMeasurementsNotNativeCause": true,
+  "native": "NOT_RUN",
+  "queriesExecuted": 0,
+  "credentialsLoaded": false,
+  "rawGitOutputRecorded": false,
+  "turnsOpened": 0,
+  "statementOrWorkBudgetsChanged": false
+}

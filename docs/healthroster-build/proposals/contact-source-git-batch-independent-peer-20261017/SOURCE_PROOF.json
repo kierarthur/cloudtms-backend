@@ -1,0 +1,116 @@
+{
+  "authorCommit": "ca286b25e0dae032955bc80a8267210083c9d53b",
+  "manifestSha256": "cc1e7752802fa31a8ecc0aae0ad0531b151b10aac5ce13b17894f44e994f22a3",
+  "savedIndexHistoricalExact": 21,
+  "selectionSha256": "038f8d054793be5e7b01e51438012b50ec8c5c83808f56cdb731198ee01f977a",
+  "verifyProofSha256": "4e18951626b8d154377c9b42936caa16aaff230df60455e99d259e3040a6aaa5",
+  "files": [
+    {
+      "file": "candidate/docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/MANIFEST.json",
+      "bytes": 8529,
+      "sha256": "e119fb9b36b191ecd61edb65567c78cf0ac9511b4e8f04ed604c7adee9ccb403"
+    },
+    {
+      "file": "candidate/docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/README.md",
+      "bytes": 10500,
+      "sha256": "56dc3b4246700b05b182959e938d60e6c1613e54dda0ebdeddb7db2ecb09f2fd"
+    },
+    {
+      "file": "candidate/docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/source.mjs",
+      "bytes": 9879,
+      "sha256": "33bfe952c5d8c32eafbbd75709587e5da573cfac735ddc3b467644c52d8d4056"
+    },
+    {
+      "file": "compose.mjs",
+      "bytes": 5742,
+      "sha256": "6e6a06b47983dfd1615b52643beafbbf5f301a19c2d8194f38cb971365ad61b5"
+    },
+    {
+      "file": "freeze.mjs",
+      "bytes": 1144,
+      "sha256": "023fa29bef34a819a4fd4f77f7c54b7c0c2427d82b35182165a954ee5a478712"
+    },
+    {
+      "file": "FULL_PARENT_INVERSES.json",
+      "bytes": 101852,
+      "sha256": "d51bbf5146e3b74ae7ca23cc560d429a3f111002a5b853717ff22538ccc7889b"
+    },
+    {
+      "file": "git-batch.inc",
+      "bytes": 2405,
+      "sha256": "3fe2f7224c253a880e9154410cf1beacb344409a8145797e9beaebf65450eca7"
+    },
+    {
+      "file": "measure-original.mjs",
+      "bytes": 3442,
+      "sha256": "3ceb56b5fd38941ce049c08964f7283e1488054cdaa0604b59484365c4be72f6"
+    },
+    {
+      "file": "measure-postimage.mjs",
+      "bytes": 3719,
+      "sha256": "934ee5c3de3b6666cbb1b6fd58d8f30e2dc207abf442f544770d3bb153c767af"
+    },
+    {
+      "file": "ORIGINAL_MEASUREMENTS.json",
+      "bytes": 2148,
+      "sha256": "f7f5b088f59e3b0358e6ddc1e0b67962d008f82666195358a571043e1df9f4d0"
+    },
+    {
+      "file": "PARENT_PINS.json",
+      "bytes": 12906,
+      "sha256": "c3071aa1b6b2616105bc9af1a1561a6074bf522e86b08d962a51ddb80f7361c5"
+    },
+    {
+      "file": "PAYLOAD_SELECTION.json",
+      "bytes": 22150,
+      "sha256": "038f8d054793be5e7b01e51438012b50ec8c5c83808f56cdb731198ee01f977a"
+    },
+    {
+      "file": "POSTIMAGE_MEASUREMENTS.json",
+      "bytes": 2418,
+      "sha256": "fd57310eb304d2f184f82e587bdd110adc6ba12c3a8c04ffc79d5f33110eb75d"
+    },
+    {
+      "file": "prepare.mjs",
+      "bytes": 2055,
+      "sha256": "d6da76c85e7db2cf8e96ff67a75954e18ddab437bf7f11aaa57ddae5d22eca5a"
+    },
+    {
+      "file": "README.md",
+      "bytes": 5102,
+      "sha256": "bf7700162a472396f00bf59c75c0215f5edc6ff39bf8335b86602572c7fa2eca"
+    },
+    {
+      "file": "source-overlay.mjs",
+      "bytes": 667,
+      "sha256": "d3d3c6f929378aa27f9d2be3e51553436d5eed8171f2c0dd53159f6724b67dc1"
+    },
+    {
+      "file": "source.test.mjs",
+      "bytes": 9327,
+      "sha256": "849ad4c234f60d1aeed663467b9ddd8f868d6461f62bec9fbc6665b2534ddfeb"
+    },
+    {
+      "file": "TEST_RESULTS.tap",
+      "bytes": 11512,
+      "sha256": "2d7aff8177ea2a18336610e17c9d2d46d8c03ae201209afe8323ea45c131deba"
+    },
+    {
+      "file": "VERIFY_PROOF.json",
+      "bytes": 29401,
+      "sha256": "4e18951626b8d154377c9b42936caa16aaff230df60455e99d259e3040a6aaa5"
+    },
+    {
+      "file": "verify.mjs",
+      "bytes": 8192,
+      "sha256": "e306911a45032391144f6acdba5d2affbce9f4723f34a29f2a6e42a4c9379ad6"
+    },
+    {
+      "file": "MANIFEST.json",
+      "bytes": 3673,
+      "sha256": "cc1e7752802fa31a8ecc0aae0ad0531b151b10aac5ce13b17894f44e994f22a3"
+    }
+  ],
+  "BankSemanticBodyReads": false,
+  "native": "NOT_RUN"
+}

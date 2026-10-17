@@ -1,0 +1,292 @@
+TAP version 13
+# Subtest: exact 15+6 raw native members preserve PGjsonb order, large numeric token, escapes and UTF8
+ok 1 - exact 15+6 raw native members preserve PGjsonb order, large numeric token, escapes and UTF8
+  ---
+  duration_ms: 3.9102
+  type: 'test'
+  ...
+# Subtest: actual capture retains raw joined SHA across every byte boundary and original logical fixture frame
+ok 2 - actual capture retains raw joined SHA across every byte boundary and original logical fixture frame
+  ---
+  duration_ms: 379.2723
+  type: 'test'
+  ...
+# Subtest: every missing key, duplicate key and escaped top-key alias refuses
+ok 3 - every missing key, duplicate key and escaped top-key alias refuses
+  ---
+  duration_ms: 3.3398
+  type: 'test'
+  ...
+# Subtest: unknown keys, wrong partition/order, swapped fragments and partial/trailing frames refuse without canaries
+ok 4 - unknown keys, wrong partition/order, swapped fragments and partial/trailing frames refuse without canaries
+  ---
+  duration_ms: 0.8443
+  type: 'test'
+  ...
+# Subtest: malformed JSON/string/bracket/number refuses at lexer or one original final JSON parse
+ok 5 - malformed JSON/string/bracket/number refuses at lexer or one original final JSON parse
+  ---
+  duration_ms: 2.725
+  type: 'test'
+  ...
+# Subtest: original cumulative stdout, stderr, control and child limits remain; failed bytes are discarded
+ok 6 - original cumulative stdout, stderr, control and child limits remain; failed bytes are discarded
+  ---
+  duration_ms: 4.4409
+  type: 'test'
+  ...
+# Subtest: default reader/capture path and original WeakMap fake/stale refusal remain
+ok 7 - default reader/capture path and original WeakMap fake/stale refusal remain
+  ---
+  duration_ms: 0.4857
+  type: 'test'
+  ...
+# Subtest: both fixed cases compile current actual source once; original reference input stays unchanged
+ok 8 - both fixed cases compile current actual source once; original reference input stays unchanged
+  ---
+  duration_ms: 3595.466
+  type: 'test'
+  ...
+# Subtest: fixed meta commands and interpolation contain only two bounded named digest bags
+ok 9 - fixed meta commands and interpolation contain only two bounded named digest bags
+  ---
+  duration_ms: 4.2078
+  type: 'test'
+  ...
+# Subtest: literal full-query inverse restores complete canonical text including dollar replacement tokens
+ok 10 - literal full-query inverse restores complete canonical text including dollar replacement tokens
+  ---
+  duration_ms: 1.8091
+  type: 'test'
+  ...
+# Subtest: compiler rejects changed full parent, missing scope, missing CSE binding or fields
+ok 11 - compiler rejects changed full parent, missing scope, missing CSE binding or fields
+  ---
+  duration_ms: 19.6078
+  type: 'test'
+  ...
+# Subtest: same-RR bag model preserves empty/duplicate/null/Unicode row hashes and bigint counts; corrupt bags differ
+ok 12 - same-RR bag model preserves empty/duplicate/null/Unicode row hashes and bigint counts; corrupt bags differ
+  ---
+  duration_ms: 2.7908
+  type: 'test'
+  ...
+# Subtest: both count/hash bags have a finite source-derived worst-case size below the original control bound
+ok 13 - both count/hash bags have a finite source-derived worst-case size below the original control bound
+  ---
+  duration_ms: 1.9369
+  type: 'test'
+  ...
+# Subtest: C-after retains exact original fixture proof, aborted-XID and fresh-PID requirements with no stale substitute
+ok 14 - C-after retains exact original fixture proof, aborted-XID and fresh-PID requirements with no stale substitute
+  ---
+  duration_ms: 1847.9223
+  type: 'test'
+  ...
+# Subtest: actual private default coordinator still parses its two original frames
+ok 15 - actual private default coordinator still parses its two original frames
+  ---
+  duration_ms: 15.7317
+  type: 'test'
+  ...
+# Subtest: actual private PREFIX coordinator closes with only bounded progress/peer
+ok 16 - actual private PREFIX coordinator closes with only bounded progress/peer
+  ---
+  duration_ms: 1.1119
+  type: 'test'
+  ...
+# Subtest: actual private failure kills own child and keeps exact SQLSTATE/completion only
+ok 17 - actual private failure kills own child and keeps exact SQLSTATE/completion only
+  ---
+  duration_ms: 2.6783
+  type: 'test'
+  ...
+# Subtest: actual private coordinator closes all three component modes with bounded count/hash only
+ok 18 - actual private coordinator closes all three component modes with bounded count/hash only
+  ---
+  duration_ms: 2.63
+  type: 'test'
+  ...
+# Subtest: actual private component SQLSTATE failure proves only prior prefix completions
+ok 19 - actual private component SQLSTATE failure proves only prior prefix completions
+  ---
+  duration_ms: 0.8748
+  type: 'test'
+  ...
+# Subtest: actual private batch coordinator returns only complete original-shaped frames after close
+ok 20 - actual private batch coordinator returns only complete original-shaped frames after close
+  ---
+  duration_ms: 2.8737
+  type: 'test'
+  ...
+# Subtest: actual private batch coordinator refuses partial frames and stderr before any snapshot returns
+ok 21 - actual private batch coordinator refuses partial frames and stderr before any snapshot returns
+  ---
+  duration_ms: 1.1563
+  type: 'test'
+  ...
+# Subtest: binary length framing preserves complete empty/CRLF/NUL/UTF8 bodies without normalization
+ok 22 - binary length framing preserves complete empty/CRLF/NUL/UTF8 bodies without normalization
+  ---
+  duration_ms: 8.5896
+  type: 'test'
+  ...
+# Subtest: every truncated output and trailing/duplicate/missing object refuses with closed errors only
+ok 23 - every truncated output and trailing/duplicate/missing object refuses with closed errors only
+  ---
+  duration_ms: 3.7573
+  type: 'test'
+  ...
+# Subtest: wrong type/size/header/OID/terminator/requests/overbound refuse
+ok 24 - wrong type/size/header/OID/terminator/requests/overbound refuse
+  ---
+  duration_ms: 0.8107
+  type: 'test'
+  ...
+# Subtest: original complete raw image predicate and predecessor forward guards are unchanged and reject each mismatch
+ok 25 - original complete raw image predicate and predecessor forward guards are unchanged and reject each mismatch
+  ---
+  duration_ms: 1.0917
+  type: 'test'
+  ...
+# Subtest: actual adapter reads all104 current/index complete blobs in one fresh bounded Git process
+ok 26 - actual adapter reads all104 current/index complete blobs in one fresh bounded Git process
+  ---
+  duration_ms: 336.6264
+  type: 'test'
+  ...
+# Subtest: actual adapter refuses changed index/current images and missing/truncated/wrong-type batches without root mutation
+ok 27 - actual adapter refuses changed index/current images and missing/truncated/wrong-type batches without root mutation
+  ---
+  duration_ms: 1953.3458
+  type: 'test'
+  ...
+# Subtest: actual source rechecks189 complete images in both calls, retaining all63 full predecessor comparisons without cache
+ok 28 - actual source rechecks189 complete images in both calls, retaining all63 full predecessor comparisons without cache
+  ---
+  duration_ms: 1908.6757
+  type: 'test'
+  ...
+# Subtest: after a successful actual source check, a subsequent changed index/current/old-parent cannot reuse admission
+ok 29 - after a successful actual source check, a subsequent changed index/current/old-parent cannot reuse admission
+  ---
+  duration_ms: 3211.6953
+  type: 'test'
+  ...
+# Subtest: saved source, setup, programme, role/source and writer checks remain actual closed checks
+ok 30 - saved source, setup, programme, role/source and writer checks remain actual closed checks
+  ---
+  duration_ms: 1465.4627
+  type: 'test'
+  ...
+# Subtest: private batching keeps original24MB bound, bounded groups, complete fallback and no retained cross-call images
+ok 31 - private batching keeps original24MB bound, bounded groups, complete fallback and no retained cross-call images
+  ---
+  duration_ms: 78.0728
+  type: 'test'
+  ...
+# Subtest: two exact complete programmes render within unchanged caps
+ok 32 - two exact complete programmes render within unchanged caps
+  ---
+  duration_ms: 86.7412
+  type: 'test'
+  ...
+# Subtest: unprovided case, fake Contact lock alias, wrong physical root refuse before connection
+ok 33 - unprovided case, fake Contact lock alias, wrong physical root refuse before connection
+  ---
+  duration_ms: 1.6399
+  type: 'test'
+  ...
+# Subtest: full constructor bodies and complete old assertions are retained
+ok 34 - full constructor bodies and complete old assertions are retained
+  ---
+  duration_ms: 719.5761
+  type: 'test'
+  ...
+# Subtest: QT actual return tag and command/domain audit checks bind current owner
+ok 35 - QT actual return tag and command/domain audit checks bind current owner
+  ---
+  duration_ms: 0.7199
+  type: 'test'
+  ...
+# Subtest: unchanged native actor preflight precedes INSERT; no role switching
+ok 36 - unchanged native actor preflight precedes INSERT; no role switching
+  ---
+  duration_ms: 0.566
+  type: 'test'
+  ...
+# Subtest: fixed C uses original canonical query and all twelve complete relations without connecting
+ok 37 - fixed C uses original canonical query and all twelve complete relations without connecting
+  ---
+  duration_ms: 1734.1891
+  type: 'test'
+  ...
+# Subtest: reader parent full raw inverse and original control/timing exact bytes
+ok 38 - reader parent full raw inverse and original control/timing exact bytes
+  ---
+  duration_ms: 9.869
+  type: 'test'
+  ...
+# Subtest: all four original SQL parents fully reverse including exact owner and framing spans
+ok 39 - all four original SQL parents fully reverse including exact owner and framing spans
+  ---
+  duration_ms: 4.9183
+  type: 'test'
+  ...
+# Subtest: native metadata guard refuses unreviewed policy/owner/rule/inheritance/DDL hooks before business reads
+ok 40 - native metadata guard refuses unreviewed policy/owner/rule/inheritance/DDL hooks before business reads
+  ---
+  duration_ms: 0.8637
+  type: 'test'
+  ...
+# Subtest: synthetic response boundaries accept exact two shapes, not native qualification
+ok 41 - synthetic response boundaries accept exact two shapes, not native qualification
+  ---
+  duration_ms: 4.8677
+  type: 'test'
+  ...
+# Subtest: synthetic SET/DDL null is per-index; SELECT null, wrong tag and extra fields refuse
+ok 42 - synthetic SET/DDL null is per-index; SELECT null, wrong tag and extra fields refuse
+  ---
+  duration_ms: 2.4493
+  type: 'test'
+  ...
+# Subtest: synthetic wrong programme counters/accepted/rollback/freshness refuse
+ok 43 - synthetic wrong programme counters/accepted/rollback/freshness refuse
+  ---
+  duration_ms: 2.4859
+  type: 'test'
+  ...
+# Subtest: pooled MCP PID equal B is permitted only with independent C-after and full scope
+ok 44 - pooled MCP PID equal B is permitted only with independent C-after and full scope
+  ---
+  duration_ms: 1.7007
+  type: 'test'
+  ...
+# Subtest: original WeakMap refuses invented proof or stale copied qualification
+ok 45 - original WeakMap refuses invented proof or stale copied qualification
+  ---
+  duration_ms: 856.2061
+  type: 'test'
+  ...
+# Subtest: bounded capture and persistence refuse oversized/native raw maps
+ok 46 - bounded capture and persistence refuse oversized/native raw maps
+  ---
+  duration_ms: 1.722
+  type: 'test'
+  ...
+# Subtest: root timing is actual bounded metadata only; no fabricated latency or SQL result
+ok 47 - root timing is actual bounded metadata only; no fabricated latency or SQL result
+  ---
+  duration_ms: 3.4896
+  type: 'test'
+  ...
+1..47
+# tests 47
+# suites 0
+# pass 47
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 9180.5049
