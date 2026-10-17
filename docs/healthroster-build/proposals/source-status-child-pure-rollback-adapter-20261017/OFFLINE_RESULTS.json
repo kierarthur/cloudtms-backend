@@ -1,0 +1,37 @@
+{
+  "version": "SOURCE_STATUS_CHILD_PURE_ADAPTER_OFFLINE_RESULTS_V1",
+  "programmeMilestoneCommit": "fb235cfae7a6d3f5eb3ef581bebebf7daa68315e",
+  "rootSourceCommit": "bb6252f46597cf15a6450adfb2af27c1e615fb3d",
+  "programme": {
+    "bytes": 20303,
+    "sha256": "ed1eb564947cea75131284ba62967e0654154d7374eebb9bba4a436bc12908a8",
+    "statements": 6,
+    "newDefinitions": 1,
+    "positiveSyntheticBoundaries": 4,
+    "negativeSyntheticBoundaries": 12,
+    "existingHelperReplaced": false
+  },
+  "checks": {
+    "programmeSourceAndPG17": 41,
+    "exactCataloguePredicateASTSyntheticBoundaryVectors": 56,
+    "nodeAdapterCases": 20,
+    "sourceAndWholeParentAndGrammar": 177
+  },
+  "rootInputs": 42,
+  "completeCurrentParents": 9,
+  "byteUnchanged": [
+    "control.mjs",
+    "timing.mjs"
+  ],
+  "fixedMetadataReaderDelta": "Only Source application_name",
+  "native": "NOT_RUN",
+  "restoration": "NOT_RUN",
+  "dbConnections": 0,
+  "publicFinancialResult": "NOT_PROVIDED",
+  "API": "NOT_RUN",
+  "businessCurrentness": "NOT_QUALIFIED",
+  "runtimeRootSourceWrites": 0,
+  "BankBodyReads": 0,
+  "Docker": false,
+  "nativeTrials": 0
+}
