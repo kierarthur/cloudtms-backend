@@ -1,0 +1,70 @@
+{
+  "version": "ROOT_REAL_TEST_ACTOR_READ_HOLD_V1",
+  "observations": [
+    {
+      "version": "ROOT_REAL_TEST_ACTOR_READ_V1",
+      "observedAt": "2026-10-17T07:48:10.730Z",
+      "backend": "https://test-cloudtms-backend.kier-88a.workers.dev",
+      "mode": "READ_ONLY_WITH_EXISTING_SINGLE_SECURITY_REFRESH",
+      "businessWritesAllowed": false,
+      "credentialsPrinted": false,
+      "readyStatus": 200,
+      "status": "HOLD_READ_ONLY_OBSERVATION",
+      "failure": "APPROVED_AUTH_REUSE_OR_ROUTE_NOT_READY"
+    },
+    {
+      "version": "ROOT_REAL_TEST_ACTOR_READ_V1",
+      "observedAt": "2026-10-17T07:48:38.584Z",
+      "backend": "https://test-cloudtms-backend.kier-88a.workers.dev",
+      "mode": "READ_ONLY_WITH_EXISTING_SINGLE_SECURITY_REFRESH",
+      "businessWritesAllowed": false,
+      "credentialsPrinted": false,
+      "readyStatus": 200,
+      "status": "HOLD_READ_ONLY_OBSERVATION",
+      "phase": "ME_READ",
+      "errorClass": "Error",
+      "errorCategory": "OTHER_SANITISED",
+      "failure": "APPROVED_AUTH_REUSE_OR_ROUTE_NOT_READY"
+    },
+    {
+      "version": "ROOT_REAL_TEST_ACTOR_READ_V1",
+      "observedAt": "2026-10-17T07:51:16.393Z",
+      "backend": "https://test-cloudtms-backend.kier-88a.workers.dev",
+      "mode": "READ_ONLY_WITH_EXISTING_SINGLE_SECURITY_REFRESH",
+      "businessWritesAllowed": false,
+      "credentialsPrinted": false,
+      "readyStatus": 200,
+      "actor": {
+        "status": 401,
+        "actorId": null,
+        "admin": false
+      },
+      "workspace": {
+        "status": 401,
+        "contract": null,
+        "queryWorkspacePresent": false
+      },
+      "requestMethods": {
+        "GET": 99,
+        "POST": 1
+      },
+      "refusedOrigins": 0,
+      "refusedMethods": 0,
+      "securityRefreshCount": 1,
+      "status": "HOLD_ACTOR_OR_WORKSPACE_UNQUALIFIED",
+      "limits": [
+        "Application admission only; no direct native WP-PP call, fixture creation or mutation.",
+        "No payment flag values, passwords, tokens, auth state, email, display name or signature are recorded.",
+        "No claim that proposed Install2 modules are deployed."
+      ]
+    }
+  ],
+  "finalConclusion": "NORMAL_TEST_READY_200_EXISTING_SESSION_ME_AND_WORKSPACE_401_ACTOR_UNBOUND",
+  "businessMutation": false,
+  "credentialsOrStatePrinted": false,
+  "storageStateCopiedOrChanged": false,
+  "limits": "R1/R2 are generic harness failures, not diagnosed product defects. R3 returns actual401 with refresh-suppression mode on explicit reads. No inference about why the retained authentication was invalid.",
+  "retainedOwnedTemporaryFolder": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\.codex-tmp\\healthroster-real-actor-read-20261017",
+  "privateDataFilesCreated": [],
+  "deletionRefused": false
+}

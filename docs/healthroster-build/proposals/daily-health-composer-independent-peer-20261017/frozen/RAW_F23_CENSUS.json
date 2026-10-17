@@ -1,0 +1,108 @@
+{
+  "stage": "RAW_HEALTH_SOURCE_CENSUS_NOT_F23_ADMISSION",
+  "actualGate": {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+    "commit": "77b70db4c9c19eab2a473a6600f438fb3c5acc01",
+    "file": "scripts/bpay-next-source-gates.mjs",
+    "sha256": "0ea663b95c457f4f06b403aa4928f42a0993dfecafdc495a6fa1915713d931f8",
+    "savedEqualsCommit": true
+  },
+  "inputs": [
+    {
+      "file": "health/00_presentation.sqlinc",
+      "sha256": "a3c7ce4e96fd67395e292752df2274e7464536ce3566b543a23f149de49fafc0",
+      "bytes": 4550,
+      "heldUnexpandedTemplate": false,
+      "rawOnly": true,
+      "classified": false,
+      "points": []
+    },
+    {
+      "file": "health/05_review_enrollment.sqlinc",
+      "sha256": "006dd80653b9156ad1f162b9a2e78bc1e243fa38b5cdc75e123d5bc88119f3e6",
+      "bytes": 2917,
+      "heldUnexpandedTemplate": false,
+      "rawOnly": true,
+      "classified": false,
+      "points": []
+    },
+    {
+      "file": "health/10_revision_apply.sqlinc",
+      "sha256": "58cb6c60005c2e731cd4fe31b26c62aa70a2b4a10bf051ff1ef5e69783a28adf",
+      "bytes": 8104,
+      "heldUnexpandedTemplate": false,
+      "rawOnly": true,
+      "classified": false,
+      "points": []
+    },
+    {
+      "file": "templates/01_review.sql.tmpl",
+      "sha256": "ea6ee0ffd4b25e7c2843c18b2e6f94fb48a1abf28da6463274ad75c52ed858ef",
+      "bytes": 8788,
+      "heldUnexpandedTemplate": true,
+      "rawOnly": true,
+      "classified": false,
+      "points": []
+    },
+    {
+      "file": "templates/02_accept.sql.tmpl",
+      "sha256": "7bae24fa58c854f4e8df0b16e17cef8a04aff52fa88792f316f2daa7f42f21d3",
+      "bytes": 7621,
+      "heldUnexpandedTemplate": true,
+      "rawOnly": true,
+      "classified": false,
+      "points": []
+    },
+    {
+      "file": "templates/03_result.sql.tmpl",
+      "sha256": "325f48bdc55048c42392105d055bc8fe2dcd138f4d4b9ec6a1d1e77c7f42dc1b",
+      "bytes": 3741,
+      "heldUnexpandedTemplate": true,
+      "rawOnly": true,
+      "classified": false,
+      "points": []
+    },
+    {
+      "file": "health/99_acl.sqlinc",
+      "sha256": "d0941f0c92c247d86772a0c179f01ad9e2be95e9556556b7618045bdf362d43e",
+      "bytes": 1766,
+      "heldUnexpandedTemplate": false,
+      "rawOnly": true,
+      "classified": false,
+      "points": []
+    },
+    {
+      "file": "admission/ONE_TIME_ADMISSION.sqlinc",
+      "sha256": "712843c11c753f140413e39796efa930146ae9e7464c3cfbdf0b1f87ceb1d964",
+      "bytes": 797,
+      "heldUnexpandedTemplate": false,
+      "rawOnly": true,
+      "classified": false,
+      "points": []
+    },
+    {
+      "file": "verification/mandatory_security.sql",
+      "sha256": "3753fc86b3d12c0a64053410b99078c08bd30db25c8209ce0a79f0bafe80b114",
+      "bytes": 3202,
+      "heldUnexpandedTemplate": false,
+      "rawOnly": true,
+      "classified": false,
+      "points": []
+    },
+    {
+      "file": "ADDITIVE_REVERSE.sqlinc",
+      "sha256": "84b62bf38324601f871cc3356ee6b0a24bde27a08349c5f1482765fe5f97cc75",
+      "bytes": 675,
+      "heldUnexpandedTemplate": false,
+      "rawOnly": true,
+      "classified": false,
+      "points": []
+    }
+  ],
+  "hazardCount": 0,
+  "joinedBodyTypeProof": "HELD_UNPROVIDED_BANK_SLOTS_AND_FINAL_BODY",
+  "allowancesAdded": 0,
+  "existingClassifiersChanged": 0,
+  "bankingRuntimeOwnersSelected": 0,
+  "native": "NOT_RUN"
+}

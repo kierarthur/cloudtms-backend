@@ -1,0 +1,31 @@
+✔ complete bc9f packet and old77 saved-divergence history are preserved or completely reversed (1568.3051ms)
+✔ actual current0910 whole source inputs are bound to exact bb6252 committed bytes (551.5903ms)
+✔ current complete context differs only by reviewed upper normalization and reverses to original complete0858 parent (0.3346ms)
+✔ whole current registry/release reversals preserve every Source and six Daily chain and append only0910 verifier (4.0425ms)
+✔ changed current context, chain and unrelated root metadata refuse finite proof (19.9898ms)
+✔ literal reverse preserves SQL regex and JavaScript replacement tokens without expansion (0.1568ms)
+✔ new binding does not repair/qualify placement mapping or emit any runtime target/Bank interface (100.5779ms)
+✔ all complete parents transfer raw bytes from immutable Git, including the six untouched helpers (581.1251ms)
+✔ Review forward reverses the entire original parent literally and only once (0.6024ms)
+✔ real native and actor locks precede metadata FK enrollment; replay occurs on both sides of waits (0.2118ms)
+✔ enrollment response union rejects extra keys and never substitutes a Ready preview (0.1156ms)
+✔ immutable request replay after waits precedes Accept stale checks and business effects (0.1414ms)
+✔ native revision admits genuine cut, approved immutable row and exactly one declared publisher before Invoice (0.4225ms)
+✔ five actual Invoice owners bind exact signatures, including the genuine four-argument Daily overload (191.1232ms)
+✔ billing disposition comes from real selected slices and denies group identifiers to non-full readers (0.4506ms)
+✔ Result uses actual current Office reader rather than mutation Admin, compares full readers and basis after join (0.1928ms)
+✔ denied financial fields are NULL/REDACTED, explicit visibility required, actions dedupe semantic target not captions (0.3042ms)
+✔ eight exact new private names have explicit owner/revoke, one-time collision check and finite reverse (0.7016ms)
+✔ independent fifteen-row verifier checks catalogue/ACL without invoking private helpers or role switches (0.3536ms)
+✔ all three original Bank blocks lack actual ABI/contract pins and no nominal success can be emitted (82.2239ms)
+✔ operation-local placement scalar/history is explicitly unqualified and not state_revision/native-counter authority (0.4627ms)
+✔ grammar explicitly excludes all unprovided templates and uses no Banking substitutions (2.2906ms)
+✔ changed Health/Invoice/security source and flipped owner/approval metadata refuse before any runtime output (425.5198ms)
+ℹ tests 23
+ℹ suites 0
+ℹ pass 23
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2347.4512

@@ -1,0 +1,24 @@
+// Source-derived scalar counterexample and exact existing Health authority pins.
+import fs from 'node:fs';import path from 'node:path';import assert from 'node:assert/strict';import crypto from 'node:crypto';import {fileURLToPath} from 'node:url';
+const here=path.dirname(fileURLToPath(import.meta.url)),sha=s=>crypto.createHash('sha256').update(s).digest('hex'),read=f=>fs.readFileSync(path.join(here,'frozen',f),'utf8');
+const sources={schema:read('reference/root/supabase/migrations/16102026_0159_nhsp_v6_01_physical_source_review_schema.sql'),context:read('reference/root/supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/01_context.sqlinc'),scope:read('reference/root/supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/02_admission.sqlinc'),support:read('reference/root/supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/01_complete_helpers.sqlinc'),apply:read('health/10_revision_apply.sqlinc'),result:read('templates/03_result.sql.tmpl')};
+const evidence=[];const anchor=(name,key,needle)=>{const text=sources[key],at=text.indexOf(needle);assert(at>=0,name);assert.equal(text.indexOf(needle,at+needle.length),-1,name+' unique');evidence.push({name,source:key,wholeSha256:sha(text),line:text.slice(0,at).split('\n').length,exact:needle});};
+anchor('operation-local initial billing revision','schema','billing_revision bigint not null default 0 check(billing_revision>=0)');
+anchor('one increment in candidate apply','apply','billing_revision=billing_revision+1,to_timesheet_id=from_timesheet_id,state_revision=state_revision+1');
+anchor('unsupported receipt scalar','apply',"'placement_revision',o.billing_revision::text");
+anchor('unsupported Result scalar equality','result','placement_revision is distinct from o.billing_revision::text');
+anchor('genuine existing Health native financial counter','context',"'current_financial_revision',case when w.id is not null then w.current_revision_no::text else null end");
+anchor('genuine existing Health typed same-ID current binding','scope',"'current_placement',jsonb_build_object('version','CURRENT_DAILY_REVISION_V1','timesheet_id',t.timesheet_id,'financial_id',f.id,\n   'work_id',context#>'{identity,current_work_id}','revision_no',context->'current_financial_revision')");
+const basis=sources.support.slice(sources.support.indexOf('create or replace function private.daily_rate_correction_health_result_basis_v1'));
+assert(basis.includes('f.id=member.to_financial_id'));assert(!basis.includes('f.is_current'));assert(!basis.includes('placement_revision'));
+const defaultBilling=BigInt(sources.schema.match(/billing_revision bigint not null default ([0-9]+)/)[1]);
+const independentOperations=['A','B','C'].map(operation=>({operation,operationLocalBillingRevision:(defaultBilling+1n).toString()}));
+assert.equal(new Set(independentOperations.map(x=>x.operationLocalBillingRevision)).size,1);
+const pack='D:/Development/Legacy-Work/C-tmp/healthroster-handover/HealthRoster_Builder_Pack_16102026/NHSP_AUTHORISATION_AUDIT_15102026_HANDOFF_V6/WORKING_PREPARATION/MODULE_AND_CLOSURE_TARGETS.json';
+const raw=fs.readFileSync(pack),policy=JSON.parse(raw).currentV3PresentationContract;
+assert.deepEqual(policy.objects.Placement.required,['status','original_timesheet_id','current_timesheet_id','placement_revision','receipt_id']);
+assert.equal(policy.objects.Placement.fields.placement_revision,'uint63-decimal-string');
+assert(policy.invariants.some(x=>x.includes('Daily Result')&&x.includes('equal original/current physical IDs')));
+fs.writeFileSync(path.join(here,'SHARED_PRESENTATION_BINDING.json'),JSON.stringify({source:pack,wholeSha256:sha(raw),pointer:'#/currentV3PresentationContract',exactParsedContract:policy},null,2)+'\n');
+fs.writeFileSync(path.join(here,'SCALAR_MAPPING_EVIDENCE.json'),JSON.stringify({evidence,independentOperations,historicalBasisChecksAcceptedFinancialWithoutCurrentRequirement:true,historicalBasisRequiresNewScalar:false,currentProjectionABI:'UNPROVIDED',nativeWorkRevisionOrdinalContract:'NOT_PROVED_BY_BANK_IMPLEMENTATION',publicDTOChangesProposed:0,ownerBusinessDecisionRequired:false,native:'NOT_RUN'},null,2)+'\n');
+console.log(JSON.stringify({anchors:evidence.length,operationCounterCollision:true,publicDTOChanges:0,ownerDecisionRequired:false,native:'NOT_RUN'}));

@@ -1,0 +1,26 @@
+{
+  "files": [
+    {
+      "file": "reference/current0910/supabase/repeatable/17102026_0910_nhsp_v6_daily_role_identity/01_complete_context.sqlinc",
+      "statements": 1,
+      "bodies": 1,
+      "removedPsqlDirectives": []
+    },
+    {
+      "file": "reference/current0910/supabase/repeatable/17102026_0910_nhsp_v6_daily_role_identity/99_acl.sqlinc",
+      "statements": 2,
+      "bodies": 0,
+      "removedPsqlDirectives": []
+    },
+    {
+      "file": "reference/current0910/supabase/verification/17102026_0910_daily_role_identity_security.sql",
+      "statements": 3,
+      "bodies": 1,
+      "removedPsqlDirectives": [
+        "\\set ON_ERROR_STOP on"
+      ]
+    }
+  ],
+  "substitutions": [],
+  "native": "NOT_RUN"
+}

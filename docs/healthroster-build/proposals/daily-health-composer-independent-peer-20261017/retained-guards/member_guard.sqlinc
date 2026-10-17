@@ -1,0 +1,26 @@
+create or replace function private.timesheet_contract_move_member_guard_v1()
+returns trigger language plpgsql security definer set search_path='pg_catalog','private','pg_temp'
+as $function$
+declare o private.timesheet_contract_move_operations%rowtype;
+begin
+ if tg_op='DELETE' then raise exception 'CONTRACT_MOVE_MEMBER_IMMUTABLE' using errcode='55000'; end if;
+ select v.* into o from private.timesheet_contract_move_operations v where v.id=new.operation_id for update;
+ if o.id is null or o.state<>'REVIEWED' or (tg_op='UPDATE' and not (
+   (old.to_timesheet_id is null and (to_jsonb(new)-array['to_timesheet_id','to_version','to_financial_id','current_booking_id'])
+     is not distinct from (to_jsonb(old)-array['to_timesheet_id','to_version','to_financial_id','current_booking_id']))
+   or (old.to_timesheet_id is not null and old.to_financial_id is null and new.to_financial_id is not null
+     and (to_jsonb(new)-'to_financial_id') is not distinct from (to_jsonb(old)-'to_financial_id'))))
+  or not private.timesheet_contract_move_uuid_array_v1(new.expense_component_ids)
+  or not private.timesheet_contract_move_uuid_array_v1(new.workflow_ids)
+  or not private.timesheet_contract_move_uuid_array_v1(new.source_lineage_ids) then
+  raise exception 'CONTRACT_MOVE_MEMBER_IMMUTABLE' using errcode='55000';
+ end if;
+ if o.purpose='CONTRACT_CORRECTION' and (new.from_contract_id is null or new.to_contract_id<>o.to_contract_id
+  or new.from_timesheet_id=new.to_timesheet_id or new.original_booking_id=new.current_booking_id)
+  or o.purpose='DAILY_RATE_CORRECTION' and (new.from_contract_id is not null or new.to_contract_id is not null
+    or new.to_timesheet_id is not null and new.from_timesheet_id<>new.to_timesheet_id) then
+  raise exception 'CONTRACT_MOVE_MEMBER_PURPOSE_MISMATCH' using errcode='23514';
+ end if;
+ return new;
+end;
+$function$;

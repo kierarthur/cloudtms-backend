@@ -1,0 +1,24 @@
+{
+  "version": "ROOT_SOURCE_PURE_ADAPTER_SOURCE_REVIEW_V1",
+  "authorCommit": "5931ae9e2f1ab11de810996f5aea6a02570b7ce9",
+  "freezeManifestSha256": "1c19cc71647619081a736d44cd794cdb3941b9d761e4bb9f88485e00bd3051a9",
+  "rawGitExactFiles": 46,
+  "unchangedProgrammeMilestoneFiles": 13,
+  "independentChecks": {
+    "programme": 41,
+    "actualCataloguePredicateASTSyntheticVectors": 56,
+    "adapter": 20,
+    "sourceAndPG17": 177
+  },
+  "wholeCurrentParentInverses": 9,
+  "rootInputs": 42,
+  "qualifierAndFullCanonicalQueries": "ORIGINAL_UNCHANGED",
+  "timeAndTransportBounds": "ORIGINAL_UNCHANGED",
+  "freshVerification": "ORIGINAL_THREE_PLUS_EXACT_SIX_KEY_SAME_PHYSICAL_READONLY_PEER_NAME_WIDE_NEW_CHILD_ABSENCE",
+  "sourceReviewFindings": 0,
+  "independentPeer": "IN_PROGRESS",
+  "native": "NOT_RUN",
+  "verdict": "PASS_ROOT_BOUNDED_SOURCE_ONLY_PENDING_PEER_AND_COMMITTED_SETUP",
+  "existingKeyHelperReplaced": false,
+  "publicFinancialResult": "NOT_PROVIDED"
+}

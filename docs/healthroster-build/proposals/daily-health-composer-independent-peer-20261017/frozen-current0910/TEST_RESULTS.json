@@ -1,0 +1,10 @@
+{
+  "sourceBoundaryTests": 16,
+  "negativeMutationCases": 5,
+  "pass": 16,
+  "fail": 0,
+  "stdout": "✔ all complete parents transfer raw bytes from immutable Git, including the six untouched helpers (609.5487ms)\n✔ Review forward reverses the entire original parent literally and only once (0.7173ms)\n✔ real native and actor locks precede metadata FK enrollment; replay occurs on both sides of waits (0.2269ms)\n✔ enrollment response union rejects extra keys and never substitutes a Ready preview (0.1083ms)\n✔ immutable request replay after waits precedes Accept stale checks and business effects (0.1981ms)\n✔ native revision admits genuine cut, approved immutable row and exactly one declared publisher before Invoice (0.4339ms)\n✔ five actual Invoice owners bind exact signatures, including the genuine four-argument Daily overload (224.0638ms)\n✔ billing disposition comes from real selected slices and denies group identifiers to non-full readers (0.4685ms)\n✔ Result uses actual current Office reader rather than mutation Admin, compares full readers and basis after join (0.2119ms)\n✔ denied financial fields are NULL/REDACTED, explicit visibility required, actions dedupe semantic target not captions (0.202ms)\n✔ eight exact new private names have explicit owner/revoke, one-time collision check and finite reverse (0.6877ms)\n✔ independent fifteen-row verifier checks catalogue/ACL without invoking private helpers or role switches (0.4026ms)\n✔ all three original Bank blocks lack actual ABI/contract pins and no nominal success can be emitted (90.9157ms)\n✔ operation-local placement scalar/history is explicitly unqualified and not state_revision/native-counter authority (1.789ms)\n✔ grammar explicitly excludes all unprovided templates and uses no Banking substitutions (4.1062ms)\n✔ changed Health/Invoice/security source and flipped owner/approval metadata refuse before any runtime output (481.84ms)\nℹ tests 16\nℹ suites 0\nℹ pass 16\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 1521.1579\n",
+  "stderr": "",
+  "native": "NOT_RUN",
+  "dbConnections": 0
+}

@@ -1,0 +1,26 @@
+{
+  "version": "ROOT_DAILY_COMPOSER_INDEPENDENT_PEER_DISPOSITION_V1",
+  "peerCommit": "3dcee2696454c64f99d158a261d0ba5db44f12fa",
+  "manifestSha256": "4cd723c435fbe1fbd9141e3db63a82f68c9a4b14e29fa4f505a389c2489a9ed1",
+  "rawGitExactPeerFiles": 166,
+  "authorPackets": [
+    "bc9f07844759bb3a914d6a48488dd25c2946489c",
+    "4b1067c859f921855989eb7f147636cebf9286c3"
+  ],
+  "rootIndependentReplay": {
+    "originalSource": 16,
+    "currentSource": 23,
+    "currentWorker": 21,
+    "actualEnrollmentASTPaths": 8,
+    "PG17Inputs": 7,
+    "wholeEqualASTOutputWriteSuppressed": "Original Python Windows newline behavior reproduced exactly; no frozen evidence rewritten."
+  },
+  "peerVerdict": "BOUNDED_HEALTH_SOURCE_REVIEW_COMPLETE_CURRENT_MAPPING_AND_GENUINE_JOINS_HELD",
+  "additionalFindings": 0,
+  "knownTechnicalMappingFinding": 1,
+  "ownerBusinessDecisionRequired": false,
+  "native": "NOT_RUN",
+  "finalCriticSignoff": false,
+  "retainedPeerTemporaryFolder": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-v2-money-build-13102026\\docs\\.codex-tmp",
+  "optionalCleanup": "Combined replay/conditional nonrecursive empty-directory cleanup/freeze command was blocked by tool policy before execution. Peer completed replay/freeze separately; empty folder retained, no deletion claimed."
+}

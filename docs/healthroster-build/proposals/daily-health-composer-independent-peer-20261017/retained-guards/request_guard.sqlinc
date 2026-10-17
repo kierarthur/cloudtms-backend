@@ -1,0 +1,11 @@
+create or replace function private.timesheet_contract_move_request_guard_v1()
+returns trigger language plpgsql security definer set search_path='pg_catalog','pg_temp'
+as $function$
+begin
+ if tg_op='DELETE' or (tg_op='UPDATE' and (old.receipt_json is not null or new.receipt_json is null
+  or (to_jsonb(new)-'receipt_json') is distinct from (to_jsonb(old)-'receipt_json'))) then
+  raise exception 'CONTRACT_MOVE_REQUEST_IMMUTABLE' using errcode='55000';
+ end if;
+ return new;
+end;
+$function$;

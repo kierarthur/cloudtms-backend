@@ -1,0 +1,285 @@
+{
+  "version": "DAILY_COMPOSER_INDEPENDENT_CAPTURE_V1",
+  "commit": "bc9f07844759bb3a914d6a48488dd25c2946489c",
+  "source": "docs/healthroster-build/proposals/daily-health-composer-full-health-source-20261017",
+  "files": [
+    {
+      "file": "ADDITIVE_REVERSE.sqlinc",
+      "bytes": 675,
+      "sha256": "84b62bf38324601f871cc3356ee6b0a24bde27a08349c5f1482765fe5f97cc75",
+      "savedEqual": true
+    },
+    {
+      "file": "ASSEMBLY_STATE.json",
+      "bytes": 584,
+      "sha256": "3ab16bae5cbdf7de9c047874090a82c35934cf32f6e67a961d7c2fc9e3f31bc2",
+      "savedEqual": true
+    },
+    {
+      "file": "CURRENT_SOURCE_BINDING.json",
+      "bytes": 11463,
+      "sha256": "4d9d2ed7117ddc3b86097846f23643afd841668e95df87ea5bbdca9e5d589ccd",
+      "savedEqual": true
+    },
+    {
+      "file": "FORWARD_REVERSE.json",
+      "bytes": 2956,
+      "sha256": "5a6f74dd977570e903427776c53cb18feb29c4ffe3e26117294df7953104f535",
+      "savedEqual": true
+    },
+    {
+      "file": "GRAMMAR_RESULTS.json",
+      "bytes": 1591,
+      "sha256": "5421a58752205fc7dd14f9bcb9f5a7205f548d2044b6d8d51197935dd0d192f1",
+      "savedEqual": true
+    },
+    {
+      "file": "MANIFEST.json",
+      "bytes": 9613,
+      "sha256": "ccd5bf622b2f8f42644004a369c49db7f2c6e3ce8979431ee6c80033e26f2c13",
+      "savedEqual": true
+    },
+    {
+      "file": "MOUNT_REQUIREMENTS.md",
+      "bytes": 3850,
+      "sha256": "a2671713a1fefbe634f368f764472c2c2aab6592bfc5e6f787387cdcd2d62809",
+      "savedEqual": true
+    },
+    {
+      "file": "OWNER_BLOCKS.json",
+      "bytes": 4431,
+      "sha256": "6dcc99a25a5080ca3d35260aa4c589274cd03c5c9164a5535fb90dd4493cf718",
+      "savedEqual": true
+    },
+    {
+      "file": "PLACEMENT_HISTORY_QUALIFICATION.md",
+      "bytes": 3316,
+      "sha256": "1769460dd99d6a9c14e6c2794b3056d896bc438faa62cab6d75f43a9c39be161",
+      "savedEqual": true
+    },
+    {
+      "file": "RAW_F23_CENSUS.json",
+      "bytes": 3341,
+      "sha256": "4b95db0cc9e9290ae2930195830aa609c0f3d069f9d333648b15c758c84c2d17",
+      "savedEqual": true
+    },
+    {
+      "file": "README.md",
+      "bytes": 7829,
+      "sha256": "610adef09f0e897c10a78c87b73fd53d1cb49609e08dd435dbc0140ec68aa76f",
+      "savedEqual": true
+    },
+    {
+      "file": "SOURCE_PROOF.json",
+      "bytes": 13590,
+      "sha256": "2f420e8942a75e37dfce7775aee9755603c1e31307726a1cf0cb2cc6103bb6b8",
+      "savedEqual": true
+    },
+    {
+      "file": "SOURCE_SELECTION.json",
+      "bytes": 1480,
+      "sha256": "e7eca4134d32296caab80e63656fb279a0b2f9d79e8d53d4a850ecd6852e91b0",
+      "savedEqual": true
+    },
+    {
+      "file": "TEST_RESULTS.json",
+      "bytes": 2142,
+      "sha256": "ecb14e5b04252dc1d30672b12b9b0af9e78cabcbe37526f811721fea9843a8ca",
+      "savedEqual": true
+    },
+    {
+      "file": "admission/ONE_TIME_ADMISSION.sqlinc",
+      "bytes": 797,
+      "sha256": "712843c11c753f140413e39796efa930146ae9e7464c3cfbdf0b1f87ceb1d964",
+      "savedEqual": true
+    },
+    {
+      "file": "capture-current-source.mjs",
+      "bytes": 3989,
+      "sha256": "d4649e3dab6e653e90675a3530db761e3f20232fab0686cad6aa117a2e564631",
+      "savedEqual": true
+    },
+    {
+      "file": "census-source.mjs",
+      "bytes": 2250,
+      "sha256": "bd48c53cc67926e0a16a4935c6f22e7239e070a4366bf95928bfbb8a1a0a8080",
+      "savedEqual": true
+    },
+    {
+      "file": "check-source.mjs",
+      "bytes": 2265,
+      "sha256": "37656ec43debec2278c492eccbd19705e98a8f366c19a53bbe5b15b89fa4c55f",
+      "savedEqual": true
+    },
+    {
+      "file": "freeze.mjs",
+      "bytes": 4593,
+      "sha256": "2e76767e81ec3b5dd8e53f6fabef7f2083f9a6e280adbd630f105e0fb06cc985",
+      "savedEqual": true
+    },
+    {
+      "file": "grammar-source.py",
+      "bytes": 1270,
+      "sha256": "360e0c3ba90909698702f84aeaeaf3ee19ba3c8f881c6e12d500cd09502fd809",
+      "savedEqual": true
+    },
+    {
+      "file": "health/00_presentation.sqlinc",
+      "bytes": 4550,
+      "sha256": "a3c7ce4e96fd67395e292752df2274e7464536ce3566b543a23f149de49fafc0",
+      "savedEqual": true
+    },
+    {
+      "file": "health/05_review_enrollment.sqlinc",
+      "bytes": 2917,
+      "sha256": "006dd80653b9156ad1f162b9a2e78bc1e243fa38b5cdc75e123d5bc88119f3e6",
+      "savedEqual": true
+    },
+    {
+      "file": "health/10_revision_apply.sqlinc",
+      "bytes": 8104,
+      "sha256": "58cb6c60005c2e731cd4fe31b26c62aa70a2b4a10bf051ff1ef5e69783a28adf",
+      "savedEqual": true
+    },
+    {
+      "file": "health/99_acl.sqlinc",
+      "bytes": 1766,
+      "sha256": "d0941f0c92c247d86772a0c179f01ad9e2be95e9556556b7618045bdf362d43e",
+      "savedEqual": true
+    },
+    {
+      "file": "prepare.mjs",
+      "bytes": 8567,
+      "sha256": "3b98d6d4346626ff8e899f4b5b898929233a43ba43cf04ec13607a305072cc8a",
+      "savedEqual": true
+    },
+    {
+      "file": "reference/invoice/invoice_contract_move_billing_read_v1.sqlinc",
+      "bytes": 3566,
+      "sha256": "64eb2b4a35b0fde61ce9e5f76b8786df5f73ee16ddd39a1de6dfc27f2afc5672",
+      "savedEqual": true
+    },
+    {
+      "file": "reference/invoice/invoice_contract_move_inspect_v1.sqlinc",
+      "bytes": 12477,
+      "sha256": "fe9c8afa1a50b91e0464e786bc96133c4fd0148d14fc78ede0572e14b64a8f75",
+      "savedEqual": true
+    },
+    {
+      "file": "reference/invoice/invoice_contract_move_preflight_v1.sqlinc",
+      "bytes": 2071,
+      "sha256": "5b1d159e60c47afddcd75d29429c5c7a4a54d5da1aef546c85fd85d98b409c2f",
+      "savedEqual": true
+    },
+    {
+      "file": "reference/invoice/invoice_contract_move_prepare_v1.sqlinc",
+      "bytes": 17809,
+      "sha256": "4c6ba0028762c4e98302f1bbcfb4316e030825dd1fe1b93955799cc202f6f719",
+      "savedEqual": true
+    },
+    {
+      "file": "reference/invoice/invoice_daily_rate_actual_revision_assert_v1.sqlinc",
+      "bytes": 4163,
+      "sha256": "b18fe2cd908e27cfe8fb52156406b661b3961f1d2bc924781eff01271e60ac82",
+      "savedEqual": true
+    },
+    {
+      "file": "reference/policy/DAILY_RATE_CORRECTION_CONTRACT.md",
+      "bytes": 23611,
+      "sha256": "d55b4c278a77bc576cbacc31812e1b3f2202c578895105f479b3a23e3e7549d1",
+      "savedEqual": true
+    },
+    {
+      "file": "reference/policy/MOVE_STAGE_CONTRACT.md",
+      "bytes": 87319,
+      "sha256": "e8fd1cbff0165343b7460d52a4c73d41d6ee1fc7b4cb6b624f5df3eedf55262f",
+      "savedEqual": true
+    },
+    {
+      "file": "reference/report/templates/01_review.sql.tmpl",
+      "bytes": 8792,
+      "sha256": "797a0f324d716b0002883f1272976e1196d06acdf36f6f71d687f551aa95e1a6",
+      "savedEqual": true
+    },
+    {
+      "file": "reference/root/supabase/migrations/16102026_0159_nhsp_v6_01_physical_source_review_schema.sql",
+      "bytes": 40625,
+      "sha256": "d46481d0cd53880041b126c554d34dccc39854ff3bf31ac98883f85949cc1d82",
+      "savedEqual": true
+    },
+    {
+      "file": "reference/root/supabase/release/migration-lock.json",
+      "bytes": 79294,
+      "sha256": "655bbb55095a64a586fc448e1e654fd843564b55ca584f9f79967cb5c1a8eb14",
+      "savedEqual": true
+    },
+    {
+      "file": "reference/root/supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/01_context.sqlinc",
+      "bytes": 15693,
+      "sha256": "81a4b5a51c6898e728bcfa6c82e7326f7b3e3eaebf23847048473927615d5f3f",
+      "savedEqual": true
+    },
+    {
+      "file": "reference/root/supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/02_admission.sqlinc",
+      "bytes": 38065,
+      "sha256": "8b592b3833650f82159d703b960dab7baaf46d5958e02204a38bce45a407216e",
+      "savedEqual": true
+    },
+    {
+      "file": "reference/root/supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/03_requests.sqlinc",
+      "bytes": 4862,
+      "sha256": "daf9306ef07b5f9a8102ab65be38995e6465e13a433e997265911019eaed1912",
+      "savedEqual": true
+    },
+    {
+      "file": "reference/root/supabase/repeatable/16102026_1342_nhsp_v6_daily_public_services/01_public_services.sqlinc",
+      "bytes": 18959,
+      "sha256": "9d0038a0c0105eb9e44ad43c52364cf1b5ff03d212b44c40bdffc77b411f4b34",
+      "savedEqual": true
+    },
+    {
+      "file": "reference/root/supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/01_complete_helpers.sqlinc",
+      "bytes": 15886,
+      "sha256": "95c35931e723787e4c5258ef704cb1115f0edbd9fd6b34e9ab25c4d0966b355b",
+      "savedEqual": true
+    },
+    {
+      "file": "source.test.mjs",
+      "bytes": 14320,
+      "sha256": "ed6745fd0b357e976206ca2728cc54f76190953e81e4a77c5e9745b40979418d",
+      "savedEqual": true
+    },
+    {
+      "file": "templates/01_review.sql.tmpl",
+      "bytes": 8788,
+      "sha256": "ea6ee0ffd4b25e7c2843c18b2e6f94fb48a1abf28da6463274ad75c52ed858ef",
+      "savedEqual": true
+    },
+    {
+      "file": "templates/02_accept.sql.tmpl",
+      "bytes": 7621,
+      "sha256": "7bae24fa58c854f4e8df0b16e17cef8a04aff52fa88792f316f2daa7f42f21d3",
+      "savedEqual": true
+    },
+    {
+      "file": "templates/03_result.sql.tmpl",
+      "bytes": 3741,
+      "sha256": "325f48bdc55048c42392105d055bc8fe2dcd138f4d4b9ec6a1d1e77c7f42dc1b",
+      "savedEqual": true
+    },
+    {
+      "file": "verification/mandatory_security.sql",
+      "bytes": 3202,
+      "sha256": "3753fc86b3d12c0a64053410b99078c08bd30db25c8209ce0a79f0bafe80b114",
+      "savedEqual": true
+    },
+    {
+      "file": "verifier-template.sql",
+      "bytes": 1523,
+      "sha256": "c9f7c4ac8a6e8c0d5bf0c20937b7193fc588e99be68bbb466072ccad50cbc7f8",
+      "savedEqual": true
+    }
+  ],
+  "manifestEntries": 45,
+  "savedAndGitEqual": true
+}

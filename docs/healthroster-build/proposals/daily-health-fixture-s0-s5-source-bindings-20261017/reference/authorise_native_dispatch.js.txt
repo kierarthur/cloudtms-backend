@@ -1,0 +1,29 @@
+  if (!rpcPayload) {
+  try {
+    lifecycleSignatureLog('before_rpc', {
+      rpc_function_name: authoriseRpcFunctionName,
+      requested_timesheet_id: requestedTimesheetId || null,
+      expected_timesheet_id: expectedTimesheetId || null,
+      current_timesheet_id: currentTimesheetId || null,
+      expected_row_signature: expectedRowSignature || null
+    });
+    const authoriseRpcArgs = {
+      p_timesheet_id: requestedTimesheetId,
+      p_expected_timesheet_id: expectedTimesheetId,
+      p_actor_user_id: user?.id || null,
+      p_now_utc: now,
+      p_expected_row_signature: expectedRowSignature || null
+    };
+    if (duplicateExpenseConfirmed) authoriseRpcArgs.p_duplicate_expense_confirmed = true;
+    const rpcRes = await callTimesheetLifecycleRpcWithTransientRetry(env, authoriseRpcFunctionName, authoriseRpcArgs, {
+      timeoutMs: 12000,
+      lifecycleAction: 'AUTHORISE',
+      routeFamily: 'TIMESHEET_AUTHORISE',
+      requestedTimesheetId,
+      expectedTimesheetId,
+      currentTimesheetId,
+      expectedRowSignature,
+      actorUserId: user?.id || null,
+      maxAttempts: 4,
+      retryBudgetMs: 1800,
+      retryDelaysMs: [0, 125, 375, 850],

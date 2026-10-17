@@ -1,0 +1,18 @@
+{
+  "version": "SOURCE_STATUS_CHILD_PURE_SETUP_INTENT_V1",
+  "native": "NOT_RUN",
+  "rootMustAppendExactSetupEntryAndCommitBeforeNativeCall": true,
+  "databaseTarget": "agency_test",
+  "physicalDatabase": "cloudtms_test_clone",
+  "identity": "TEST; customer_key SQL NULL; LEGACY:1; no APPLYING release",
+  "businessFixtures": [],
+  "businessFixtureRows": 0,
+  "temporaryDefinitions": ["private.weekly_source_pay_decision_native_status_child_v1(jsonb,uuid,uuid,uuid,uuid)"],
+  "beforeNamespaceRequirement": "Zero pg_proc rows under private with this name, across all overloads and routine kinds, checked again inside B before CREATE",
+  "existingDependency": "private.weekly_exceptional_json_keys_exact_v1(jsonb,text[])",
+  "existingDependencyReplaced": false,
+  "marker": "Actual hr_install2_<original turn id hex> private relation, proof boolean NOT NULL, zero rows; created in actual B",
+  "rollback": "Server-owned direct Kier MCP B; complete original canonical before/after; actual original B transaction/empty observation; original qualifier and fresh distinct C-after third frame",
+  "freshVerification": "Original first three statements plus explicit name-wide new-child count zero on the same genuine read-only verification PID",
+  "outcomeAuthority": "No native success, restoration, Banking producer, public result or business-currentness claim at this source checkpoint"
+}

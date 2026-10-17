@@ -1,0 +1,89 @@
+{
+  "version": "DAILY_FIXTURE_S0_S5_SOURCE_BINDING_FREEZE_V1",
+  "originalRecipe": "ad02698589fa28b1a73af26390fad7cf4c0466f9",
+  "sourceParent": "bb6252f46597cf15a6450adfb2af27c1e615fb3d",
+  "actualActor": "UNBOUND",
+  "executableApiInputs": 0,
+  "authFileContentsRead": false,
+  "networkCalls": 0,
+  "nativeCalls": 0,
+  "businessRowsCreated": 0,
+  "sourceTests": 5,
+  "files": [
+    {
+      "file": "build.mjs",
+      "sha256": "a8369cddf4f56559ee2ba386c0acce9eb66505f38dca57b6635e97d11f59b379",
+      "bytes": 5204
+    },
+    {
+      "file": "freeze.mjs",
+      "sha256": "924be5e753f619bc322d5b16d8d2751062e126b9b18e525cde65d1eff1e63dba",
+      "bytes": 1545
+    },
+    {
+      "file": "PLAN.json",
+      "sha256": "65125ba8814b0bcb70f7c9dc32da8fd73852a881c99c0230f066c692585b9dcc",
+      "bytes": 6108
+    },
+    {
+      "file": "README.md",
+      "sha256": "272b7bc1ee132f46be276c985ae0b58ec4a293b49e1b3dd2f059699af450fb1a",
+      "bytes": 3493
+    },
+    {
+      "file": "reference/auth/playwright.config.ts",
+      "sha256": "4648b57b4a5d78e86f96ee3f7472e9cdb99977bba3fbc22750ad363a8475036b",
+      "bytes": 790
+    },
+    {
+      "file": "reference/auth/tests/e2e/auth.setup.ts",
+      "sha256": "ce6324a65869d6b4d58a3038b4f3b8e0204ff2dda49e80ef95c249817c1fe9ef",
+      "bytes": 1989
+    },
+    {
+      "file": "reference/authorise_input_and_current_guard.js.txt",
+      "sha256": "f274560f828fc6554ff3a33d7079cd18d246ebf6b71138d0043b370425cdc41a",
+      "bytes": 3238
+    },
+    {
+      "file": "reference/authorise_native_dispatch.js.txt",
+      "sha256": "2ecc14d1f1dc6fb78267822a532a7de7fb820d707b0686d631d3691e8be7c097",
+      "bytes": 1169
+    },
+    {
+      "file": "reference/details_lifecycle_branch.js.txt",
+      "sha256": "c860b3fd6e24601ddb464c16c5bef77ae9de2f5b0e20ca040460ee63434ed289",
+      "bytes": 5633
+    },
+    {
+      "file": "reference/handleMe.js.txt",
+      "sha256": "883d81b4c51eb579c8b7273cfe7a5d42046f80aa7954ecd090664e1fee3c9e1b",
+      "bytes": 1362
+    },
+    {
+      "file": "reference/lifecycle_native_read_candidate.js.txt",
+      "sha256": "7d566cf82ec24b523859278fb05cdd95efb173ac71f8aa423b5d82a4951ca97c",
+      "bytes": 4926
+    },
+    {
+      "file": "reference/payment-actor-permission.js",
+      "sha256": "cca0e4fa2d6ca5627d900538ea1d9176d4ae31dc29bb775067c997f3dff70c4e",
+      "bytes": 2692
+    },
+    {
+      "file": "reference/requireUser.js.txt",
+      "sha256": "7108146127fbeb4c71ed883f23fbf27add1b7aa9fa1d56da6f8f676246439d88",
+      "bytes": 1387
+    },
+    {
+      "file": "TEST_RESULTS.json",
+      "sha256": "b29602a72f94ea9fb0530b5bcc27bc4a50c53057401367a8c09e49ba8ab56d29",
+      "bytes": 776
+    },
+    {
+      "file": "test.mjs",
+      "sha256": "d196e0e1c61ffae4e105c5f6daee88ccd92135f9152188c8c4e46ebf5809cf5e",
+      "bytes": 3461
+    }
+  ]
+}

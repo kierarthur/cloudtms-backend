@@ -1,0 +1,59 @@
+{
+  "version": "DAILY_V3_HEALTH_OWNER_BLOCK_ASSEMBLY_V1",
+  "status": "HELD_UNPROVIDED_GENUINE_BANK_INTERFACES",
+  "runtimeComposerSymbolsMayBeInstalled": false,
+  "ownerBlockFiles": [],
+  "boundaries": [
+    {
+      "token": "@@BANK_REVIEW@@",
+      "owner": "BANKING",
+      "status": "UNPROVIDED",
+      "publishedContractPath": null,
+      "publishedContractCommit": null,
+      "publishedContractSha256": null,
+      "ownerCallBlockPath": null,
+      "ownerCallBlockSha256": null,
+      "inputSourceLocals": ["actor", "o", "daily", "physical"],
+      "mustBindSourceLocals": ["bank_pay_cut_hash", "bank_manifest_extension", "bank_pay_effect", "bank_financial_visible", "bank_ready", "bank_blockers", "bank_links"],
+      "existingNativeMetadataRequired": ["o.financial_state=QUALIFIED", "o.current_financial_cut_id genuine", "native prospective accepted_valuation_json when required by real0955"],
+      "obligation": "Actual original paid/frozen/current financial cut and known freeze/permission/history qualification under the actual native lock order; canonical SummaryDTO/current-role preview projection; genuine cut hash and any exact original native manifest extension. No prospective Work/command/publication or fabricated cut/zero/Ready. The exact callable signature, cut-hash semantics and native return/proof contract have not been published. Local variable names define Health composition slots only, not a new Bank service ABI."
+    },
+    {
+      "token": "@@BANK_ACCEPT@@",
+      "owner": "BANKING",
+      "status": "UNPROVIDED",
+      "publishedContractPath": null,
+      "publishedContractCommit": null,
+      "publishedContractSha256": null,
+      "ownerCallBlockPath": null,
+      "ownerCallBlockSha256": null,
+      "inputSourceLocals": ["actor", "o", "r", "context", "preview_args"],
+      "mustBindSourceLocals": ["bank_accept_qualified"],
+      "obligation": "Re-execute the genuine original financial cut/frozen/currentness/permission admission against this immutable review and actual native state under retained native locks, before Health Invoice/metadata locks, capability issue or DML. Exact original owner proof must be consumed by the real publisher and accepted valuation. No caller boolean, GUC, symbol-existence probe, legacy Contract-only cut API, new kernel or trusted arbitrary JSON substitutes. The Health local remains NULL unless a published reviewed owner block qualifies it."
+    },
+    {
+      "token": "@@BANK_RESULT@@",
+      "owner": "BANKING",
+      "status": "UNPROVIDED",
+      "publishedContractPath": null,
+      "publishedContractCommit": null,
+      "publishedContractSha256": null,
+      "ownerCallBlockPath": null,
+      "ownerCallBlockSha256": null,
+      "inputSourceLocals": ["p_actor_user_id", "o", "basis"],
+      "mustBindSourceLocals": ["financial", "financial_visible", "bank_next_actions", "bank_links"],
+      "obligation": "Actual independent current Office reader authority plus canonical native current-versus-retained semantic financial result/SummaryDTO and exact permitted native actions/links. Project into the existing closed V3 Financial/Effect/Action shapes only using the sole published native owner/adapter. No raw receipt, no immutable creator projection replay, no Admin/pay/creator implies visibility, no invented status or monetary IDs. Required actual native callable/projection contract is unprovided."
+    }
+  ],
+  "publishedProducerOnly": {
+    "signature": "private.bpay_next_daily_rate_correction_publish_v1(uuid,uuid)",
+    "policy": "WORKING_PREPARATION/DAILY_RATE_CORRECTION_CONTRACT.md section3 / DAILY-RATE-ADMISSION-01",
+    "declaredReturn": "DAILY_RATE_PUBLICATION_V1 with genuine work_id, revision_id, command_id, agency_sequence, state REGISTERED, canonical summary_dto",
+    "rule": "Health calls this exact producer once after real0858 revision admission, then requires original native daily_assert proof and Invoice obligation. No separate producer or summary implementation. Symbol existence alone never proves admission/publication."
+  },
+  "notRequiredCertificate": {
+    "status": "UNPROVIDED",
+    "signature": null,
+    "rule": "The actual pinned0858 path requires an approved genuine revision/publication and QUALIFIED native cut. No nominal NOT_REQUIRED alternative is authored. A genuine owner certificate and corresponding original native admission/receipt proof would require a separately reviewed successor."
+  }
+}

@@ -1,0 +1,29 @@
+✔ actual zero override PAY and Client CHARGE preserve fixed reimbursement and old paid input (2.3393ms)
+✔ NULL used override PAY is missing and cannot be replaced by a Client PAY quote (0.3708ms)
+✔ missing unused standard buckets and unused Additional zero do not block (0.2306ms)
+✔ mileage uses genuine current Candidate PAY and Client CHARGE; zero and missing differ (0.4081ms)
+✔ current Candidate channel changes rate cells without changing original physical or paid input (0.2049ms)
+✔ Contract or changed server identity/context cannot enter Daily correction calculation (0.1409ms)
+✔ native Client PAY fallback is used only when resolver selected CLIENT_DEFAULT (0.143ms)
+✔ unused decimal zero Additional differs from missing units or nonfinite retained money (0.1932ms)
+✔ a used invalid rate and changed worked input cannot be admitted as zero (0.2011ms)
+✔ Daily preview uses exact native selector and canonical builder; private context never becomes public DTO (21.0683ms)
+✔ browser-supplied actor, money, Contract, duplicate escaped keys and path mismatch are rejected before RPC (2.6719ms)
+✔ fresh active Office administrator is required before preview or acceptance (0.6173ms)
+✔ selected rates changing between native context and resolver do not produce a fresh calculation (0.7768ms)
+✔ saved preview replay can return before a now-missing used rate is freshly admitted (0.8115ms)
+✔ Accept repeats the exact browser UUID/body and performs no calculator, context, queue or automatic retry (1.3133ms)
+✔ malformed success or lost native Accept reply remains uncertain and retains request identity (1.2523ms)
+✔ definitive SQL stale/permission failure is not reported as successful or uncertain acceptance (0.6758ms)
+✔ GET uses only actual operation and current actor and rejects Contract or unrelated results (0.8534ms)
+✔ oversized browser data and invalid native cache return truthful dependency errors (0.6951ms)
+✔ RPC transport allows only specified native functions and uses the supplied abort signal (1.3939ms)
+✔ specified route registration leaves ordinary Daily processing outside this module (0.1895ms)
+ℹ tests 21
+ℹ suites 0
+ℹ pass 21
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 154.3496

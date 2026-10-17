@@ -1,0 +1,854 @@
+{
+  "version": "DAILY_HEALTH_COMPOSER_INDEPENDENT_PEER_V1",
+  "reviewModel": "gpt-6.1-sol",
+  "reasoningEffort": "xhigh",
+  "reviewedCommits": [
+    "bc9f07844759bb3a914d6a48488dd25c2946489c",
+    "4b1067c859f921855989eb7f147636cebf9286c3"
+  ],
+  "verdict": "BOUNDED_HEALTH_SOURCE_REVIEW_COMPLETE_RUNTIME_MAPPING_AND_JOINS_HELD",
+  "knownTechnicalMappingDefects": 1,
+  "additionalUnreportedFindings": 0,
+  "newOwnerBusinessPermissionRequired": false,
+  "sourceChecks": 100,
+  "currentForwardSourceTests": 23,
+  "currentWorkerUnitTests": 21,
+  "controlledEnrollmentAstPaths": 8,
+  "grammarInputs": 10,
+  "unexpandedTemplatesNotParsed": 3,
+  "rawCensusInputs": 10,
+  "rawHazards": 0,
+  "allowancesAdded": 0,
+  "bankBodySemanticReads": 0,
+  "rootWrites": 0,
+  "OfficeWrites": 0,
+  "native": "NOT_RUN",
+  "runtimeTargets": [],
+  "files": [
+    {
+      "file": "CAPTURE.json",
+      "bytes": 9460,
+      "sha256": "f92791ee540f3a07b7899fb6e4133078893e8a26549768506effc6d519f5bf80"
+    },
+    {
+      "file": "CURRENT_BINDING.json",
+      "bytes": 3908,
+      "sha256": "c4a0c1ae748c46aee3bfb65e8e6e73202d0dcf55ff6bdce497eae8b83f970c52"
+    },
+    {
+      "file": "current-forward-replay.mjs",
+      "bytes": 4666,
+      "sha256": "da498db42a14a110666b9f8a7d83218a88fa5babc46a2b65b9e07ca61380f9c0"
+    },
+    {
+      "file": "current-health/broker/src/contract-correction-v3.mjs",
+      "bytes": 12418,
+      "sha256": "57034c72103454ed956e7cbd7fbd9425b83171152a684237a94425147b33b087"
+    },
+    {
+      "file": "current-health/broker/src/daily-canonical-authority.js",
+      "bytes": 18725,
+      "sha256": "baa0df9bc653d0c4159a3401a903154444e17cfc3ea0c7b3bd30c5bdfae91942"
+    },
+    {
+      "file": "current-health/broker/src/daily-rate-correction.js",
+      "bytes": 14101,
+      "sha256": "ed0d0c9c9f52f281adf4f124d0ae6877caf3933fdbeaec4dc27e368da325dc84"
+    },
+    {
+      "file": "current-health/package.json",
+      "bytes": 33,
+      "sha256": "a90fc33418afa2b9cbf4768524b021135b965ecdf993457505bfae3ac44a8428"
+    },
+    {
+      "file": "current-health/tests/daily-rate-calculator.test.mjs",
+      "bytes": 7453,
+      "sha256": "d4a61133d01dc4f20ea254513c7e047a6632ddfc2d5961069b2edb2daffcce7d"
+    },
+    {
+      "file": "current-health/tests/daily-rate-http.test.mjs",
+      "bytes": 11158,
+      "sha256": "d974bbafa15373dcc09d78b3a157c3e772b0d7822b0b62865fcb77154ee2b62e"
+    },
+    {
+      "file": "CURRENT0910_CAPTURE.json",
+      "bytes": 14562,
+      "sha256": "e0a48ee2f1d105c929f17fcdb345ab6751c200d50a900e82609d8beb94844343"
+    },
+    {
+      "file": "CURRENT0910_GRAMMAR_REPLAY.json",
+      "bytes": 724,
+      "sha256": "bf3ca9d4d3291f64014620fcff0a665e7ac3007eefd29a4a0c099ee64914e972"
+    },
+    {
+      "file": "CURRENT0910_PEER_RESULTS.json",
+      "bytes": 2793,
+      "sha256": "16d4924ff4da3c0044c08675ef640cf954ebee1fd55a6d24bdc83620c21f804e"
+    },
+    {
+      "file": "ENROLLMENT_AST_PATHS.json",
+      "bytes": 2862,
+      "sha256": "9c15f8c3c738aec00cc5469ddf41377dc8a5efb19f1a390341e86cee0eacd71d"
+    },
+    {
+      "file": "enrollment-ast-paths.py",
+      "bytes": 4870,
+      "sha256": "f905782ac4834a98fbfd322ac07f20ad95de86d931082de92f351f9d5661189d"
+    },
+    {
+      "file": "freeze.mjs",
+      "bytes": 1898,
+      "sha256": "40771a2f07b731e38881a591f486547f21e5af1d14747404c8583b7aab461de2"
+    },
+    {
+      "file": "frozen-current0910/ADDITIVE_REVERSE.sqlinc",
+      "bytes": 675,
+      "sha256": "84b62bf38324601f871cc3356ee6b0a24bde27a08349c5f1482765fe5f97cc75"
+    },
+    {
+      "file": "frozen-current0910/admission/ONE_TIME_ADMISSION.sqlinc",
+      "bytes": 797,
+      "sha256": "712843c11c753f140413e39796efa930146ae9e7464c3cfbdf0b1f87ceb1d964"
+    },
+    {
+      "file": "frozen-current0910/ASSEMBLY_STATE.json",
+      "bytes": 969,
+      "sha256": "eca50b4edb5b684b8c65666c45b029709ef15a77a3532ee44215395d56939f9c"
+    },
+    {
+      "file": "frozen-current0910/capture-current-source.mjs",
+      "bytes": 3989,
+      "sha256": "d4649e3dab6e653e90675a3530db761e3f20232fab0686cad6aa117a2e564631"
+    },
+    {
+      "file": "frozen-current0910/census-source.mjs",
+      "bytes": 2250,
+      "sha256": "bd48c53cc67926e0a16a4935c6f22e7239e070a4366bf95928bfbb8a1a0a8080"
+    },
+    {
+      "file": "frozen-current0910/check-source.mjs",
+      "bytes": 2265,
+      "sha256": "37656ec43debec2278c492eccbd19705e98a8f366c19a53bbe5b15b89fa4c55f"
+    },
+    {
+      "file": "frozen-current0910/CURRENT_SOURCE_BINDING.json",
+      "bytes": 11554,
+      "sha256": "352614111bf2fad55b41d6b23ed786ea3fb9ade285d473542dc1c40a82c785f6"
+    },
+    {
+      "file": "frozen-current0910/CURRENT0910_BINDING.json",
+      "bytes": 85045,
+      "sha256": "12665d62aafd6b9d472d335bff0e25a1979a5953cf719a3779e8f6ef00f16822"
+    },
+    {
+      "file": "frozen-current0910/CURRENT0910_GRAMMAR.json",
+      "bytes": 1161,
+      "sha256": "d096550bf4cf90ff79086d27d67b442247f6297994cf5c664d79a5155f98e95b"
+    },
+    {
+      "file": "frozen-current0910/FORWARD_EDITS.json",
+      "bytes": 108608,
+      "sha256": "2f707a233fba6aa4f101855f2fa508e6970905c8eda1f32c90a3169e32347e3a"
+    },
+    {
+      "file": "frozen-current0910/FORWARD_REVERSE.json",
+      "bytes": 2956,
+      "sha256": "5a6f74dd977570e903427776c53cb18feb29c4ffe3e26117294df7953104f535"
+    },
+    {
+      "file": "frozen-current0910/FORWARD_TEST_RESULTS.json",
+      "bytes": 2911,
+      "sha256": "d2968deb2ddc6d36c5814c81d14605556bbbf3027150e9d24cc98fce011171c3"
+    },
+    {
+      "file": "frozen-current0910/forward.test.mjs",
+      "bytes": 4851,
+      "sha256": "c70f8bb7e442f10e348c923568bc9c3c59a2aea27a941848caa56b1705c3bcac"
+    },
+    {
+      "file": "frozen-current0910/freeze-forward.mjs",
+      "bytes": 2615,
+      "sha256": "c5e10542b5e06ec5829fcf97eb092452e2adfede53691494a4f8adc3ed22b8e8"
+    },
+    {
+      "file": "frozen-current0910/freeze.mjs",
+      "bytes": 4593,
+      "sha256": "2e76767e81ec3b5dd8e53f6fabef7f2083f9a6e280adbd630f105e0fb06cc985"
+    },
+    {
+      "file": "frozen-current0910/GRAMMAR_RESULTS.json",
+      "bytes": 1591,
+      "sha256": "5421a58752205fc7dd14f9bcb9f5a7205f548d2044b6d8d51197935dd0d192f1"
+    },
+    {
+      "file": "frozen-current0910/grammar-current0910.py",
+      "bytes": 1592,
+      "sha256": "3df1c75d791b93d09e4f6f08282e4657d68d96c31517b7a45a3ef4869c365fa3"
+    },
+    {
+      "file": "frozen-current0910/grammar-source.py",
+      "bytes": 1270,
+      "sha256": "360e0c3ba90909698702f84aeaeaf3ee19ba3c8f881c6e12d500cd09502fd809"
+    },
+    {
+      "file": "frozen-current0910/health/00_presentation.sqlinc",
+      "bytes": 4550,
+      "sha256": "a3c7ce4e96fd67395e292752df2274e7464536ce3566b543a23f149de49fafc0"
+    },
+    {
+      "file": "frozen-current0910/health/05_review_enrollment.sqlinc",
+      "bytes": 2917,
+      "sha256": "006dd80653b9156ad1f162b9a2e78bc1e243fa38b5cdc75e123d5bc88119f3e6"
+    },
+    {
+      "file": "frozen-current0910/health/10_revision_apply.sqlinc",
+      "bytes": 8104,
+      "sha256": "58cb6c60005c2e731cd4fe31b26c62aa70a2b4a10bf051ff1ef5e69783a28adf"
+    },
+    {
+      "file": "frozen-current0910/health/99_acl.sqlinc",
+      "bytes": 1766,
+      "sha256": "d0941f0c92c247d86772a0c179f01ad9e2be95e9556556b7618045bdf362d43e"
+    },
+    {
+      "file": "frozen-current0910/MANIFEST.json",
+      "bytes": 13242,
+      "sha256": "4eb6407252c0d6f9ccc5d5cbcca421c06ef73775f2ca56deaff53f0cc286293c"
+    },
+    {
+      "file": "frozen-current0910/MOUNT_REQUIREMENTS.md",
+      "bytes": 3850,
+      "sha256": "a2671713a1fefbe634f368f764472c2c2aab6592bfc5e6f787387cdcd2d62809"
+    },
+    {
+      "file": "frozen-current0910/OWNER_BLOCKS.json",
+      "bytes": 4431,
+      "sha256": "6dcc99a25a5080ca3d35260aa4c589274cd03c5c9164a5535fb90dd4493cf718"
+    },
+    {
+      "file": "frozen-current0910/PLACEMENT_HISTORY_QUALIFICATION.md",
+      "bytes": 4045,
+      "sha256": "8761b3de1afe1076a0eff0d432849b8060e87d014818b6d9e5f7566667d6c31f"
+    },
+    {
+      "file": "frozen-current0910/prepare-forward.mjs",
+      "bytes": 12366,
+      "sha256": "3896eb6929487acb283f4bc753e79c7cc6f6b36706460e3c35c3bae1073e567e"
+    },
+    {
+      "file": "frozen-current0910/prepare.mjs",
+      "bytes": 8567,
+      "sha256": "3b98d6d4346626ff8e899f4b5b898929233a43ba43cf04ec13607a305072cc8a"
+    },
+    {
+      "file": "frozen-current0910/RAW_F23_CENSUS.json",
+      "bytes": 3341,
+      "sha256": "4b95db0cc9e9290ae2930195830aa609c0f3d069f9d333648b15c758c84c2d17"
+    },
+    {
+      "file": "frozen-current0910/README.md",
+      "bytes": 9026,
+      "sha256": "0fa05120518c461928f096e0361cd256bb334545c7ece1ee39a033064c09e7c9"
+    },
+    {
+      "file": "frozen-current0910/reference/bc9f/ASSEMBLY_STATE.json",
+      "bytes": 584,
+      "sha256": "3ab16bae5cbdf7de9c047874090a82c35934cf32f6e67a961d7c2fc9e3f31bc2"
+    },
+    {
+      "file": "frozen-current0910/reference/bc9f/CURRENT_SOURCE_BINDING.json",
+      "bytes": 11463,
+      "sha256": "4d9d2ed7117ddc3b86097846f23643afd841668e95df87ea5bbdca9e5d589ccd"
+    },
+    {
+      "file": "frozen-current0910/reference/bc9f/MANIFEST.json",
+      "bytes": 9613,
+      "sha256": "ccd5bf622b2f8f42644004a369c49db7f2c6e3ce8979431ee6c80033e26f2c13"
+    },
+    {
+      "file": "frozen-current0910/reference/bc9f/PLACEMENT_HISTORY_QUALIFICATION.md",
+      "bytes": 3316,
+      "sha256": "1769460dd99d6a9c14e6c2794b3056d896bc438faa62cab6d75f43a9c39be161"
+    },
+    {
+      "file": "frozen-current0910/reference/bc9f/README.md",
+      "bytes": 7829,
+      "sha256": "610adef09f0e897c10a78c87b73fd53d1cb49609e08dd435dbc0140ec68aa76f"
+    },
+    {
+      "file": "frozen-current0910/reference/bc9f/SOURCE_PROOF.json",
+      "bytes": 13590,
+      "sha256": "2f420e8942a75e37dfce7775aee9755603c1e31307726a1cf0cb2cc6103bb6b8"
+    },
+    {
+      "file": "frozen-current0910/reference/bc9f/SOURCE_SELECTION.json",
+      "bytes": 1480,
+      "sha256": "e7eca4134d32296caab80e63656fb279a0b2f9d79e8d53d4a850ecd6852e91b0"
+    },
+    {
+      "file": "frozen-current0910/reference/current0910/docs/bpay-next/final-definer-closures.json",
+      "bytes": 1746259,
+      "sha256": "c10ac5fa3aafa9c2def791badd2b647bea2e980cd88a43af81c9a1cba7e7e00c"
+    },
+    {
+      "file": "frozen-current0910/reference/current0910/supabase/release/current-release.json",
+      "bytes": 36636,
+      "sha256": "1396346c26872e318231f0815594b2efe206eac4180de7b3c9120f14be24726d"
+    },
+    {
+      "file": "frozen-current0910/reference/current0910/supabase/repeatable/17102026_0910_nhsp_v6_daily_role_identity_v1.sql",
+      "bytes": 244,
+      "sha256": "869be3d8ff7f6635c9ca81c6805558e1de8d1f1de60c0d21342b0dfbfac39ea0"
+    },
+    {
+      "file": "frozen-current0910/reference/current0910/supabase/repeatable/17102026_0910_nhsp_v6_daily_role_identity/01_complete_context.sqlinc",
+      "bytes": 8650,
+      "sha256": "032153eb7425c21c1f7bbe0fe6abd29689fe6ba8fb0d154e8e6476a11d26c7d6"
+    },
+    {
+      "file": "frozen-current0910/reference/current0910/supabase/repeatable/17102026_0910_nhsp_v6_daily_role_identity/99_acl.sqlinc",
+      "bytes": 288,
+      "sha256": "f0477a93e05e9fa6960d64df4628c17421ce1e80d661067febec3c5fa0e6f3c4"
+    },
+    {
+      "file": "frozen-current0910/reference/current0910/supabase/verification/17102026_0910_daily_role_identity_security.sql",
+      "bytes": 2886,
+      "sha256": "888fcbcb73c5222f3756e1428130a67fe7a06f56b544d3a17c92cc46795b9852"
+    },
+    {
+      "file": "frozen-current0910/reference/invoice/invoice_contract_move_billing_read_v1.sqlinc",
+      "bytes": 3566,
+      "sha256": "64eb2b4a35b0fde61ce9e5f76b8786df5f73ee16ddd39a1de6dfc27f2afc5672"
+    },
+    {
+      "file": "frozen-current0910/reference/invoice/invoice_contract_move_inspect_v1.sqlinc",
+      "bytes": 12477,
+      "sha256": "fe9c8afa1a50b91e0464e786bc96133c4fd0148d14fc78ede0572e14b64a8f75"
+    },
+    {
+      "file": "frozen-current0910/reference/invoice/invoice_contract_move_preflight_v1.sqlinc",
+      "bytes": 2071,
+      "sha256": "5b1d159e60c47afddcd75d29429c5c7a4a54d5da1aef546c85fd85d98b409c2f"
+    },
+    {
+      "file": "frozen-current0910/reference/invoice/invoice_contract_move_prepare_v1.sqlinc",
+      "bytes": 17809,
+      "sha256": "4c6ba0028762c4e98302f1bbcfb4316e030825dd1fe1b93955799cc202f6f719"
+    },
+    {
+      "file": "frozen-current0910/reference/invoice/invoice_daily_rate_actual_revision_assert_v1.sqlinc",
+      "bytes": 4163,
+      "sha256": "b18fe2cd908e27cfe8fb52156406b661b3961f1d2bc924781eff01271e60ac82"
+    },
+    {
+      "file": "frozen-current0910/reference/policy/DAILY_RATE_CORRECTION_CONTRACT.md",
+      "bytes": 23611,
+      "sha256": "d55b4c278a77bc576cbacc31812e1b3f2202c578895105f479b3a23e3e7549d1"
+    },
+    {
+      "file": "frozen-current0910/reference/policy/MOVE_STAGE_CONTRACT.md",
+      "bytes": 87319,
+      "sha256": "e8fd1cbff0165343b7460d52a4c73d41d6ee1fc7b4cb6b624f5df3eedf55262f"
+    },
+    {
+      "file": "frozen-current0910/reference/report/templates/01_review.sql.tmpl",
+      "bytes": 8792,
+      "sha256": "797a0f324d716b0002883f1272976e1196d06acdf36f6f71d687f551aa95e1a6"
+    },
+    {
+      "file": "frozen-current0910/reference/root/supabase/migrations/16102026_0159_nhsp_v6_01_physical_source_review_schema.sql",
+      "bytes": 40625,
+      "sha256": "d46481d0cd53880041b126c554d34dccc39854ff3bf31ac98883f85949cc1d82"
+    },
+    {
+      "file": "frozen-current0910/reference/root/supabase/release/migration-lock.json",
+      "bytes": 79294,
+      "sha256": "655bbb55095a64a586fc448e1e654fd843564b55ca584f9f79967cb5c1a8eb14"
+    },
+    {
+      "file": "frozen-current0910/reference/root/supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/01_context.sqlinc",
+      "bytes": 15693,
+      "sha256": "81a4b5a51c6898e728bcfa6c82e7326f7b3e3eaebf23847048473927615d5f3f"
+    },
+    {
+      "file": "frozen-current0910/reference/root/supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/02_admission.sqlinc",
+      "bytes": 38065,
+      "sha256": "8b592b3833650f82159d703b960dab7baaf46d5958e02204a38bce45a407216e"
+    },
+    {
+      "file": "frozen-current0910/reference/root/supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/03_requests.sqlinc",
+      "bytes": 4862,
+      "sha256": "daf9306ef07b5f9a8102ab65be38995e6465e13a433e997265911019eaed1912"
+    },
+    {
+      "file": "frozen-current0910/reference/root/supabase/repeatable/16102026_1342_nhsp_v6_daily_public_services/01_public_services.sqlinc",
+      "bytes": 18959,
+      "sha256": "9d0038a0c0105eb9e44ad43c52364cf1b5ff03d212b44c40bdffc77b411f4b34"
+    },
+    {
+      "file": "frozen-current0910/reference/root/supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/01_complete_helpers.sqlinc",
+      "bytes": 15886,
+      "sha256": "95c35931e723787e4c5258ef704cb1115f0edbd9fd6b34e9ab25c4d0966b355b"
+    },
+    {
+      "file": "frozen-current0910/reference/root77/docs/bpay-next/final-definer-closures.json",
+      "bytes": 1745976,
+      "sha256": "d436e0a3512e7c29b85657f257100a5f6bbc44cc44bd4fcffada04a561e3cc39"
+    },
+    {
+      "file": "frozen-current0910/reference/root77/supabase/release/current-release.json",
+      "bytes": 36484,
+      "sha256": "6f3a4b39d686f440c8488e2d8233b6a00ec4d8e3d67ef080e586ddf28a0156bd"
+    },
+    {
+      "file": "frozen-current0910/SOURCE_PROOF.json",
+      "bytes": 14073,
+      "sha256": "5e34b9d48307492476cacc368bfbebc63433c7bbde277d42e4854f58303b1c90"
+    },
+    {
+      "file": "frozen-current0910/SOURCE_SELECTION.json",
+      "bytes": 1664,
+      "sha256": "a1cfef7882687083db65d3f99c4ff40915b9651d373cd0dce19d919a9c115ff3"
+    },
+    {
+      "file": "frozen-current0910/source.test.mjs",
+      "bytes": 14320,
+      "sha256": "ed6745fd0b357e976206ca2728cc54f76190953e81e4a77c5e9745b40979418d"
+    },
+    {
+      "file": "frozen-current0910/templates/01_review.sql.tmpl",
+      "bytes": 8788,
+      "sha256": "ea6ee0ffd4b25e7c2843c18b2e6f94fb48a1abf28da6463274ad75c52ed858ef"
+    },
+    {
+      "file": "frozen-current0910/templates/02_accept.sql.tmpl",
+      "bytes": 7621,
+      "sha256": "7bae24fa58c854f4e8df0b16e17cef8a04aff52fa88792f316f2daa7f42f21d3"
+    },
+    {
+      "file": "frozen-current0910/templates/03_result.sql.tmpl",
+      "bytes": 3741,
+      "sha256": "325f48bdc55048c42392105d055bc8fe2dcd138f4d4b9ec6a1d1e77c7f42dc1b"
+    },
+    {
+      "file": "frozen-current0910/TEST_RESULTS.json",
+      "bytes": 2142,
+      "sha256": "ecb14e5b04252dc1d30672b12b9b0af9e78cabcbe37526f811721fea9843a8ca"
+    },
+    {
+      "file": "frozen-current0910/verification/mandatory_security.sql",
+      "bytes": 3202,
+      "sha256": "3753fc86b3d12c0a64053410b99078c08bd30db25c8209ce0a79f0bafe80b114"
+    },
+    {
+      "file": "frozen-current0910/verifier-template.sql",
+      "bytes": 1523,
+      "sha256": "c9f7c4ac8a6e8c0d5bf0c20937b7193fc588e99be68bbb466072ccad50cbc7f8"
+    },
+    {
+      "file": "frozen-current0910/verify-forward.mjs",
+      "bytes": 2910,
+      "sha256": "c11804d6a0e5da25db26f07a50978f9d9d939d1fdf654c597d2403ffdcbd66fb"
+    },
+    {
+      "file": "frozen/ADDITIVE_REVERSE.sqlinc",
+      "bytes": 675,
+      "sha256": "84b62bf38324601f871cc3356ee6b0a24bde27a08349c5f1482765fe5f97cc75"
+    },
+    {
+      "file": "frozen/admission/ONE_TIME_ADMISSION.sqlinc",
+      "bytes": 797,
+      "sha256": "712843c11c753f140413e39796efa930146ae9e7464c3cfbdf0b1f87ceb1d964"
+    },
+    {
+      "file": "frozen/ASSEMBLY_STATE.json",
+      "bytes": 584,
+      "sha256": "3ab16bae5cbdf7de9c047874090a82c35934cf32f6e67a961d7c2fc9e3f31bc2"
+    },
+    {
+      "file": "frozen/capture-current-source.mjs",
+      "bytes": 3989,
+      "sha256": "d4649e3dab6e653e90675a3530db761e3f20232fab0686cad6aa117a2e564631"
+    },
+    {
+      "file": "frozen/census-source.mjs",
+      "bytes": 2250,
+      "sha256": "bd48c53cc67926e0a16a4935c6f22e7239e070a4366bf95928bfbb8a1a0a8080"
+    },
+    {
+      "file": "frozen/check-source.mjs",
+      "bytes": 2265,
+      "sha256": "37656ec43debec2278c492eccbd19705e98a8f366c19a53bbe5b15b89fa4c55f"
+    },
+    {
+      "file": "frozen/CURRENT_SOURCE_BINDING.json",
+      "bytes": 11463,
+      "sha256": "4d9d2ed7117ddc3b86097846f23643afd841668e95df87ea5bbdca9e5d589ccd"
+    },
+    {
+      "file": "frozen/FORWARD_REVERSE.json",
+      "bytes": 2956,
+      "sha256": "5a6f74dd977570e903427776c53cb18feb29c4ffe3e26117294df7953104f535"
+    },
+    {
+      "file": "frozen/freeze.mjs",
+      "bytes": 4593,
+      "sha256": "2e76767e81ec3b5dd8e53f6fabef7f2083f9a6e280adbd630f105e0fb06cc985"
+    },
+    {
+      "file": "frozen/GRAMMAR_RESULTS.json",
+      "bytes": 1591,
+      "sha256": "5421a58752205fc7dd14f9bcb9f5a7205f548d2044b6d8d51197935dd0d192f1"
+    },
+    {
+      "file": "frozen/grammar-source.py",
+      "bytes": 1270,
+      "sha256": "360e0c3ba90909698702f84aeaeaf3ee19ba3c8f881c6e12d500cd09502fd809"
+    },
+    {
+      "file": "frozen/health/00_presentation.sqlinc",
+      "bytes": 4550,
+      "sha256": "a3c7ce4e96fd67395e292752df2274e7464536ce3566b543a23f149de49fafc0"
+    },
+    {
+      "file": "frozen/health/05_review_enrollment.sqlinc",
+      "bytes": 2917,
+      "sha256": "006dd80653b9156ad1f162b9a2e78bc1e243fa38b5cdc75e123d5bc88119f3e6"
+    },
+    {
+      "file": "frozen/health/10_revision_apply.sqlinc",
+      "bytes": 8104,
+      "sha256": "58cb6c60005c2e731cd4fe31b26c62aa70a2b4a10bf051ff1ef5e69783a28adf"
+    },
+    {
+      "file": "frozen/health/99_acl.sqlinc",
+      "bytes": 1766,
+      "sha256": "d0941f0c92c247d86772a0c179f01ad9e2be95e9556556b7618045bdf362d43e"
+    },
+    {
+      "file": "frozen/MANIFEST.json",
+      "bytes": 9613,
+      "sha256": "ccd5bf622b2f8f42644004a369c49db7f2c6e3ce8979431ee6c80033e26f2c13"
+    },
+    {
+      "file": "frozen/MOUNT_REQUIREMENTS.md",
+      "bytes": 3850,
+      "sha256": "a2671713a1fefbe634f368f764472c2c2aab6592bfc5e6f787387cdcd2d62809"
+    },
+    {
+      "file": "frozen/OWNER_BLOCKS.json",
+      "bytes": 4431,
+      "sha256": "6dcc99a25a5080ca3d35260aa4c589274cd03c5c9164a5535fb90dd4493cf718"
+    },
+    {
+      "file": "frozen/PLACEMENT_HISTORY_QUALIFICATION.md",
+      "bytes": 3316,
+      "sha256": "1769460dd99d6a9c14e6c2794b3056d896bc438faa62cab6d75f43a9c39be161"
+    },
+    {
+      "file": "frozen/prepare.mjs",
+      "bytes": 8567,
+      "sha256": "3b98d6d4346626ff8e899f4b5b898929233a43ba43cf04ec13607a305072cc8a"
+    },
+    {
+      "file": "frozen/RAW_F23_CENSUS.json",
+      "bytes": 3341,
+      "sha256": "4b95db0cc9e9290ae2930195830aa609c0f3d069f9d333648b15c758c84c2d17"
+    },
+    {
+      "file": "frozen/README.md",
+      "bytes": 7829,
+      "sha256": "610adef09f0e897c10a78c87b73fd53d1cb49609e08dd435dbc0140ec68aa76f"
+    },
+    {
+      "file": "frozen/reference/invoice/invoice_contract_move_billing_read_v1.sqlinc",
+      "bytes": 3566,
+      "sha256": "64eb2b4a35b0fde61ce9e5f76b8786df5f73ee16ddd39a1de6dfc27f2afc5672"
+    },
+    {
+      "file": "frozen/reference/invoice/invoice_contract_move_inspect_v1.sqlinc",
+      "bytes": 12477,
+      "sha256": "fe9c8afa1a50b91e0464e786bc96133c4fd0148d14fc78ede0572e14b64a8f75"
+    },
+    {
+      "file": "frozen/reference/invoice/invoice_contract_move_preflight_v1.sqlinc",
+      "bytes": 2071,
+      "sha256": "5b1d159e60c47afddcd75d29429c5c7a4a54d5da1aef546c85fd85d98b409c2f"
+    },
+    {
+      "file": "frozen/reference/invoice/invoice_contract_move_prepare_v1.sqlinc",
+      "bytes": 17809,
+      "sha256": "4c6ba0028762c4e98302f1bbcfb4316e030825dd1fe1b93955799cc202f6f719"
+    },
+    {
+      "file": "frozen/reference/invoice/invoice_daily_rate_actual_revision_assert_v1.sqlinc",
+      "bytes": 4163,
+      "sha256": "b18fe2cd908e27cfe8fb52156406b661b3961f1d2bc924781eff01271e60ac82"
+    },
+    {
+      "file": "frozen/reference/policy/DAILY_RATE_CORRECTION_CONTRACT.md",
+      "bytes": 23611,
+      "sha256": "d55b4c278a77bc576cbacc31812e1b3f2202c578895105f479b3a23e3e7549d1"
+    },
+    {
+      "file": "frozen/reference/policy/MOVE_STAGE_CONTRACT.md",
+      "bytes": 87319,
+      "sha256": "e8fd1cbff0165343b7460d52a4c73d41d6ee1fc7b4cb6b624f5df3eedf55262f"
+    },
+    {
+      "file": "frozen/reference/report/templates/01_review.sql.tmpl",
+      "bytes": 8792,
+      "sha256": "797a0f324d716b0002883f1272976e1196d06acdf36f6f71d687f551aa95e1a6"
+    },
+    {
+      "file": "frozen/reference/root/supabase/migrations/16102026_0159_nhsp_v6_01_physical_source_review_schema.sql",
+      "bytes": 40625,
+      "sha256": "d46481d0cd53880041b126c554d34dccc39854ff3bf31ac98883f85949cc1d82"
+    },
+    {
+      "file": "frozen/reference/root/supabase/release/migration-lock.json",
+      "bytes": 79294,
+      "sha256": "655bbb55095a64a586fc448e1e654fd843564b55ca584f9f79967cb5c1a8eb14"
+    },
+    {
+      "file": "frozen/reference/root/supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/01_context.sqlinc",
+      "bytes": 15693,
+      "sha256": "81a4b5a51c6898e728bcfa6c82e7326f7b3e3eaebf23847048473927615d5f3f"
+    },
+    {
+      "file": "frozen/reference/root/supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/02_admission.sqlinc",
+      "bytes": 38065,
+      "sha256": "8b592b3833650f82159d703b960dab7baaf46d5958e02204a38bce45a407216e"
+    },
+    {
+      "file": "frozen/reference/root/supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/03_requests.sqlinc",
+      "bytes": 4862,
+      "sha256": "daf9306ef07b5f9a8102ab65be38995e6465e13a433e997265911019eaed1912"
+    },
+    {
+      "file": "frozen/reference/root/supabase/repeatable/16102026_1342_nhsp_v6_daily_public_services/01_public_services.sqlinc",
+      "bytes": 18959,
+      "sha256": "9d0038a0c0105eb9e44ad43c52364cf1b5ff03d212b44c40bdffc77b411f4b34"
+    },
+    {
+      "file": "frozen/reference/root/supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/01_complete_helpers.sqlinc",
+      "bytes": 15886,
+      "sha256": "95c35931e723787e4c5258ef704cb1115f0edbd9fd6b34e9ab25c4d0966b355b"
+    },
+    {
+      "file": "frozen/SOURCE_PROOF.json",
+      "bytes": 13590,
+      "sha256": "2f420e8942a75e37dfce7775aee9755603c1e31307726a1cf0cb2cc6103bb6b8"
+    },
+    {
+      "file": "frozen/SOURCE_SELECTION.json",
+      "bytes": 1480,
+      "sha256": "e7eca4134d32296caab80e63656fb279a0b2f9d79e8d53d4a850ecd6852e91b0"
+    },
+    {
+      "file": "frozen/source.test.mjs",
+      "bytes": 14320,
+      "sha256": "ed6745fd0b357e976206ca2728cc54f76190953e81e4a77c5e9745b40979418d"
+    },
+    {
+      "file": "frozen/templates/01_review.sql.tmpl",
+      "bytes": 8788,
+      "sha256": "ea6ee0ffd4b25e7c2843c18b2e6f94fb48a1abf28da6463274ad75c52ed858ef"
+    },
+    {
+      "file": "frozen/templates/02_accept.sql.tmpl",
+      "bytes": 7621,
+      "sha256": "7bae24fa58c854f4e8df0b16e17cef8a04aff52fa88792f316f2daa7f42f21d3"
+    },
+    {
+      "file": "frozen/templates/03_result.sql.tmpl",
+      "bytes": 3741,
+      "sha256": "325f48bdc55048c42392105d055bc8fe2dcd138f4d4b9ec6a1d1e77c7f42dc1b"
+    },
+    {
+      "file": "frozen/TEST_RESULTS.json",
+      "bytes": 2142,
+      "sha256": "ecb14e5b04252dc1d30672b12b9b0af9e78cabcbe37526f811721fea9843a8ca"
+    },
+    {
+      "file": "frozen/verification/mandatory_security.sql",
+      "bytes": 3202,
+      "sha256": "3753fc86b3d12c0a64053410b99078c08bd30db25c8209ce0a79f0bafe80b114"
+    },
+    {
+      "file": "frozen/verifier-template.sql",
+      "bytes": 1523,
+      "sha256": "c9f7c4ac8a6e8c0d5bf0c20937b7193fc588e99be68bbb466072ccad50cbc7f8"
+    },
+    {
+      "file": "grammar-input/ADDITIVE_REVERSE.sqlinc",
+      "bytes": 675,
+      "sha256": "84b62bf38324601f871cc3356ee6b0a24bde27a08349c5f1482765fe5f97cc75"
+    },
+    {
+      "file": "grammar-input/admission/ONE_TIME_ADMISSION.sqlinc",
+      "bytes": 797,
+      "sha256": "712843c11c753f140413e39796efa930146ae9e7464c3cfbdf0b1f87ceb1d964"
+    },
+    {
+      "file": "grammar-input/GRAMMAR_RESULTS.json",
+      "bytes": 1591,
+      "sha256": "5421a58752205fc7dd14f9bcb9f5a7205f548d2044b6d8d51197935dd0d192f1"
+    },
+    {
+      "file": "grammar-input/grammar-source.py",
+      "bytes": 1270,
+      "sha256": "360e0c3ba90909698702f84aeaeaf3ee19ba3c8f881c6e12d500cd09502fd809"
+    },
+    {
+      "file": "grammar-input/health/00_presentation.sqlinc",
+      "bytes": 4550,
+      "sha256": "a3c7ce4e96fd67395e292752df2274e7464536ce3566b543a23f149de49fafc0"
+    },
+    {
+      "file": "grammar-input/health/05_review_enrollment.sqlinc",
+      "bytes": 2917,
+      "sha256": "006dd80653b9156ad1f162b9a2e78bc1e243fa38b5cdc75e123d5bc88119f3e6"
+    },
+    {
+      "file": "grammar-input/health/10_revision_apply.sqlinc",
+      "bytes": 8104,
+      "sha256": "58cb6c60005c2e731cd4fe31b26c62aa70a2b4a10bf051ff1ef5e69783a28adf"
+    },
+    {
+      "file": "grammar-input/health/99_acl.sqlinc",
+      "bytes": 1766,
+      "sha256": "d0941f0c92c247d86772a0c179f01ad9e2be95e9556556b7618045bdf362d43e"
+    },
+    {
+      "file": "grammar-input/verification/mandatory_security.sql",
+      "bytes": 3202,
+      "sha256": "3753fc86b3d12c0a64053410b99078c08bd30db25c8209ce0a79f0bafe80b114"
+    },
+    {
+      "file": "PEER_REVIEW.md",
+      "bytes": 8008,
+      "sha256": "7dff8a4369ff573d05ac41691277a12c668a8358741c4dd55054e5f852c452ce"
+    },
+    {
+      "file": "RAW_F23_REPLAY.json",
+      "bytes": 2545,
+      "sha256": "576ffa94314719ea3c62c060a9115b871059c744dc0dff2e39d73475ac6cdf49"
+    },
+    {
+      "file": "raw-census.mjs",
+      "bytes": 1872,
+      "sha256": "9f5fcd37cbbf7dc254d790292f023868e3e08b85cbc2a17e469260be2c426bdf"
+    },
+    {
+      "file": "REPLAY_RESULTS.json",
+      "bytes": 520,
+      "sha256": "de6ad6c67145073da80beb9c94578fc133316e77418b56e9fd387ca016abf4b8"
+    },
+    {
+      "file": "replay.mjs",
+      "bytes": 8448,
+      "sha256": "c47dbad71a7b566ebfbfb61bdb49607e5eb2f1c9b6192586c39952e11b4f11f2"
+    },
+    {
+      "file": "replay/actual-current-worker21.stderr.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "replay/actual-current-worker21.stdout.txt",
+      "bytes": 2273,
+      "sha256": "52e79dc6ad4380888a11b0034826c4ef85b318fddb6d3d9ae907235213ab5b5d"
+    },
+    {
+      "file": "replay/author-source16.stderr.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "replay/author-source16.stdout.txt",
+      "bytes": 1955,
+      "sha256": "2e89052da6eeddc33a0fdb0f06978629878daf498293d9a1c755840ad417136d"
+    },
+    {
+      "file": "replay/current0910-source23.stderr.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "replay/current0910-source23.stdout.txt",
+      "bytes": 2733,
+      "sha256": "a5b6aec5da9bad30f4a85827615cb3de51a9a830f939ffefdb88eaec4bcd6a81"
+    },
+    {
+      "file": "replay/grammar.stderr.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "replay/grammar.stdout.txt",
+      "bytes": 1212,
+      "sha256": "ee480471a66a245daf1fe63db85e7542140b8fc69b0529961ef5e4ed427adcc1"
+    },
+    {
+      "file": "retained-guards/capability_cleanup.sqlinc",
+      "bytes": 694,
+      "sha256": "156f2eebf11a6f8839b51f40b7cf07264c745970bc6a9327c3e2e2bb19f33f5c"
+    },
+    {
+      "file": "retained-guards/commit_guard.sqlinc",
+      "bytes": 1741,
+      "sha256": "c86b2ddbe50934dbe977e39e725bf8a26b6a8eee89bd5e6b6ae84480198b11d3"
+    },
+    {
+      "file": "retained-guards/context_commit_guard.sqlinc",
+      "bytes": 537,
+      "sha256": "24a92e8742b204af4595d0836f8cbf4c21212ee07e83840b5d5d7e2f35703fb5"
+    },
+    {
+      "file": "retained-guards/context_guard.sqlinc",
+      "bytes": 3122,
+      "sha256": "946bc2d409e341917107359cf7d3a6850a86d0b9606a1af7851c2239fa2c592a"
+    },
+    {
+      "file": "retained-guards/member_guard.sqlinc",
+      "bytes": 1849,
+      "sha256": "b9df033e11f7031fd2d9371b8d6db1cf84b68673bf3ce15bdbde29be313872a9"
+    },
+    {
+      "file": "retained-guards/operation_guard.sqlinc",
+      "bytes": 2285,
+      "sha256": "b8406cafd855096a071f85c3be83855859eda25ea8852b062571b17f71122cd8"
+    },
+    {
+      "file": "retained-guards/request_guard.sqlinc",
+      "bytes": 491,
+      "sha256": "d682e08bd1fadccaaeb88f54a3856acc1326b785fe67645efc16316f26f84f1a"
+    },
+    {
+      "file": "SCALAR_MAPPING_EVIDENCE.json",
+      "bytes": 2563,
+      "sha256": "7821a9364fa39bbd28a56d7214cf22a71eae61e58619c201151ca6b982c38f09"
+    },
+    {
+      "file": "SHARED_PRESENTATION_BINDING.json",
+      "bytes": 9574,
+      "sha256": "2ee6c09e527691529da6055287fe0b3430a46b6f0e16f9d323fc7bb89341a82a"
+    },
+    {
+      "file": "SOURCE_CHECK_RESULTS.json",
+      "bytes": 13446,
+      "sha256": "ef8ac4a8ed81cba86698c3a5f6e9c3a07da3e19e6d3afc573703e151dcf40e7b"
+    },
+    {
+      "file": "TECHNICAL_SCALAR_DISPOSITION.md",
+      "bytes": 5245,
+      "sha256": "e2a792537175226a6d9dd48b4d8afa61f43031e8ae5c85223e302bf7111923ec"
+    },
+    {
+      "file": "technical-mapping.mjs",
+      "bytes": 4299,
+      "sha256": "c01c745d9ee896b959e203615c0ca08fedc20070c167bbd350213c16d5e5d876"
+    }
+  ]
+}

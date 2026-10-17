@@ -1,0 +1,46 @@
+-- PARTIAL SOURCE ONLY. Not mounted independently of the closed full assembly.
+create or replace function private.daily_rate_correction_health_review_enroll_v1(p_args jsonb)
+returns jsonb language plpgsql volatile security definer
+set search_path=pg_catalog,public,private,pg_temp
+as $function$
+declare actor uuid; replay jsonb; daily jsonb; prepared jsonb;
+begin
+ perform private.daily_rate_correction_request_assert_v1(p_args,'PREVIEW');
+ actor:=(p_args->>'actor_user_id')::uuid;
+ replay:=private.daily_rate_correction_preview_replay_v1(p_args);
+ if replay is not null then
+  return jsonb_build_object('version','DAILY_HEALTH_REVIEW_ENROLL_V1','replayed',true,
+   'preview',private.daily_rate_correction_public_assert_v1(replay,'PREVIEW'),'prepared',null);
+ end if;
+ perform private.daily_rate_correction_health_actor_require_v1(actor,false);
+ if current_setting('transaction_isolation') is distinct from 'read committed' then
+  raise exception 'DAILY_RATE_LOCKED_CONTEXT_ISOLATION_REQUIRED' using errcode='55000';end if;
+ -- Real native locks precede every immediate metadata FK enrollment. A
+ -- request/review mutex is deliberately not taken ahead of these native locks.
+ perform private.daily_rate_correction_context_v1((p_args->>'timesheet_id')::uuid,actor,true);
+ -- A concurrent identical preview may now have committed. Saved immutable
+ -- request replay precedes stale-digest admission and creates no metadata.
+ replay:=private.daily_rate_correction_preview_replay_v1(p_args);
+ if replay is not null then
+  return jsonb_build_object('version','DAILY_HEALTH_REVIEW_ENROLL_V1','replayed',true,
+   'preview',private.daily_rate_correction_public_assert_v1(replay,'PREVIEW'),'prepared',null);
+ end if;
+ -- This real actor lock is before operations.created_by_user_id's immediate
+ -- FK; no pre-wait permission boolean is trusted after native waits.
+ perform private.daily_rate_correction_health_actor_require_v1(actor,true);
+ daily:=private.daily_rate_correction_health_basis_v1(p_args,true);
+ -- The unchanged e938 initializer enrolls operation/member FKs only AFTER
+ -- real Client/Candidate/Timesheet/current TSFIN and actor locks above.
+ prepared:=private.daily_rate_correction_health_review_prepare_v1(p_args);
+ if prepared->'daily' is distinct from daily
+  or jsonb_typeof(prepared->'physical') is distinct from 'object'
+  or jsonb_typeof(prepared->'invoice') is distinct from 'object' then
+  raise exception 'REVIEW_STALE' using errcode='40001';end if;
+ perform private.daily_rate_correction_health_actor_require_v1(actor,true);
+ return jsonb_build_object('version','DAILY_HEALTH_REVIEW_ENROLL_V1','replayed',false,
+  'preview',null,'prepared',prepared);
+ -- This is a private intermediate result, never a Preview/Ready/capability.
+ -- The unchanged deferred commit guard forbids committing this incomplete
+ -- metadata. The genuine Bank cut/Invoice/sealed-review joins remain required.
+end;
+$function$;

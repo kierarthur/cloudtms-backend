@@ -1,0 +1,47 @@
+create or replace function private.timesheet_contract_move_context_guard_v1()
+returns trigger language plpgsql security definer set search_path='pg_catalog','private','pg_temp'
+as $function$
+begin
+ if tg_op='DELETE' then
+  if old.backend_pid<>pg_backend_pid() or old.transaction_id<>pg_current_xact_id() then
+   raise exception 'CONTRACT_MOVE_CONTEXT_OTHER_TRANSACTION' using errcode='42501';
+  end if;
+  if exists(select 1 from private.timesheet_contract_move_capabilities k where k.execution_context_id=old.id)
+   or exists(select 1 from jsonb_array_elements(old.native_manifest_json->'events') e
+    where not exists(select 1 from private.timesheet_contract_move_capability_consumptions k
+     where k.execution_context_id=old.id and k.event_no=(e->>'event_no')::bigint
+      and k.member_key=e->>'member_key' and k.guard_name=e->>'guard_name'
+      and k.phase=old.phase and k.billing_revision=old.billing_revision
+      and k.relation_oid=to_regclass(e->>'relation')::oid and k.row_operation=e->>'row_operation'
+      and k.scope_receipt_id is not distinct from (e->>'scope_receipt_id')::uuid
+      and k.authority_receipt_id=(e->>'authority_receipt_id')::uuid
+      and k.row_sha256=private.timesheet_contract_move_row_hash_v1(e->'new_row'))) then
+   raise exception 'CONTRACT_MOVE_GUARD_EVENTS_INCOMPLETE' using errcode='23514';
+  end if;
+  return old;
+ end if;
+ if new.backend_pid<>pg_backend_pid() or new.transaction_id<>pg_current_xact_id()
+  or new.expires_at_utc<>new.created_at_utc+interval '120 seconds' or new.expires_at_utc<=clock_timestamp()
+  or new.manifest_sha256<>private.timesheet_contract_move_row_hash_v1(new.native_manifest_json)
+  or not private.timesheet_contract_move_context_actor_allowed_v1(new.operation_id,new.phase,new.actor_user_id)
+  or not exists(select 1 from private.timesheet_contract_move_operations o
+   join private.timesheet_contract_move_reviews r on r.operation_id=o.id and r.id=new.review_id
+   where o.id=new.operation_id and o.billing_revision=new.billing_revision)
+  or new.native_manifest_json->>'version'<>'CORRECTION_NATIVE_EVENTS_V1'
+  or jsonb_typeof(new.native_manifest_json->'events') is distinct from 'array' then
+  raise exception 'CONTRACT_MOVE_CONTEXT_IDENTITY_INVALID' using errcode='42501';
+ end if;
+ if tg_op='UPDATE' and ((to_jsonb(new)-array['event_no','native_manifest_json','manifest_sha256'])
+   is distinct from (to_jsonb(old)-array['event_no','native_manifest_json','manifest_sha256'])
+   or new.event_no<>old.event_no+1
+   or jsonb_array_length(new.native_manifest_json->'events')<>jsonb_array_length(old.native_manifest_json->'events')+1
+   or (new.native_manifest_json->'events')-(jsonb_array_length(new.native_manifest_json->'events')-1)
+    is distinct from old.native_manifest_json->'events') then
+  raise exception 'CONTRACT_MOVE_CONTEXT_EVENT_APPEND_ONLY' using errcode='23514';
+ end if;
+ if tg_op='UPDATE' and exists(select 1 from private.timesheet_contract_move_capabilities k where k.execution_context_id=old.id) then
+  raise exception 'CONTRACT_MOVE_PREVIOUS_EVENT_NOT_CONSUMED' using errcode='23514';
+ end if;
+ return new;
+end;
+$function$;

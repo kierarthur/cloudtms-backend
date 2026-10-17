@@ -1,0 +1,140 @@
+{
+  "version": "DAILY_FIXTURE_S0_S5_SOURCE_BINDING_V1",
+  "recipeCommit": "ad02698589fa28b1a73af26390fad7cf4c0466f9",
+  "roleFixCommit": "1d00a57a1cf292f2a0c6cf8c17898d1e13204d31",
+  "currentContextParent": "bb6252f46597cf15a6450adfb2af27c1e615fb3d",
+  "sourceExcerpts": [
+    {
+      "file": "reference/handleMe.js.txt",
+      "source": "broker/src/index.js",
+      "sourceCommit": "bb6252f46597cf15a6450adfb2af27c1e615fb3d",
+      "sourceSha256": "a360e1147b0f6e7902c16b4c6109df0db203af36a981600f84371c17d0e1f6db",
+      "startLine": 108849,
+      "endLine": 108892,
+      "sha256": "883d81b4c51eb579c8b7273cfe7a5d42046f80aa7954ecd090664e1fee3c9e1b"
+    },
+    {
+      "file": "reference/requireUser.js.txt",
+      "source": "broker/src/index.js",
+      "sourceCommit": "bb6252f46597cf15a6450adfb2af27c1e615fb3d",
+      "sourceSha256": "a360e1147b0f6e7902c16b4c6109df0db203af36a981600f84371c17d0e1f6db",
+      "startLine": 139791,
+      "endLine": 139830,
+      "sha256": "7108146127fbeb4c71ed883f23fbf27add1b7aa9fa1d56da6f8f676246439d88"
+    },
+    {
+      "file": "reference/authorise_input_and_current_guard.js.txt",
+      "source": "broker/src/index.js",
+      "sourceCommit": "bb6252f46597cf15a6450adfb2af27c1e615fb3d",
+      "sourceSha256": "a360e1147b0f6e7902c16b4c6109df0db203af36a981600f84371c17d0e1f6db",
+      "startLine": 168789,
+      "endLine": 168857,
+      "sha256": "f274560f828fc6554ff3a33d7079cd18d246ebf6b71138d0043b370425cdc41a"
+    },
+    {
+      "file": "reference/authorise_native_dispatch.js.txt",
+      "source": "broker/src/index.js",
+      "sourceCommit": "bb6252f46597cf15a6450adfb2af27c1e615fb3d",
+      "sourceSha256": "a360e1147b0f6e7902c16b4c6109df0db203af36a981600f84371c17d0e1f6db",
+      "startLine": 169109,
+      "endLine": 169137,
+      "sha256": "2ecc14d1f1dc6fb78267822a532a7de7fb820d707b0686d631d3691e8be7c097"
+    },
+    {
+      "file": "reference/details_lifecycle_branch.js.txt",
+      "source": "broker/src/index.js",
+      "sourceCommit": "bb6252f46597cf15a6450adfb2af27c1e615fb3d",
+      "sourceSha256": "a360e1147b0f6e7902c16b4c6109df0db203af36a981600f84371c17d0e1f6db",
+      "startLine": 73460,
+      "endLine": 73563,
+      "sha256": "c860b3fd6e24601ddb464c16c5bef77ae9de2f5b0e20ca040460ee63434ed289"
+    },
+    {
+      "file": "reference/lifecycle_native_read_candidate.js.txt",
+      "source": "broker/src/index.js",
+      "sourceCommit": "bb6252f46597cf15a6450adfb2af27c1e615fb3d",
+      "sourceSha256": "a360e1147b0f6e7902c16b4c6109df0db203af36a981600f84371c17d0e1f6db",
+      "startLine": 93088,
+      "endLine": 93182,
+      "sha256": "7d566cf82ec24b523859278fb05cdd95efb173ac71f8aa423b5d82a4951ca97c"
+    }
+  ],
+  "authSources": [
+    {
+      "file": "tests/e2e/auth.setup.ts",
+      "office": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-office-13102026",
+      "officeCommit": "ac112422e529aefbcba0fc0147d2b28123751823",
+      "frontend": "D:/Development/GitHub/TEST-Frontend",
+      "frontendCommit": "7a75111ec2923693e75feef4a7ccbcb6ecba942e",
+      "sha256": "ce6324a65869d6b4d58a3038b4f3b8e0204ff2dda49e80ef95c249817c1fe9ef",
+      "bytes": 1989,
+      "gitSha256": "c742f79f6c0f3d7187acb2d893d383b50e4baaf9d42b0f0b2c164c50a1a9a85d",
+      "savedEqualsCommit": false,
+      "savedOfficeEqualsFrontend": true,
+      "gitOfficeEqualsFrontend": true,
+      "explicitLineEndingComparison": "SAVED_CRLF_TO_GIT_LF_EQUAL; raw saved copy preserved, no file rewritten"
+    },
+    {
+      "file": "playwright.config.ts",
+      "office": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-office-13102026",
+      "officeCommit": "ac112422e529aefbcba0fc0147d2b28123751823",
+      "frontend": "D:/Development/GitHub/TEST-Frontend",
+      "frontendCommit": "7a75111ec2923693e75feef4a7ccbcb6ecba942e",
+      "sha256": "4648b57b4a5d78e86f96ee3f7472e9cdb99977bba3fbc22750ad363a8475036b",
+      "bytes": 790,
+      "gitSha256": "8a0ee61ebb1feb918db54f00ce38ce486df130ab975a8654e7b78ebbb2b0e420",
+      "savedEqualsCommit": false,
+      "savedOfficeEqualsFrontend": true,
+      "gitOfficeEqualsFrontend": true,
+      "explicitLineEndingComparison": "SAVED_CRLF_TO_GIT_LF_EQUAL; raw saved copy preserved, no file rewritten"
+    }
+  ],
+  "actorModule": {
+    "file": "broker/src/payment-actor-permission.js",
+    "sha256": "cca0e4fa2d6ca5627d900538ea1d9176d4ae31dc29bb775067c997f3dff70c4e"
+  },
+  "authPresenceOnly": {
+    "approvedIgnoredEnvPath": "D:/Development/GitHub/TEST-Frontend/tests/e2e/.auth/playwright-test.env",
+    "envExists": true,
+    "approvedIgnoredStatePath": "D:/Development/GitHub/TEST-Frontend/tests/e2e/.auth/user.json",
+    "stateExists": true,
+    "contentsRead": false
+  },
+  "S0": {
+    "existingIdentityRoute": {
+      "method": "GET",
+      "path": "/api/me",
+      "sourceReadOnly": true,
+      "invoked": false
+    },
+    "actualActorId": null,
+    "actualCurrentActorQualification": "UNBOUND_NOT_PROVED",
+    "meAloneProvesWpPp": false,
+    "nativeCurrentActiveAdminAndWpPp": "FRESH_ROOT_READ_REQUIRED",
+    "installedSchemaOwnerAclTriggers": "NOT_PROVED",
+    "vacancy": "NOT_PROVED",
+    "manifestAppend": "ROOT_EXACT_STAGE_BEFORE_EACH_MUTATION"
+  },
+  "S5": {
+    "method": "POST",
+    "path": "/api/timesheets/{ACTUAL_NATIVE_TIMESHEET_ID}/authorise",
+    "bodyTemplate": {
+      "expected_timesheet_id": "{ACTUAL_NATIVE_TIMESHEET_ID}",
+      "expected_row_signature": "{FRESH_NATIVE_ROW_SIGNATURE}"
+    },
+    "executable": false,
+    "signatureSource": "FRESH_AUTHORISED_READ_OF_ACTUAL_CURRENT_ROW; NEVER local hash/random/saved old signature",
+    "defaultDetailsGet": "NOT_ACCEPTED_AS_READ_ONLY: existing full handler can enqueue/run TSFIN",
+    "lifecycleDetailsGet": "CANDIDATE_ONLY; transitive native read-only closure not qualified by this packet",
+    "nativeOwner": "public.timesheet_authorise_generic_atomic(uuid,uuid,uuid,timestamp with time zone,text)",
+    "bankingOwnerBodyRead": false,
+    "actualSignature": null,
+    "actualCurrentTimesheetId": null
+  },
+  "sourceOnly": true,
+  "networkCalls": 0,
+  "authCalls": 0,
+  "nativeCalls": 0,
+  "credentialsRead": false,
+  "businessRowsCreated": 0
+}

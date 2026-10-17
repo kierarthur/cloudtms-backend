@@ -1,0 +1,234 @@
+{
+  "source": "D:/Development/Legacy-Work/C-tmp/healthroster-handover/HealthRoster_Builder_Pack_16102026/NHSP_AUTHORISATION_AUDIT_15102026_HANDOFF_V6/WORKING_PREPARATION/MODULE_AND_CLOSURE_TARGETS.json",
+  "wholeSha256": "213c4ff9afc09b9fbf3be54b75b4d3629342647ba6f32119a9b13d269eec7c8f",
+  "pointer": "#/currentV3PresentationContract",
+  "exactParsedContract": {
+    "version": "CORRECTION_PRESENTATION_V3",
+    "sole_projection_author": "HEALTH preview/accept/read wrappers; BANKING supplies genuine native SummaryDTO text inputs only",
+    "common_action_ref": "WORKING_PREPARATION/MODULE_AND_CLOSURE_TARGETS.json#/sharedActionContract",
+    "objects": {
+      "Effect": {
+        "closed_union": [
+          {
+            "visibility": "FULL",
+            "text": "nonempty safe plain string <=500 Unicode characters, derived only from genuine native DTO/status"
+          },
+          {
+            "visibility": "REDACTED"
+          }
+        ],
+        "redacted_rule": "REDACTED permits exactly visibility: no text/amount/rate/quantity/currency/ID/child/economic keys. Render FULL text with textContent; no HTML/browser calculation."
+      },
+      "Summary": {
+        "closed": true,
+        "required": [
+          "worked_facts_preserved",
+          "pay_effect",
+          "invoice_effect"
+        ],
+        "fields": {
+          "worked_facts_preserved": "boolean",
+          "pay_effect": "Effect",
+          "invoice_effect": "Effect"
+        }
+      },
+      "KnownBlocker": {
+        "closed": true,
+        "required": [
+          "code",
+          "native_owner",
+          "field_key",
+          "permitted_action"
+        ],
+        "fields": {
+          "code": "nonempty existing native preflight code string",
+          "native_owner": "HEALTH|BANKING",
+          "field_key": "nonempty native field-key string or NULL",
+          "permitted_action": "CommonAction or NULL"
+        }
+      },
+      "Confirm": {
+        "closed": true,
+        "required": [
+          "request_version",
+          "review_id",
+          "review_digest",
+          "expected_state_revision"
+        ],
+        "fields": {
+          "request_version": "TIMESHEET_CONTRACT_CORRECTION_V3",
+          "review_id": "uuid",
+          "review_digest": "hex64",
+          "expected_state_revision": "uint63-decimal-string"
+        }
+      },
+      "Preview": {
+        "closed": true,
+        "required": [
+          "version",
+          "operation_id",
+          "review_id",
+          "review_digest",
+          "state_revision",
+          "ready_to_confirm",
+          "current_timesheet_id",
+          "to_contract_id",
+          "summary",
+          "known_blockers",
+          "confirm",
+          "links"
+        ],
+        "fields": {
+          "version": "TIMESHEET_CONTRACT_CORRECTION_V3",
+          "operation_id": "uuid",
+          "review_id": "uuid",
+          "review_digest": "hex64",
+          "state_revision": "uint63-decimal-string",
+          "ready_to_confirm": "boolean",
+          "current_timesheet_id": "uuid",
+          "to_contract_id": "uuid",
+          "summary": "Summary",
+          "known_blockers": "KnownBlocker[]",
+          "confirm": "Confirm or NULL",
+          "links": "CommonAction[]"
+        }
+      },
+      "Placement": {
+        "closed": true,
+        "required": [
+          "status",
+          "original_timesheet_id",
+          "current_timesheet_id",
+          "placement_revision",
+          "receipt_id"
+        ],
+        "fields": {
+          "status": "NOT_COMMITTED|COMMITTED|NATIVE_PENDING",
+          "original_timesheet_id": "uuid",
+          "current_timesheet_id": "uuid or NULL only genuine native pending without current allocation",
+          "placement_revision": "uint63-decimal-string",
+          "receipt_id": "uuid or NULL"
+        }
+      },
+      "Financial": {
+        "closed": true,
+        "required": [
+          "status",
+          "command_id",
+          "cut_id",
+          "summary"
+        ],
+        "fields": {
+          "status": "NOT_REQUIRED|REGISTERED|PROCESSING|APPLIED|ACTION_REQUIRED",
+          "command_id": "uuid or NULL",
+          "cut_id": "uuid or NULL",
+          "summary": "Effect or NULL"
+        }
+      },
+      "Billing": {
+        "closed": true,
+        "required": [
+          "status",
+          "revision",
+          "group_id",
+          "visible_summary"
+        ],
+        "fields": {
+          "status": "NOT_REQUIRED|PREPARING_DRAFTS|DRAFTS_READY|PARTIALLY_ISSUED|ISSUED|RETRY_WAIT|ACTION_REQUIRED",
+          "revision": "uint63-decimal-string",
+          "group_id": "uuid or NULL",
+          "visible_summary": "Effect or NULL"
+        }
+      },
+      "Result": {
+        "closed": true,
+        "required": [
+          "version",
+          "purpose",
+          "operation_id",
+          "state",
+          "state_revision",
+          "placement",
+          "financial",
+          "billing",
+          "next_actions",
+          "links"
+        ],
+        "fields": {
+          "version": "TIMESHEET_CONTRACT_CORRECTION_V3|DAILY_RATE_CORRECTION_V1",
+          "purpose": "CONTRACT_CORRECTION|DAILY_RATE_CORRECTION, correlated with version",
+          "operation_id": "uuid",
+          "state": "REVIEWED|COMPLETE|SUPERSEDED|PENDING_PLACEMENT (last exact retained native receipt only)",
+          "state_revision": "uint63-decimal-string",
+          "placement": "Placement",
+          "financial": "Financial",
+          "billing": "Billing",
+          "next_actions": "CommonAction[]",
+          "links": "CommonAction[]"
+        }
+      },
+      "DailyConfirm": {
+        "closed": true,
+        "required": [
+          "request_version",
+          "review_id",
+          "review_digest",
+          "expected_state_revision"
+        ],
+        "fields": {
+          "request_version": "DAILY_RATE_CORRECTION_V1",
+          "review_id": "uuid",
+          "review_digest": "hex64",
+          "expected_state_revision": "uint63-decimal-string"
+        }
+      },
+      "DailyPreview": {
+        "closed": true,
+        "required": [
+          "version",
+          "operation_id",
+          "review_id",
+          "review_digest",
+          "state_revision",
+          "ready_to_confirm",
+          "current_timesheet_id",
+          "summary",
+          "known_blockers",
+          "confirm",
+          "links"
+        ],
+        "fields": {
+          "version": "DAILY_RATE_CORRECTION_V1",
+          "operation_id": "uuid",
+          "review_id": "uuid",
+          "review_digest": "hex64",
+          "state_revision": "uint63-decimal-string",
+          "ready_to_confirm": "boolean",
+          "current_timesheet_id": "uuid",
+          "summary": "Summary",
+          "known_blockers": "KnownBlocker[]",
+          "confirm": "DailyConfirm or NULL",
+          "links": "CommonAction[]"
+        }
+      }
+    },
+    "scalars": {
+      "uuid": "lowercase canonical UUID string",
+      "hex64": "exactly64 lowercase hexadecimal characters",
+      "uint63-decimal-string": "canonical base10 digits, zero or nonzero without sign/leadingzero, <=9223372036854775807; never JSON Number"
+    },
+    "invariants": [
+      "Every listed field required, all other keys reject; explicit NULL is not omitted/zero. CommonAction refers solely to sharedActionContract.",
+      "Preview confirm NULL iff not ready; ready true requires zero known blockers and exact immutable review/currentness capability.",
+      "COMPLETE requires COMMITTED placement, real same-operation receipt/current Timesheet; genuine financial REGISTERED/PROCESSING remains asynchronous. NATIVE_PENDING is only the qualified original native exception.",
+      "Contract Result version TIMESHEET_CONTRACT_CORRECTION_V3/purpose CONTRACT_CORRECTION; Daily Result version DAILY_RATE_CORRECTION_V1/purpose DAILY_RATE_CORRECTION, equal original/current physical IDs and no Contract field/fake Work.",
+      "Financial NOT_REQUIRED has NULL command_id/cut_id; all published IDs genuine native only. Denied financial/billing identifiers are NULL and any non-NULL denied summary exactly REDACTED. Billing NOT_REQUIRED has NULL group_id/visible_summary.",
+      "FULL text uses canonical native SummaryDTO/accepted valuation/native billing state only. Preserve actual cash versus comparable earnings/NET/VAT distinctions; registration is not payment/Issue. Unknown money has no numeric display operand and uses its actual native insufficiency/status. Never embed private raw DTO JSON.",
+      "links/next_actions use exact CommonAction active correlated variants; omit invisible targets recursively. No new action/caption/URL family. Fresh completed V3 cannot emit REVIEW_RATES/REVIEW_EARLIER_PAYMENT/RESUME_FINANCIAL as a repair wizard; genuine Source/historical owners retain those actions separately.",
+      "Read only exact indexed operation/review/member/billing/command-manifest IDs, never global/history discovery. Dedupe kind+target+native extra keys; arrays are bounded by the complete admitted native manifest (at most active variant count per scoped actual target). Navigation never supplies economic coverage or truncates required native obligations.",
+      "Preview/Confirm are Contract V3 only; DailyPreview/DailyConfirm are the correlated DAILY_RATE_CORRECTION_V1 variants and forbid to_contract_id/any Contract field. Both use exactly Summary/Effect/KnownBlocker/CommonAction; actual Health Daily wrappers/module decode Daily variant and Bank native SummaryDTO consumers do not substitute Contract Preview."
+    ],
+    "native": "REQUIRED_NOT_RUN",
+    "reference_base": "V6 pack root"
+  }
+}

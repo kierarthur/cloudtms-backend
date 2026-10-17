@@ -1,0 +1,22 @@
+{
+  "version": "ROOT_FINITE_IMMUTABLE_EXCERPT_DIFFCHECK_V1",
+  "fullDiffCheckExit": 2,
+  "exactWarnings": [
+    "docs/healthroster-build/proposals/daily-health-fixture-s0-s5-source-bindings-20261017/reference/handleMe.js.txt:44: new blank line at EOF.",
+    "docs/healthroster-build/proposals/daily-health-fixture-s0-s5-source-bindings-20261017/reference/requireUser.js.txt:40: new blank line at EOF."
+  ],
+  "immutableGitExactExceptions": [
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-fixture-s0-s5-source-bindings-20261017/reference/handleMe.js.txt",
+      "sha256": "883d81b4c51eb579c8b7273cfe7a5d42046f80aa7954ecd090664e1fee3c9e1b",
+      "reason": "Exact immutable source excerpt includes original trailing blank line; not a runtime source file."
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-fixture-s0-s5-source-bindings-20261017/reference/requireUser.js.txt",
+      "sha256": "7108146127fbeb4c71ed883f23fbf27add1b7aa9fa1d56da6f8f676246439d88",
+      "reason": "Exact immutable source excerpt includes original trailing blank line; not a runtime source file."
+    }
+  ],
+  "allOtherStagedPathsDiffCheck": "PASS",
+  "runtimeChanges": false
+}
