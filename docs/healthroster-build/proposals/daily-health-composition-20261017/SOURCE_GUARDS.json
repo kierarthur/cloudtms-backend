@@ -1,0 +1,94 @@
+{
+  "version": "DAILY_HEALTH_COMPOSITION_SOURCE_GUARDS_V1",
+  "status": "SOURCE_ONLY_ROOT_REVIEW_REQUIRED",
+  "integrationHeadObserved": "5ecc4c73113660edf48a5bca2f3a478453a81c2b",
+  "files": [
+    {
+      "file": "supabase/migrations/16102026_0159_nhsp_v6_01_physical_source_review_schema.sql",
+      "canonicalSha256": "d46481d0cd53880041b126c554d34dccc39854ff3bf31ac98883f85949cc1d82"
+    },
+    {
+      "file": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/01_context.sqlinc",
+      "canonicalSha256": "81a4b5a51c6898e728bcfa6c82e7326f7b3e3eaebf23847048473927615d5f3f"
+    },
+    {
+      "file": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/02_admission.sqlinc",
+      "canonicalSha256": "8b592b3833650f82159d703b960dab7baaf46d5958e02204a38bce45a407216e"
+    },
+    {
+      "file": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/03_requests.sqlinc",
+      "canonicalSha256": "daf9306ef07b5f9a8102ab65be38995e6465e13a433e997265911019eaed1912"
+    },
+    {
+      "file": "supabase/repeatable/16102026_1342_nhsp_v6_daily_public_services/01_public_services.sqlinc",
+      "canonicalSha256": "9d0038a0c0105eb9e44ad43c52364cf1b5ff03d212b44c40bdffc77b411f4b34"
+    },
+    {
+      "file": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority/01_complete_invoice_authorities.sqlinc",
+      "canonicalSha256": "e03acb39db8cc2441cde46125ad9b38e8594b3790c772b247cea76a052cb2044"
+    },
+    {
+      "file": "supabase/repeatable/includes/nhsp_v6_health_review_context.sqlinc",
+      "canonicalSha256": "9c2cc018537e1dacab493dc079903edcfedb959df172f4582d476e4ce30ff346"
+    }
+  ],
+  "finalOwners": [
+    {
+      "signature": "private.daily_rate_correction_context_v1(uuid,uuid,boolean)",
+      "finalRoot": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/01_context.sqlinc"
+    },
+    {
+      "signature": "private.daily_rate_correction_scope_v1(uuid,boolean)",
+      "finalRoot": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/02_admission.sqlinc"
+    },
+    {
+      "signature": "private.daily_rate_correction_snapshot_assert_v1(jsonb,jsonb,jsonb,uuid)",
+      "finalRoot": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/02_admission.sqlinc"
+    },
+    {
+      "signature": "private.daily_rate_correction_normalized_snapshot_v1(jsonb,jsonb,jsonb,uuid)",
+      "finalRoot": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/02_admission.sqlinc"
+    },
+    {
+      "signature": "private.daily_rate_correction_request_assert_v1(jsonb,text)",
+      "finalRoot": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/03_requests.sqlinc"
+    },
+    {
+      "signature": "private.invoice_contract_move_inspect_v1(jsonb,jsonb,uuid,boolean)",
+      "finalRoot": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority/01_complete_invoice_authorities.sqlinc"
+    },
+    {
+      "signature": "private.invoice_contract_move_preflight_v1(uuid,uuid,boolean)",
+      "finalRoot": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority/01_complete_invoice_authorities.sqlinc"
+    },
+    {
+      "signature": "private.invoice_contract_move_billing_read_v1(uuid,uuid)",
+      "finalRoot": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority/01_complete_invoice_authorities.sqlinc"
+    },
+    {
+      "signature": "private.timesheet_contract_move_commit_guard_v1()",
+      "finalRoot": "supabase/repeatable/16102026_0713_nhsp_v6_06_integrated_move_source_composition_v1.sql",
+      "finalPhysical": "supabase/repeatable/includes/nhsp_v6_health_review_context.sqlinc"
+    }
+  ],
+  "dailyExistingInvoiceInputKeys": [
+    "context",
+    "calculation_snapshot",
+    "normalized_snapshot",
+    "rate_provenance"
+  ],
+  "publicComposersIntentionallyUnimplemented": [
+    "private.daily_rate_correction_review_v1(jsonb)",
+    "private.daily_rate_correction_accept_v1(jsonb)",
+    "private.daily_rate_correction_result_v1(uuid,uuid)"
+  ],
+  "native": "NOT_RUN"
+}
