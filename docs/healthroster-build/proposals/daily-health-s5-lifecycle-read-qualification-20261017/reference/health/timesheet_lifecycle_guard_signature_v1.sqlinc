@@ -1,0 +1,274 @@
+CREATE OR REPLACE FUNCTION public.timesheet_lifecycle_guard_signature_v1(p_timesheet_id uuid DEFAULT NULL::uuid, p_contract_week_id uuid DEFAULT NULL::uuid, p_include_payload boolean DEFAULT false)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_requested_ts public.timesheets%ROWTYPE;
+  v_current_ts public.timesheets%ROWTYPE;
+  v_week public.contract_weeks%ROWTYPE;
+  v_tsfin public.timesheets_financials%ROWTYPE;
+
+  v_resolved_booking_id text := NULL;
+  v_signature_payload jsonb := '{}'::jsonb;
+  v_component_hashes jsonb := '{}'::jsonb;
+  v_component_values jsonb := '{}'::jsonb;
+  v_diagnostic_payload jsonb := '{}'::jsonb;
+  v_candidate_component jsonb := '{}'::jsonb;
+  v_source_category jsonb;
+  v_candidate_component_enabled boolean := private._candidate_feature_enabled_current_v1('candidate_record_role_capabilities');
+  v_temp_log_enabled boolean := false;
+  v_signature text := NULL;
+BEGIN
+  IF p_timesheet_id IS NULL AND p_contract_week_id IS NULL THEN
+    RETURN jsonb_build_object(
+      'ok', false,
+      'error_code', 'INVALID_PAYLOAD',
+      'message', 'timesheet_id or contract_week_id is required',
+      'signature', NULL,
+      'backend_row_signature', NULL,
+      'row_signature', NULL
+    );
+  END IF;
+
+  IF p_contract_week_id IS NOT NULL THEN
+    SELECT cw.*
+      INTO v_week
+    FROM public.contract_weeks AS cw
+    WHERE cw.id = p_contract_week_id
+    LIMIT 1;
+  END IF;
+
+  IF p_timesheet_id IS NOT NULL THEN
+    SELECT ts.*
+      INTO v_requested_ts
+    FROM public.timesheets AS ts
+    WHERE ts.timesheet_id = p_timesheet_id
+    LIMIT 1;
+
+    IF v_requested_ts.timesheet_id IS NOT NULL THEN
+      v_resolved_booking_id := v_requested_ts.booking_id;
+    END IF;
+  END IF;
+
+  IF v_resolved_booking_id IS NULL AND v_week.timesheet_id IS NOT NULL THEN
+    SELECT ts.*
+      INTO v_requested_ts
+    FROM public.timesheets AS ts
+    WHERE ts.timesheet_id = v_week.timesheet_id
+    LIMIT 1;
+
+    IF v_requested_ts.timesheet_id IS NOT NULL THEN
+      v_resolved_booking_id := v_requested_ts.booking_id;
+    END IF;
+  END IF;
+
+  IF v_resolved_booking_id IS NOT NULL THEN
+    SELECT ts.*
+      INTO v_current_ts
+    FROM public.timesheets AS ts
+    WHERE ts.booking_id = v_resolved_booking_id
+      AND ts.is_current = true
+    ORDER BY ts.version DESC, ts.updated_at DESC NULLS LAST, ts.created_at DESC NULLS LAST, ts.timesheet_id DESC
+    LIMIT 1;
+  END IF;
+
+  IF v_current_ts.timesheet_id IS NULL AND v_requested_ts.timesheet_id IS NOT NULL THEN
+    v_current_ts := v_requested_ts;
+  END IF;
+
+  IF v_week.id IS NULL AND v_current_ts.timesheet_id IS NOT NULL THEN
+    SELECT cw.*
+      INTO v_week
+    FROM public.contract_weeks AS cw
+    WHERE cw.timesheet_id = v_current_ts.timesheet_id
+       OR EXISTS (
+         SELECT 1
+         FROM public.timesheets AS cw_ts
+         WHERE cw_ts.timesheet_id = cw.timesheet_id
+           AND cw_ts.booking_id = v_current_ts.booking_id
+       )
+    ORDER BY
+      CASE WHEN cw.timesheet_id = v_current_ts.timesheet_id THEN 0 ELSE 1 END,
+      cw.updated_at DESC NULLS LAST,
+      cw.created_at DESC NULLS LAST,
+      cw.id DESC
+    LIMIT 1;
+  END IF;
+
+  IF v_current_ts.timesheet_id IS NULL AND v_week.id IS NULL THEN
+    RETURN jsonb_build_object(
+      'ok', false,
+      'error_code', 'TARGET_NOT_FOUND',
+      'message', 'No current timesheet or contract week was found for the supplied identity',
+      'timesheet_id', p_timesheet_id,
+      'contract_week_id', p_contract_week_id,
+      'signature', NULL,
+      'backend_row_signature', NULL,
+      'row_signature', NULL
+    );
+  END IF;
+
+  IF v_current_ts.timesheet_id IS NOT NULL THEN
+    SELECT tf.*
+      INTO v_tsfin
+    FROM public.timesheets_financials AS tf
+    WHERE tf.timesheet_id = v_current_ts.timesheet_id
+      AND tf.is_current = true
+    ORDER BY tf.computed_at_utc DESC NULLS LAST, tf.updated_at DESC NULLS LAST, tf.created_at DESC NULLS LAST, tf.id DESC
+    LIMIT 1;
+  END IF;
+
+  IF v_candidate_component_enabled THEN
+    v_candidate_component := private._candidate_signature_component_v1(
+      CASE WHEN v_current_ts.timesheet_id IS NULL THEN NULL ELSE v_current_ts.timesheet_id END,
+      CASE WHEN v_week.id IS NULL THEN NULL ELSE v_week.id END
+    );
+  END IF;
+
+  v_signature_payload := jsonb_strip_nulls(jsonb_build_object(
+    'signature_version', 'timesheet_lifecycle_guard_signature_v1',
+    'identity', jsonb_build_object(
+      'requested_timesheet_id', p_timesheet_id,
+      'current_timesheet_id', CASE WHEN v_current_ts.timesheet_id IS NULL THEN NULL ELSE v_current_ts.timesheet_id END,
+      'contract_week_id', CASE WHEN v_week.id IS NULL THEN NULL ELSE v_week.id END,
+      'booking_id', COALESCE(v_current_ts.booking_id, v_requested_ts.booking_id, v_resolved_booking_id)
+    ),
+    'timesheet', CASE WHEN v_current_ts.timesheet_id IS NULL THEN NULL ELSE jsonb_build_object(
+      'timesheet_id', v_current_ts.timesheet_id,
+      'booking_id', v_current_ts.booking_id,
+      'version', v_current_ts.version,
+      'is_current', v_current_ts.is_current,
+    'archived_at_utc', v_current_ts.archived_at_utc,
+    'archived_by_user_id', v_current_ts.archived_by_user_id,
+    'archived_reason_code', v_current_ts.archived_reason_code,
+      'status', v_current_ts.status::text,
+      'candidate_submission_route_intent', v_current_ts.candidate_submission_route_intent,
+      'authorised_at_server', v_current_ts.authorised_at_server,
+      'revoked_at', v_current_ts.revoked_at,
+      'updated_at', v_current_ts.updated_at
+    ) END,
+    'timesheets_financials', CASE WHEN v_tsfin.id IS NULL THEN NULL ELSE jsonb_build_object(
+      'id', v_tsfin.id,
+      'timesheet_id', v_tsfin.timesheet_id,
+      'is_current', v_tsfin.is_current,
+      'processing_status', v_tsfin.processing_status::text,
+      'authorised_at_utc', v_tsfin.authorised_at_utc,
+      'locked_by_invoice_id', v_tsfin.locked_by_invoice_id,
+      'locked_at_utc', v_tsfin.locked_at_utc,
+      'paid_at_utc', v_tsfin.paid_at_utc,
+      'is_stale', v_tsfin.is_stale,
+      'computed_at_utc', v_tsfin.computed_at_utc,
+      'updated_at', v_tsfin.updated_at
+    ) END,
+    'contract_week', CASE WHEN v_week.id IS NULL THEN NULL ELSE jsonb_build_object(
+      'id', v_week.id,
+      'timesheet_id', v_week.timesheet_id,
+      'status', v_week.status::text,
+      'updated_at', v_week.updated_at
+    ) END
+  ));
+
+  IF v_candidate_component_enabled THEN
+    v_signature_payload := v_signature_payload || jsonb_build_object('candidate_app', v_candidate_component);
+  END IF;
+
+  -- Source presentation is not archive/action authority. Bind its exact
+  -- origin/application/duty basis so the existing stale-signature guard also
+  -- notices a genuine later Source decision without changing ordinary hashes.
+  IF v_current_ts.timesheet_id IS NOT NULL AND (
+    EXISTS(SELECT 1 FROM public.weekly_source_row_timesheet_lineages l
+      WHERE l.family_booking_id=v_current_ts.booking_id)
+    OR EXISTS(SELECT 1 FROM public.weekly_exceptional_pay_target_families f
+      WHERE f.root_family_booking_id=v_current_ts.booking_id)
+  ) THEN
+    v_source_category:=private.weekly_source_timesheet_category_v2(v_current_ts.timesheet_id);
+    v_signature_payload:=v_signature_payload||jsonb_build_object(
+      'weekly_source_category_basis',v_source_category->'category_basis');
+  END IF;
+  v_signature := MD5(v_signature_payload::text);
+
+  IF COALESCE(p_include_payload, false) THEN
+    BEGIN
+      SELECT COALESCE(sd.temp_log, false)
+        INTO v_temp_log_enabled
+      FROM public.settings_defaults AS sd
+      ORDER BY sd.id
+      LIMIT 1;
+    EXCEPTION
+      WHEN undefined_table OR undefined_column THEN
+        v_temp_log_enabled := false;
+      WHEN OTHERS THEN
+        v_temp_log_enabled := false;
+    END;
+
+    IF COALESCE(v_temp_log_enabled, false) THEN
+      v_component_values := jsonb_strip_nulls(jsonb_build_object(
+        'identity', v_signature_payload -> 'identity',
+        'timesheet', v_signature_payload -> 'timesheet',
+        'timesheets_financials', v_signature_payload -> 'timesheets_financials',
+        'contract_week', v_signature_payload -> 'contract_week'
+      ));
+      v_component_hashes := jsonb_strip_nulls(jsonb_build_object(
+        'identity', md5(COALESCE((v_signature_payload -> 'identity')::text, 'null')),
+        'timesheet', md5(COALESCE((v_signature_payload -> 'timesheet')::text, 'null')),
+        'timesheets_financials', md5(COALESCE((v_signature_payload -> 'timesheets_financials')::text, 'null')),
+        'contract_week', md5(COALESCE((v_signature_payload -> 'contract_week')::text, 'null')),
+        'full_payload', v_signature
+      ));
+      IF v_candidate_component_enabled THEN
+        v_component_values := v_component_values || jsonb_build_object('candidate_app', v_signature_payload -> 'candidate_app');
+        v_component_hashes := v_component_hashes || jsonb_build_object(
+          'candidate_app', md5(COALESCE((v_signature_payload -> 'candidate_app')::text, 'null'))
+        );
+      END IF;
+      v_diagnostic_payload := jsonb_strip_nulls(jsonb_build_object(
+        'tag', 'TIMESHEET_LIFECYCLE_SIGNATURE_PAYLOAD',
+        'function_name', 'timesheet_lifecycle_guard_signature_v1',
+        'timesheet_id', CASE WHEN v_current_ts.timesheet_id IS NULL THEN NULL ELSE v_current_ts.timesheet_id END,
+        'requested_timesheet_id', p_timesheet_id,
+        'contract_week_id', CASE WHEN v_week.id IS NULL THEN NULL ELSE v_week.id END,
+        'booking_id', COALESCE(v_current_ts.booking_id, v_requested_ts.booking_id, v_resolved_booking_id),
+        'signature', v_signature,
+        'backend_row_signature', v_signature,
+        'component_hashes', v_component_hashes,
+        'component_values', v_component_values
+      ));
+      PERFORM public._temp_diag_log(
+        'TIMESHEET_LIFECYCLE_SIGNATURE_PAYLOAD',
+        'TEMP_TIMESHEET_LIFECYCLE',
+        COALESCE(
+          CASE WHEN v_current_ts.timesheet_id IS NULL THEN NULL ELSE v_current_ts.timesheet_id::text END,
+          p_timesheet_id::text,
+          p_contract_week_id::text
+        ),
+        v_diagnostic_payload
+      );
+    END IF;
+  END IF;
+
+  RETURN jsonb_build_object(
+    'ok', true,
+    'signature_version', 'timesheet_lifecycle_guard_signature_v1',
+    'signature', v_signature,
+    'backend_row_signature', v_signature,
+    'row_signature', v_signature,
+    'timesheet_id', CASE WHEN v_current_ts.timesheet_id IS NULL THEN NULL ELSE v_current_ts.timesheet_id END,
+    'current_timesheet_id', CASE WHEN v_current_ts.timesheet_id IS NULL THEN NULL ELSE v_current_ts.timesheet_id END,
+    'requested_timesheet_id', p_timesheet_id,
+    'contract_week_id', CASE WHEN v_week.id IS NULL THEN NULL ELSE v_week.id END,
+    'booking_id', COALESCE(v_current_ts.booking_id, v_requested_ts.booking_id, v_resolved_booking_id),
+    'current_version', CASE WHEN v_current_ts.timesheet_id IS NULL THEN NULL ELSE v_current_ts.version END,
+    'payload', CASE WHEN COALESCE(p_include_payload, false) THEN v_signature_payload ELSE NULL END
+  ) || CASE
+    WHEN COALESCE(p_include_payload, false) AND COALESCE(v_temp_log_enabled, false) THEN
+      jsonb_build_object(
+        'component_hashes', v_component_hashes,
+        'component_values', v_component_values,
+        'diagnostic_payload', v_diagnostic_payload
+      )
+    ELSE '{}'::jsonb
+  END;
+END;
+$function$;

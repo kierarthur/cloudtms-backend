@@ -1,0 +1,28 @@
+{
+  "version": "S5_ROOT_DEFINITION_OBSERVATION_BINDING_V1",
+  "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+  "commit": "f9d6d77d521c027bbab88f12af6f4e5c9f83f16e",
+  "pins": [
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/S5_NATIVE_SIGNATURE_DEFINITION_READONLY_20261017.json",
+      "sha256": "49824d73917c2aff53f4de0a01e668f05803726320307ae19c15da9ee471efd1",
+      "bytes": 12245
+    },
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/S5_NATIVE_SIGNATURE_SOURCE_IDENTITY_20261017.json",
+      "sha256": "e6331d5a221b8f83821b25949459f871a14546b17d238495f9da54f5833fc560",
+      "bytes": 762
+    }
+  ],
+  "sourceCompleteFunctionSha256": "168ee689ffe7b9bb068ebd2196c0fbff399aded566f71ecd808dd7209ce436f6",
+  "nativeCompleteFunctionSha256": "64d0268a4628ef5834b84b7f96446cf041372542a37d1f7bcd63d81a5f7c73ff",
+  "completeFunctionHeadersIdentical": false,
+  "completeInnerBodyRawEqual": true,
+  "completeInnerBodySha256": "3d6909bbe551436ff70eeafc72fd10088149692619cc760f5e6c404917982830",
+  "newlineOrSqlNormalisationApplied": false,
+  "observationScope": "DEFINITION_ONLY_NO_FUNCTION_INVOCATION_OR_BUSINESS_ROWS",
+  "sourceClosureQualification": "CONDITIONAL_EXACT_OFFICE_MANUAL_FIXTURE_ONLY",
+  "installedTransitiveDependencies": "NOT_PROVED",
+  "fixtureAndActor": "UNBOUND",
+  "nativeFalseArmInvocation": "NOT_RUN"
+}

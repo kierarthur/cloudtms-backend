@@ -1,0 +1,87 @@
+{
+  "version": "ROOT_BANKING_NAMED_DEPENDENCY_RECHECK_V2",
+  "recordedAt": "2026-10-17T08:20:09.091960+00:00",
+  "checkpointOnlyHead": "fd4c58f3dcfd943027fcf8656e9ba2a91e96326d",
+  "selectedNamedItemRows": [
+    {
+      "Item ID": "DY-02",
+      "Row kind": "ITEM",
+      "BUILT revised deliverable": "[x]",
+      "REVIEWED implementation": "[x]",
+      "INSTALLED revised deliverable": "[ ]",
+      "Current completion with amendments": "BASELINE_COMPLETE",
+      "Implementation commit": "1552e0c97051b48becf4aeb58cd026f15d7792fc",
+      "Implementation evidence": "design/DY-04-completion.md; design/DY-04-successor-provenance.json; reviews/DY-04-source-review.md; reviews/DY-04-authorise-source-review.md"
+    },
+    {
+      "Item ID": "CM-02",
+      "Row kind": "ITEM",
+      "BUILT revised deliverable": "[ ]",
+      "REVIEWED implementation": "[ ]",
+      "INSTALLED revised deliverable": "[ ]",
+      "Current completion with amendments": "OPEN \u2014 original boxes prove prior scope only",
+      "Implementation commit": "",
+      "Implementation evidence": ""
+    },
+    {
+      "Item ID": "CM-16",
+      "Row kind": "ITEM",
+      "BUILT revised deliverable": "[ ]",
+      "REVIEWED implementation": "[ ]",
+      "INSTALLED revised deliverable": "[ ]",
+      "Current completion with amendments": "OPEN \u2014 original boxes prove prior scope only",
+      "Implementation commit": "",
+      "Implementation evidence": ""
+    },
+    {
+      "Item ID": "CM-17",
+      "Row kind": "ITEM",
+      "BUILT revised deliverable": "[ ]",
+      "REVIEWED implementation": "[ ]",
+      "INSTALLED revised deliverable": "[ ]",
+      "Current completion with amendments": "OPEN \u2014 original boxes prove prior scope only",
+      "Implementation commit": "",
+      "Implementation evidence": ""
+    },
+    {
+      "Item ID": "F-17",
+      "Row kind": "ITEM",
+      "BUILT revised deliverable": "[ ]",
+      "REVIEWED implementation": "[ ]",
+      "INSTALLED revised deliverable": "[ ]",
+      "Current completion with amendments": "OPEN_BASELINE",
+      "Implementation commit": "ed1034e49c454f6e0ebfd0cd9d6e8713935b0881",
+      "Implementation evidence": "docs/bpay-next/design/F-17-apply-successor-provenance.json"
+    },
+    {
+      "Item ID": "HR-06",
+      "Row kind": "ITEM",
+      "BUILT revised deliverable": "[ ]",
+      "REVIEWED implementation": "[ ]",
+      "INSTALLED revised deliverable": "[ ]",
+      "Current completion with amendments": "OPEN \u2014 original boxes prove prior scope only",
+      "Implementation commit": "",
+      "Implementation evidence": ""
+    },
+    {
+      "Item ID": "HR-11",
+      "Row kind": "ITEM",
+      "BUILT revised deliverable": "[x]",
+      "REVIEWED implementation": "[x]",
+      "INSTALLED revised deliverable": "[ ]",
+      "Current completion with amendments": "OPEN \u2014 original boxes prove prior scope only",
+      "Implementation commit": "1d9b1a1a2d69b7ae81e3ca5cd47bec849c37127d",
+      "Implementation evidence": "docs/bpay-next/design/HR-11_WORKER_PERMISSION_SITE_MAP.md; twelve exact predicates and unchanged published helper; final source gate PASS1652/43/186/70; HR-06 native consumers remain OPEN"
+    }
+  ],
+  "duplicateDeliverableRowsNotConflatedWithItem": true,
+  "checklistSavedSha256": "d973b282880c9770cfaddfb6136b1ca99e93e6250c366e91ebe103d25e6933af",
+  "installsSavedSha256": "d7eed66e7a0dde18defa4628fbbbb3137e50017742195b387ab1a817f17cc1ca",
+  "F17": "SWITCH_ON_NOT_INSTALLED",
+  "CM02_CM16_CM17": "CURRENT_AMENDMENT_OPEN_NO_PUBLISHED_JOIN_CLOSURE_IN_NAMED_RECORD",
+  "HR06": "PRODUCER_PUBLICATION_ACKNOWLEDGED_CONSUMER_ADOPTION_OPEN",
+  "bankingSqlBodiesReviewed": false,
+  "bankingFilesChanged": false,
+  "chatMessageSent": false,
+  "sourceQualificationNotInstalledCompatibility": true
+}

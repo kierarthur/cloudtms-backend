@@ -1,0 +1,107 @@
+[
+  {
+    "acl": [
+      {
+        "grantee": "postgres",
+        "grantable": false,
+        "privilege": "EXECUTE"
+      }
+    ],
+    "owner": "postgres",
+    "config": [
+      "search_path=pg_catalog, public, private, pg_temp"
+    ],
+    "schema": "private",
+    "identity": "_candidate_feature_enabled_current_v1(p_feature_key text)",
+    "parallel": "u",
+    "volatility": "s",
+    "security_definer": true,
+    "definition_sha256": "06d3fc5a330beaa37a65e7397920f75aaf1cf3632067418c188a20857fb40a19"
+  },
+  {
+    "acl": [
+      {
+        "grantee": "postgres",
+        "grantable": false,
+        "privilege": "EXECUTE"
+      }
+    ],
+    "owner": "postgres",
+    "config": [
+      "search_path=pg_catalog, public, private, extensions, pg_temp"
+    ],
+    "schema": "private",
+    "identity": "_candidate_record_capabilities_v1(p_timesheet_id uuid, p_contract_week_id uuid, p_proposed_claim jsonb)",
+    "parallel": "u",
+    "volatility": "s",
+    "security_definer": true,
+    "definition_sha256": "ed0aed43dfa2db694f661cced13bad0f8e8be8fa74409de1e71748e983b0551d"
+  },
+  {
+    "acl": [
+      {
+        "grantee": "postgres",
+        "grantable": false,
+        "privilege": "EXECUTE"
+      }
+    ],
+    "owner": "postgres",
+    "config": [
+      "search_path=pg_catalog, public, private, pg_temp"
+    ],
+    "schema": "private",
+    "identity": "_candidate_signature_component_v1(p_timesheet_id uuid, p_contract_week_id uuid)",
+    "parallel": "u",
+    "volatility": "s",
+    "security_definer": true,
+    "definition_sha256": "1e0a98a4f9f23567fc834b031e2cae99ac7bc38d310d5e0d87f35eef2f72659f"
+  },
+  {
+    "acl": [
+      {
+        "grantee": "postgres",
+        "grantable": false,
+        "privilege": "EXECUTE"
+      },
+      {
+        "grantee": "service_role",
+        "grantable": false,
+        "privilege": "EXECUTE"
+      }
+    ],
+    "owner": "postgres",
+    "config": [
+      "search_path=public, extensions, pg_temp"
+    ],
+    "schema": "public",
+    "identity": "_temp_diag_log(p_action text, p_object_type text, p_object_id_text text, p_payload_json jsonb)",
+    "parallel": "u",
+    "volatility": "v",
+    "security_definer": true,
+    "definition_sha256": "b4fbf3053290bfef18b608b8fa82290e16b09647ae283f1141d67961ddeaf843"
+  },
+  {
+    "acl": [
+      {
+        "grantee": "postgres",
+        "grantable": false,
+        "privilege": "EXECUTE"
+      },
+      {
+        "grantee": "service_role",
+        "grantable": false,
+        "privilege": "EXECUTE"
+      }
+    ],
+    "owner": "postgres",
+    "config": [
+      "search_path=public"
+    ],
+    "schema": "public",
+    "identity": "timesheet_lifecycle_guard_signature_v1(p_timesheet_id uuid, p_contract_week_id uuid, p_include_payload boolean)",
+    "parallel": "u",
+    "volatility": "v",
+    "security_definer": true,
+    "definition_sha256": "64d0268a4628ef5834b84b7f96446cf041372542a37d1f7bcd63d81a5f7c73ff"
+  }
+]

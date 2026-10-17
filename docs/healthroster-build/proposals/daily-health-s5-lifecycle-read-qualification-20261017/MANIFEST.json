@@ -1,0 +1,185 @@
+{
+  "version": "S5_FALSE_ARM_SOURCE_ONLY_FREEZE_V1",
+  "sourceCommit": "feb36c0c13c87b57b7566172e4bfaa1254117794",
+  "definitionObservationCommit": "f9d6d77d521c027bbab88f12af6f4e5c9f83f16e",
+  "scope": "EXACT_OFFICE_MANUAL_DAILY_SOURCE_FEASIBILITY_ONLY",
+  "native": "NOT_RUN",
+  "runtimeTargets": [],
+  "files": [
+    {
+      "path": "ACTUAL_OWNER_ORDER.json",
+      "bytes": 19453,
+      "sha256": "a6680c57312819a6fde3d77f211956a13a5dd320e71b75e48e45eeeadb0d8889"
+    },
+    {
+      "path": "capture-effects.mjs",
+      "bytes": 4072,
+      "sha256": "d6039cf385c639cf98f212f92849cf9434d52dae53ec0b9f9217df5014bfdbd6"
+    },
+    {
+      "path": "capture-native-definition.mjs",
+      "bytes": 2874,
+      "sha256": "01c2308e9a59cda72d48b013e25024c1a3e9653e07b81735442757ab4db42b97"
+    },
+    {
+      "path": "census.mjs",
+      "bytes": 4602,
+      "sha256": "a79b9c6dd7e183d5d55bf6a0b7f87d5d72bc12058a9227155cbd4b24b6d768ce"
+    },
+    {
+      "path": "EFFECT_PROVENANCE.json",
+      "bytes": 3178,
+      "sha256": "c28dcd29c264bc2be092f70a802ef29aab85707606f9b1b3a4d06f972f204d2f"
+    },
+    {
+      "path": "freeze.mjs",
+      "bytes": 4193,
+      "sha256": "f656ea83019d875f936570627885334618219d1d47098073c33a22476a3586e4"
+    },
+    {
+      "path": "INITIAL_CENSUS.json",
+      "bytes": 14275,
+      "sha256": "02a5f4a65fdb912fafa442230cae90fb832464ac8bd8637248a67a384e82fe65"
+    },
+    {
+      "path": "NATIVE_DEFINITION_BINDING.json",
+      "bytes": 1403,
+      "sha256": "52f79c77b7e586f8e87e180f70b062aff8f9d27c632f39ac4a977d9bf59f035e"
+    },
+    {
+      "path": "owner-order.mjs",
+      "bytes": 3177,
+      "sha256": "fd37ccfb05aaecdb3370bf05530e31b9da84a8530798468662482d85c06bb61d"
+    },
+    {
+      "path": "README.md",
+      "bytes": 5050,
+      "sha256": "5e170e154cbf3967655010e080b74b90384b05aeb80659f730c3349b95fdaf91"
+    },
+    {
+      "path": "reference/17102026_0113_weekly_source_kept_20_audit_guards.sql.trigger.txt",
+      "bytes": 239,
+      "sha256": "57369fb893430b7838373d6b9b5801b4c23d8c33f7371b9f606baae0383ae3ac"
+    },
+    {
+      "path": "reference/17102026_0141_weekly_source_later_accept_native_proof.sql.trigger.txt",
+      "bytes": 794,
+      "sha256": "14a41b139464d5496e44eb6bcf1e51a3f3f19215112074451ba3d5d4933db646"
+    },
+    {
+      "path": "reference/audit_identity_migration.sql",
+      "bytes": 2028,
+      "sha256": "b71629e38b3041d0b9d3040236bf6269a0cfd36db0044b611cee66dbfc9a485e"
+    },
+    {
+      "path": "reference/health/_candidate_feature_enabled_current_v1.sqlinc",
+      "bytes": 390,
+      "sha256": "b3941173042ac963df10e84e10f1cdc4d521f50a3aaaf8efb8e31ca18ae3535e"
+    },
+    {
+      "path": "reference/health/_candidate_record_capabilities_v1.sqlinc",
+      "bytes": 20745,
+      "sha256": "afd209c191590c1d90d71599dc38d45dc4f3bdf5acb67fe8cfee705708bad610"
+    },
+    {
+      "path": "reference/health/_candidate_signature_component_v1.sqlinc",
+      "bytes": 3711,
+      "sha256": "77c757ccaa80107934b30c05cb2f0f91936a42a44a612c89e31aa6866b3506fe"
+    },
+    {
+      "path": "reference/health/_temp_diag_log.sqlinc",
+      "bytes": 1661,
+      "sha256": "a8ba634536d87faab2a99d1d400acd04a213ca1c787ee95d04e9aa022a2388d8"
+    },
+    {
+      "path": "reference/health/timesheet_lifecycle_affected_rows_v1.sqlinc",
+      "bytes": 25638,
+      "sha256": "024d229f4cef2e150fc4d3c2e313c22f03d969b6b856dc15d77bd7ce9d28fe22"
+    },
+    {
+      "path": "reference/health/timesheet_lifecycle_guard_signature_v1.sqlinc",
+      "bytes": 11346,
+      "sha256": "168ee689ffe7b9bb068ebd2196c0fbff399aded566f71ecd808dd7209ce436f6"
+    },
+    {
+      "path": "reference/health/weekly_source_operational_empty_v1.sqlinc",
+      "bytes": 10760,
+      "sha256": "b7cbacd3ab45e6ff1d7d76530ccd00a3cfbc7f7a69d149c310f33164612d24e4"
+    },
+    {
+      "path": "reference/health/weekly_source_pay_query_next_receipt_v1.sqlinc",
+      "bytes": 377,
+      "sha256": "533f1fb62e135847c4c253559420a27b91c596d91dd7884dcd77bd9df3cdaffe"
+    },
+    {
+      "path": "reference/health/weekly_source_timesheet_category_v2.sqlinc",
+      "bytes": 8955,
+      "sha256": "a479705529b2ff359d4cabde1e0ed05810f42981d7d96e47192b2200c3d04543"
+    },
+    {
+      "path": "reference/root-native/S5_NATIVE_SIGNATURE_DEFINITION_READONLY_20261017.json",
+      "bytes": 12245,
+      "sha256": "49824d73917c2aff53f4de0a01e668f05803726320307ae19c15da9ee471efd1"
+    },
+    {
+      "path": "reference/root-native/S5_NATIVE_SIGNATURE_SOURCE_IDENTITY_20261017.json",
+      "bytes": 762,
+      "sha256": "e6331d5a221b8f83821b25949459f871a14546b17d238495f9da54f5833fc560"
+    },
+    {
+      "path": "reference/source_policy_metadata.json",
+      "bytes": 4117,
+      "sha256": "95e0b4d24f01e43459f173219583460fdbf5633cef207147cf86eedb5e967aed"
+    },
+    {
+      "path": "reference/source_relation_metadata.json",
+      "bytes": 311803,
+      "sha256": "1b0d8703318ba84e99d5665f498638eb80574436cb9e9f3558d1dfbc46c10d75"
+    },
+    {
+      "path": "reference/source_routine_metadata.json",
+      "bytes": 2895,
+      "sha256": "5a951e0f08dacae6d584b33319ef7fb8b36bfebf1010a0bab28fe8c4dc2ad52c"
+    },
+    {
+      "path": "reference/worker/fetchTimesheetLifecycleLightweightRow.js.txt",
+      "bytes": 11220,
+      "sha256": "413d0559fc09d238fe0c68b9e35f2221c0bc4f953cb5fb424aaef75295fb271f"
+    },
+    {
+      "path": "reference/worker/resolveTimesheetToCurrent.js.txt",
+      "bytes": 3212,
+      "sha256": "738a0c9c28985740c42fd5a6cba68a00b744ba1259ba72a0d628cc6bf167d714"
+    },
+    {
+      "path": "SCOPE_AND_FEASIBILITY.json",
+      "bytes": 3756,
+      "sha256": "6a79abcb49a8c5140c6ac13fddf024342e75d89de3b2b087509f2e233b68586d"
+    },
+    {
+      "path": "SOURCE_AUTHORITY.json",
+      "bytes": 5018,
+      "sha256": "a9ac2305670f1b61ab5056d3f82254d873af8cee9703ee9f3a58893a54eadea6"
+    },
+    {
+      "path": "SOURCE_PROOF.json",
+      "bytes": 2847,
+      "sha256": "31fb08c1cebea6f5a78d30d89286f03222536b6fefcb7f55525a7511a657ee9b"
+    },
+    {
+      "path": "SOURCE_TEST_RESULTS.txt",
+      "bytes": 1922,
+      "sha256": "4a9da5cfd0fa03ac890b896a0c6349fab6f41a1dc78fb5035e0f0251126555c8"
+    },
+    {
+      "path": "source-proof.py",
+      "bytes": 13109,
+      "sha256": "24d47e1424c62577e47b2005b31be1354a5eb4f87a4c242dd127b07953693562"
+    },
+    {
+      "path": "test-source-proof.py",
+      "bytes": 5443,
+      "sha256": "6d6898cd5dbb3ef63898f841a945bfa30292c05cdc5ab1cac0ac8ccf990741b6"
+    }
+  ]
+}

@@ -1,0 +1,122 @@
+{
+  "version": "S5_SOURCE_AUTHORITY_V1",
+  "ownPhysical": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026",
+  "rootPhysical": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-install2-14102026",
+  "sourceCommit": "feb36c0c13c87b57b7566172e4bfaa1254117794",
+  "rootDefinitionObservationCommit": "f9d6d77d521c027bbab88f12af6f4e5c9f83f16e",
+  "sourcePins": [
+    {
+      "file": "supabase/repeatable/13062026_1544_process_authorise_unprocess_unauthorise.sql",
+      "bytes": 477894,
+      "sha256": "6c5a1ac05300bb455135d327287b395d0ac7d84328808d000e98a8c78432b195",
+      "rawUnchangedAcrossPinnedCommits": true,
+      "savedEqualsCommitted": true
+    },
+    {
+      "file": "supabase/repeatable/07082026_2224_candidate_app_weekly_office_replacements_v1.sql",
+      "bytes": 888653,
+      "sha256": "bc3c85a8cd2f8a6d6c76e6f8d0d559a9c8d4bd42910187affc11aff146798648",
+      "rawUnchangedAcrossPinnedCommits": true,
+      "savedEqualsCommitted": true
+    },
+    {
+      "file": "supabase/repeatable/07082026_2059_candidate_app_private_helpers_v1.sql",
+      "bytes": 86352,
+      "sha256": "d929a42a7726a65b2b28c21715e82d1e75ee81497ecc5784bced4938a2c59f3d",
+      "rawUnchangedAcrossPinnedCommits": true,
+      "savedEqualsCommitted": true
+    },
+    {
+      "file": "supabase/repeatable/25082026_1529_candidate_signature_evidence_timestamp_compatibility_v1.sql",
+      "bytes": 4245,
+      "sha256": "803bcf0364811756fe21fc925d94ad818a34cd47fc7f3e809ae29605d2b0ff8d",
+      "rawUnchangedAcrossPinnedCommits": true,
+      "savedEqualsCommitted": true
+    },
+    {
+      "file": "supabase/repeatable/04092026_1603_candidate_expense_email_admission_v1.sql",
+      "bytes": 32097,
+      "sha256": "f283c6011f70e4bf2534a7499d40ae797053f5d5e4cf115c3169ecb01d3f228c",
+      "rawUnchangedAcrossPinnedCommits": true,
+      "savedEqualsCommitted": true
+    },
+    {
+      "file": "supabase/repeatable/05102026_0512_weekly_source_operational_category_v2.sql",
+      "bytes": 20802,
+      "sha256": "602db4edb834be6a6b3428b5d47828b62f4c7ff3589738bc36d756b30a1b8700",
+      "rawUnchangedAcrossPinnedCommits": true,
+      "savedEqualsCommitted": true
+    },
+    {
+      "file": "supabase/repeatable/13102026_2205_weekly_source_automatic_native_delta/04_native_receipt_successors.sqlinc",
+      "bytes": 51247,
+      "sha256": "4b2f73ce0dcc91c5a5893f91a49da9f69d36682273f924dbe69045c233c9f2d3",
+      "rawUnchangedAcrossPinnedCommits": true,
+      "savedEqualsCommitted": true
+    },
+    {
+      "file": "supabase/baseline/22082026_1503_cloudtms_test_routines_02.sql",
+      "bytes": 639797,
+      "sha256": "a3f2f14b787c72cf837ef0dfff06afeea3647dbe533de2a1e7235d3106b3b862",
+      "rawUnchangedAcrossPinnedCommits": true,
+      "savedEqualsCommitted": true
+    },
+    {
+      "file": "broker/src/index.js",
+      "bytes": 8936784,
+      "sha256": "a360e1147b0f6e7902c16b4c6109df0db203af36a981600f84371c17d0e1f6db",
+      "rawUnchangedAcrossPinnedCommits": true,
+      "savedEqualsCommitted": true
+    },
+    {
+      "file": "docs/bpay-next/final-definer-closures.json",
+      "bytes": 1746259,
+      "sha256": "c10ac5fa3aafa9c2def791badd2b647bea2e980cd88a43af81c9a1cba7e7e00c",
+      "rawUnchangedAcrossPinnedCommits": true,
+      "savedEqualsCommitted": true
+    },
+    {
+      "file": "supabase/release/current-release.json",
+      "bytes": 36636,
+      "sha256": "1396346c26872e318231f0815594b2efe206eac4180de7b3c9120f14be24726d",
+      "rawUnchangedAcrossPinnedCommits": true,
+      "savedEqualsCommitted": true
+    },
+    {
+      "file": "supabase/release/current-contract.json",
+      "bytes": 7865503,
+      "sha256": "da0e0870442c151534c04d108757a0d76a812879aafae71f01486c7077ce674a",
+      "rawUnchangedAcrossPinnedCommits": true,
+      "savedEqualsCommitted": true
+    },
+    {
+      "file": "scripts/cloudtms-db-release-lib.mjs",
+      "bytes": 32174,
+      "sha256": "22b3a5cd4ab5ca93f59f891c03187a6f5214e6f4bb99381e203700c52b413bbf",
+      "rawUnchangedAcrossPinnedCommits": true,
+      "savedEqualsCommitted": true
+    },
+    {
+      "file": "scripts/cloudtms-managed-release-sql.mjs",
+      "bytes": 7853,
+      "sha256": "ff391fccf7f690d4d476e935870d740667e4dfd92b972bfd5d7d80b1b3bb912b",
+      "rawUnchangedAcrossPinnedCommits": true,
+      "savedEqualsCommitted": true
+    },
+    {
+      "file": "scripts/bpay-next-final-definers.mjs",
+      "bytes": 13611,
+      "sha256": "51ab7fd6d5c582ee7f4cab612502c4fc7ac11088cb1a996dd2cf1e6561468d09",
+      "rawUnchangedAcrossPinnedCommits": true,
+      "savedEqualsCommitted": true
+    }
+  ],
+  "noRuntimeTargets": true,
+  "parentBodiesReplaced": 0,
+  "parentInversesRequired": 0,
+  "lexicalCensusCaveat": "INITIAL_CENSUS.namedCalls is a lexical qualified-token census, not an executable call graph; public.audit_events is the INSERT relation in _temp_diag_log. SOURCE_PROOF supplies the scoped statement/control-flow inspection.",
+  "native": "NOT_RUN",
+  "databaseConnections": 0,
+  "networkCalls": 0,
+  "bankBodiesSelected": 0
+}

@@ -1,0 +1,8 @@
+create or replace trigger weekly_source_missing_accept_proof_insert_guard before insert on public.audit_events
+for each row execute function private.weekly_source_missing_accept_proof_guard_v1();
+create or replace trigger weekly_source_missing_accept_proof_update_guard before update on public.audit_events
+for each row execute function private.weekly_source_missing_accept_proof_guard_v1();
+create or replace trigger weekly_source_missing_accept_proof_delete_guard before delete on public.audit_events
+for each row execute function private.weekly_source_missing_accept_proof_guard_v1();
+create or replace trigger weekly_source_missing_accept_proof_truncate_guard before truncate on public.audit_events
+for each statement execute function private.weekly_source_missing_accept_proof_guard_v1();

@@ -1,0 +1,121 @@
+async function resolveTimesheetToCurrent(env, timesheet_id) {
+  const enc = encodeURIComponent;
+  const WLOG = true;
+  const wlog = (step, extra = {}) => {
+    if (!WLOG) return;
+    try {
+      console.log(JSON.stringify({
+        tag: 'RESOLVE_TIMESHEET_TO_CURRENT',
+        step,
+        at_utc: new Date().toISOString(),
+        requested_timesheet_id: String(timesheet_id || ''),
+        ...(extra && typeof extra === 'object' ? extra : {})
+      }));
+    } catch {}
+  };
+
+  if (!timesheet_id) return null;
+
+  wlog('start');
+
+  // 1) Load the requested row by PK (current OR historical)
+  const { rows: reqRows } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?timesheet_id=eq.${enc(timesheet_id)}` +
+      `&select=timesheet_id,booking_id,version,is_current` +
+      `&limit=1`
+  );
+
+  const reqRow = (reqRows && reqRows[0]) ? reqRows[0] : null;
+  if (!reqRow) {
+    wlog('not_found_requested_row');
+    return null;
+  }
+
+  const booking_id = reqRow.booking_id || null;
+
+  wlog('requested_row_loaded', {
+    requested_row: reqRow
+  });
+
+  // If booking_id is missing, we cannot resolve the series.
+  // Return a structured response so callers can turn this into a 400.
+  if (!booking_id) {
+    const out = {
+      booking_id: null,
+      requested_timesheet_id: reqRow.timesheet_id,
+      current_timesheet_id: reqRow.timesheet_id,
+      current_version: reqRow.version != null ? Number(reqRow.version) : null,
+      was_stale: false
+    };
+    wlog('finish_no_booking_id', out);
+    return out;
+  }
+
+  // 2) Load the current row for this booking_id
+  let curRow = null;
+  try {
+    const { rows: curRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets` +
+        `?booking_id=eq.${enc(booking_id)}` +
+        `&is_current=eq.true` +
+        `&select=timesheet_id,booking_id,version,is_current` +
+        `&order=version.desc` +
+        `&limit=1`
+    );
+    curRow = (curRows && curRows[0]) ? curRows[0] : null;
+  } catch {
+    curRow = null;
+  }
+
+  wlog('queried_current_row', {
+    booking_id,
+    current_row: curRow
+  });
+
+  // Defensive fallback if data is inconsistent (no is_current row found):
+  // pick the highest version row.
+  if (!curRow) {
+    try {
+      const { rows: vRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/timesheets` +
+          `?booking_id=eq.${enc(booking_id)}` +
+          `&select=timesheet_id,booking_id,version,is_current` +
+          `&order=version.desc` +
+          `&limit=1`
+      );
+      curRow = (vRows && vRows[0]) ? vRows[0] : null;
+    } catch {
+      curRow = null;
+    }
+
+    wlog('fallback_highest_version_row', {
+      booking_id,
+      fallback_row: curRow
+    });
+  }
+
+  // If still missing, treat the requested row as the best-known "current".
+  if (!curRow) curRow = reqRow;
+
+  const current_timesheet_id = curRow.timesheet_id;
+  const current_version = curRow.version != null ? Number(curRow.version) : null;
+
+  const out = {
+    booking_id,
+    requested_timesheet_id: reqRow.timesheet_id,
+    current_timesheet_id,
+    current_version,
+    was_stale: String(reqRow.timesheet_id) !== String(current_timesheet_id)
+  };
+
+  wlog('finish', out);
+
+  return out;
+}
+
+
+
