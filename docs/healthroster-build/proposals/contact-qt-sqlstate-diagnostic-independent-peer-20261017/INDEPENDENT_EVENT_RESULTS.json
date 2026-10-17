@@ -1,0 +1,112 @@
+{
+  "version": "CONTACT_DIAGNOSTIC_INDEPENDENT_PRIVATE_EVENT_VECTORS_V1",
+  "tests": 9,
+  "cases": [
+    {
+      "label": "complete SQLSTATE without child close remains null after TERM/KILL bound",
+      "expectedCode": "LOCAL_METADATA_CHILD_CLOSE_UNCONFIRMED",
+      "expectedState": null,
+      "phase": "BEFORE",
+      "spawnCalls": 1,
+      "killSignals": [
+        "SIGTERM",
+        "SIGKILL"
+      ],
+      "closedShapeOnly": true,
+      "syntheticTimersNotNativeTiming": true
+    },
+    {
+      "label": "zero exit never clears stderr refusal",
+      "expectedCode": "LOCAL_METADATA_DIAGNOSTIC_REFUSED",
+      "expectedState": "42P01",
+      "phase": "BEFORE",
+      "spawnCalls": 1,
+      "killSignals": [
+        "SIGTERM"
+      ],
+      "closedShapeOnly": true,
+      "syntheticTimersNotNativeTiming": true
+    },
+    {
+      "label": "AFTER partial frame is null",
+      "expectedCode": "LOCAL_METADATA_DIAGNOSTIC_REFUSED",
+      "expectedState": null,
+      "phase": "AFTER",
+      "spawnCalls": 1,
+      "killSignals": [
+        "SIGTERM"
+      ],
+      "closedShapeOnly": true,
+      "syntheticTimersNotNativeTiming": true
+    },
+    {
+      "label": "earlier valid frame plus trailing line stays null",
+      "expectedCode": "LOCAL_METADATA_DIAGNOSTIC_REFUSED",
+      "expectedState": null,
+      "phase": "BEFORE",
+      "spawnCalls": 1,
+      "killSignals": [
+        "SIGTERM"
+      ],
+      "closedShapeOnly": true,
+      "syntheticTimersNotNativeTiming": true
+    },
+    {
+      "label": "silent nonzero exit gets no guessed state",
+      "expectedCode": "LOCAL_METADATA_CHILD_FAILED",
+      "expectedState": null,
+      "phase": "BEFORE",
+      "spawnCalls": 1,
+      "killSignals": [],
+      "closedShapeOnly": true,
+      "syntheticTimersNotNativeTiming": true
+    },
+    {
+      "label": "spawn refusal has no connection claim or raw cause",
+      "expectedCode": "LOCAL_METADATA_START_FAILED",
+      "expectedState": null,
+      "phase": "BEFORE",
+      "spawnCalls": 1,
+      "killSignals": [],
+      "closedShapeOnly": true,
+      "syntheticTimersNotNativeTiming": true
+    },
+    {
+      "label": "turn loss before spawn has no connection claim or raw cause",
+      "expectedCode": "LOCAL_METADATA_TURN_LOST",
+      "expectedState": null,
+      "phase": "BEFORE",
+      "spawnCalls": 0,
+      "killSignals": [],
+      "closedShapeOnly": true,
+      "syntheticTimersNotNativeTiming": true
+    },
+    {
+      "label": "owned abort stops then closes without guessed state",
+      "expectedCode": "LOCAL_METADATA_TURN_LOST",
+      "expectedState": null,
+      "phase": "BEFORE",
+      "spawnCalls": 1,
+      "killSignals": [
+        "SIGTERM"
+      ],
+      "closedShapeOnly": true,
+      "syntheticTimersNotNativeTiming": true
+    },
+    {
+      "label": "virtual child deadline stops and closes without inferred SQLSTATE",
+      "expectedCode": "LOCAL_METADATA_CHILD_DEADLINE",
+      "expectedState": null,
+      "phase": "BEFORE",
+      "spawnCalls": 1,
+      "killSignals": [
+        "SIGTERM"
+      ],
+      "closedShapeOnly": true,
+      "syntheticTimersNotNativeTiming": true
+    }
+  ],
+  "native": "NOT_RUN",
+  "osProcesses": 0,
+  "rootWrites": 0
+}
