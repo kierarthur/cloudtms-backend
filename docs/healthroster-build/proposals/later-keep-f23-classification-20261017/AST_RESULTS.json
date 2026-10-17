@@ -1,0 +1,1711 @@
+{
+  "parserVersion": "v7.20",
+  "postgresqlGrammar": [
+    17,
+    7
+  ],
+  "tupleOccurrences": 180,
+  "tuplePoints": 171,
+  "relations": 33,
+  "tuples": [
+    {
+      "file": "supabase/migrations/17102026_0126_weekly_source_missing_20_native_guard.sql",
+      "signature": "private.weekly_source_missing_cancel_native_insert_guard_v1()",
+      "variable": "V_REVISION",
+      "relation": "public.weekly_source_final_revisions",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/00_admission.sqlinc",
+      "signature": "private.weekly_source_missing_accept_admission_v1(uuid,uuid,uuid)",
+      "variable": "V_CYCLE",
+      "relation": "public.weekly_source_cycles",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/00_admission.sqlinc",
+      "signature": "private.weekly_source_missing_accept_admission_v1(uuid,uuid,uuid)",
+      "variable": "V_GROUP",
+      "relation": "public.weekly_source_groups",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/01_head_chain.sqlinc",
+      "signature": "private.weekly_source_missing_accept_head_chain_v1(uuid,uuid)",
+      "variable": "V_EVENT",
+      "relation": "public.weekly_work_events",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/01_head_chain.sqlinc",
+      "signature": "private.weekly_source_missing_accept_head_chain_v1(uuid,uuid)",
+      "variable": "V_CURRENT",
+      "relation": "public.weekly_source_entitlement_heads",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/01_head_chain.sqlinc",
+      "signature": "private.weekly_source_missing_accept_head_chain_v1(uuid,uuid)",
+      "variable": "V_HEAD",
+      "relation": "public.weekly_source_entitlement_heads",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/01_head_chain.sqlinc",
+      "signature": "private.weekly_source_missing_accept_head_chain_v1(uuid,uuid)",
+      "variable": "V_ROOT",
+      "relation": "public.timesheets",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/01_head_chain.sqlinc",
+      "signature": "private.weekly_source_missing_accept_head_chain_v1(uuid,uuid)",
+      "variable": "V_CONTRACT",
+      "relation": "public.contracts",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/01_head_chain.sqlinc",
+      "signature": "private.weekly_source_missing_accept_head_chain_v1(uuid,uuid)",
+      "variable": "V_BUNDLE",
+      "relation": "public.weekly_source_entitlement_decision_bundles",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/01_head_chain.sqlinc",
+      "signature": "private.weekly_source_missing_accept_head_chain_v1(uuid,uuid)",
+      "variable": "V_RECEIPT",
+      "relation": "private.weekly_source_entitlement_publication_receipts",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/01_head_chain.sqlinc",
+      "signature": "private.weekly_source_missing_accept_head_chain_v1(uuid,uuid)",
+      "variable": "V_PENDING",
+      "relation": "public.weekly_source_pending_entitlement_bundles",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/02_current_removal.sqlinc",
+      "signature": "private.weekly_source_missing_accept_current_removal_v1(uuid,uuid,uuid,uuid)",
+      "variable": "V_EVENT",
+      "relation": "public.weekly_work_events",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/02_current_removal.sqlinc",
+      "signature": "private.weekly_source_missing_accept_current_removal_v1(uuid,uuid,uuid,uuid)",
+      "variable": "V_ROOT",
+      "relation": "public.timesheets",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/02_current_removal.sqlinc",
+      "signature": "private.weekly_source_missing_accept_current_removal_v1(uuid,uuid,uuid,uuid)",
+      "variable": "V_CONTRACT",
+      "relation": "public.contracts",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/02_current_removal.sqlinc",
+      "signature": "private.weekly_source_missing_accept_current_removal_v1(uuid,uuid,uuid,uuid)",
+      "variable": "V_PUBLICATION",
+      "relation": "public.weekly_source_projection_publications",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/02_current_removal.sqlinc",
+      "signature": "private.weekly_source_missing_accept_current_removal_v1(uuid,uuid,uuid,uuid)",
+      "variable": "V_CYCLE",
+      "relation": "public.weekly_source_cycles",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/02_current_removal.sqlinc",
+      "signature": "private.weekly_source_missing_accept_current_removal_v1(uuid,uuid,uuid,uuid)",
+      "variable": "V_HEAD",
+      "relation": "public.weekly_source_entitlement_heads",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/02_current_removal.sqlinc",
+      "signature": "private.weekly_source_missing_accept_current_removal_v1(uuid,uuid,uuid,uuid)",
+      "variable": "V_HEAD",
+      "relation": "public.weekly_source_entitlement_heads",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/02_current_removal.sqlinc",
+      "signature": "private.weekly_source_missing_accept_current_removal_v1(uuid,uuid,uuid,uuid)",
+      "variable": "V_ACTION",
+      "relation": "private.weekly_source_accepted_publication_actions_v1",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/02_current_removal.sqlinc",
+      "signature": "private.weekly_source_missing_accept_current_removal_v1(uuid,uuid,uuid,uuid)",
+      "variable": "V_AUDIT",
+      "relation": "public.audit_events",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/02_current_removal.sqlinc",
+      "signature": "private.weekly_source_missing_accept_current_removal_v1(uuid,uuid,uuid,uuid)",
+      "variable": "V_BUNDLE",
+      "relation": "public.weekly_source_entitlement_decision_bundles",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/02_current_removal.sqlinc",
+      "signature": "private.weekly_source_missing_accept_current_removal_v1(uuid,uuid,uuid,uuid)",
+      "variable": "V_RECEIPT",
+      "relation": "private.weekly_source_entitlement_publication_receipts",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/02_current_removal.sqlinc",
+      "signature": "private.weekly_source_missing_accept_current_removal_v1(uuid,uuid,uuid,uuid)",
+      "variable": "V_PENDING",
+      "relation": "public.weekly_source_pending_entitlement_bundles",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/03_inventory_inputs.sqlinc",
+      "signature": "private.weekly_source_missing_accept_inventory_inputs_v1(uuid,uuid,uuid,uuid)",
+      "variable": "V_WORK",
+      "relation": "public.weekly_work_events",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/03_inventory_inputs.sqlinc",
+      "signature": "private.weekly_source_missing_accept_inventory_inputs_v1(uuid,uuid,uuid,uuid)",
+      "variable": "V_ROOT",
+      "relation": "public.timesheets",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/03_inventory_inputs.sqlinc",
+      "signature": "private.weekly_source_missing_accept_inventory_inputs_v1(uuid,uuid,uuid,uuid)",
+      "variable": "V_CONTRACT",
+      "relation": "public.contracts",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/03_inventory_inputs.sqlinc",
+      "signature": "private.weekly_source_missing_accept_inventory_inputs_v1(uuid,uuid,uuid,uuid)",
+      "variable": "V_CYCLE",
+      "relation": "public.weekly_source_cycles",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/04_proposal_read.sqlinc",
+      "signature": "private.weekly_source_missing_accept_proposal_v1(uuid,bigint,uuid)",
+      "variable": "V_AUDIT",
+      "relation": "public.audit_events",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/04_proposal_read.sqlinc",
+      "signature": "private.weekly_source_missing_accept_proposal_v1(uuid,bigint,uuid)",
+      "variable": "V_BUNDLE",
+      "relation": "public.weekly_source_entitlement_decision_bundles",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/05_prepare.sqlinc",
+      "signature": "private.weekly_source_missing_accept_prepare_v1(jsonb)",
+      "variable": "V_EVENT",
+      "relation": "public.weekly_work_events",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/05_prepare.sqlinc",
+      "signature": "private.weekly_source_missing_accept_prepare_v1(jsonb)",
+      "variable": "V_PUBLICATION",
+      "relation": "public.weekly_source_projection_publications",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/05_prepare.sqlinc",
+      "signature": "private.weekly_source_missing_accept_prepare_v1(jsonb)",
+      "variable": "V_CYCLE",
+      "relation": "public.weekly_source_cycles",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/05_prepare.sqlinc",
+      "signature": "private.weekly_source_missing_accept_prepare_v1(jsonb)",
+      "variable": "V_SAVED",
+      "relation": "public.audit_events",
+      "multiplicity": 2,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/05_prepare.sqlinc",
+      "signature": "private.weekly_source_missing_accept_prepare_v1(jsonb)",
+      "variable": "V_ROOT",
+      "relation": "public.timesheets",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/05_prepare.sqlinc",
+      "signature": "private.weekly_source_missing_accept_prepare_v1(jsonb)",
+      "variable": "V_CONTRACT",
+      "relation": "public.contracts",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/05_prepare.sqlinc",
+      "signature": "private.weekly_source_missing_accept_prepare_v1(jsonb)",
+      "variable": "V_GROUP",
+      "relation": "public.weekly_source_groups",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/09_complete_current_context.sqlinc",
+      "signature": "private.weekly_source_kept_as_paid_context_for_publication_v1(uuid,uuid,uuid)",
+      "variable": "V_EVENT",
+      "relation": "public.weekly_work_events",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/09_complete_current_context.sqlinc",
+      "signature": "private.weekly_source_kept_as_paid_context_for_publication_v1(uuid,uuid,uuid)",
+      "variable": "V_RESOLUTION",
+      "relation": "public.weekly_source_row_resolutions",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/09_complete_current_context.sqlinc",
+      "signature": "private.weekly_source_kept_as_paid_context_for_publication_v1(uuid,uuid,uuid)",
+      "variable": "V_DECISION",
+      "relation": "public.weekly_source_kept_as_paid_decisions",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/10_complete_later_change_decide.sqlinc",
+      "signature": "public.weekly_source_later_change_decide_atomic_v1(jsonb)",
+      "variable": "V_TIMESHEET",
+      "relation": "public.timesheets",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/10_complete_later_change_decide.sqlinc",
+      "signature": "public.weekly_source_later_change_decide_atomic_v1(jsonb)",
+      "variable": "V_CONTRACT",
+      "relation": "public.contracts",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/10_complete_later_change_decide.sqlinc",
+      "signature": "public.weekly_source_later_change_decide_atomic_v1(jsonb)",
+      "variable": "V_REVISION",
+      "relation": "public.weekly_source_final_revisions",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/10_complete_later_change_decide.sqlinc",
+      "signature": "public.weekly_source_later_change_decide_atomic_v1(jsonb)",
+      "variable": "V_CYCLE",
+      "relation": "public.weekly_source_cycles",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/10_complete_later_change_decide.sqlinc",
+      "signature": "public.weekly_source_later_change_decide_atomic_v1(jsonb)",
+      "variable": "V_GROUP",
+      "relation": "public.weekly_source_groups",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/10_complete_later_change_decide.sqlinc",
+      "signature": "public.weekly_source_later_change_decide_atomic_v1(jsonb)",
+      "variable": "V_TIMESHEET",
+      "relation": "public.timesheets",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/10_complete_later_change_decide.sqlinc",
+      "signature": "public.weekly_source_later_change_decide_atomic_v1(jsonb)",
+      "variable": "V_CONTRACT",
+      "relation": "public.contracts",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/10_complete_later_change_decide.sqlinc",
+      "signature": "public.weekly_source_later_change_decide_atomic_v1(jsonb)",
+      "variable": "V_BUNDLE",
+      "relation": "public.weekly_source_entitlement_decision_bundles",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/11_complete_cancel_basis.sqlinc",
+      "signature": "private.weekly_source_missing_cancel_basis_v1(uuid,uuid,uuid)",
+      "variable": "V_SNAPSHOT",
+      "relation": "public.weekly_source_final_snapshot_lines",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/11_complete_cancel_basis.sqlinc",
+      "signature": "private.weekly_source_missing_cancel_basis_v1(uuid,uuid,uuid)",
+      "variable": "V_PUBLICATION",
+      "relation": "public.weekly_source_projection_publications",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/12_complete_prepared_census.sqlinc",
+      "signature": "private.weekly_source_missing_prepared_census_recheck_v1(uuid,uuid)",
+      "variable": "V_REVISION",
+      "relation": "public.weekly_source_final_revisions",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/12_complete_prepared_census.sqlinc",
+      "signature": "private.weekly_source_missing_prepared_census_recheck_v1(uuid,uuid)",
+      "variable": "V_TRANSITION",
+      "relation": "public.weekly_source_state_transitions",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_01_private_weekly_source_kept_as_paid_facts_for_publication_v1.sqlinc",
+      "signature": "private.weekly_source_kept_as_paid_facts_for_publication_v1(uuid,text,uuid)",
+      "variable": "V_EVENT",
+      "relation": "public.weekly_work_events",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_01_private_weekly_source_kept_as_paid_facts_for_publication_v1.sqlinc",
+      "signature": "private.weekly_source_kept_as_paid_facts_for_publication_v1(uuid,text,uuid)",
+      "variable": "V_UPLOAD",
+      "relation": "public.weekly_source_uploads",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_02_private_weekly_source_kept_as_paid_facts_v1.sqlinc",
+      "signature": "private.weekly_source_kept_as_paid_facts_v1(uuid,text)",
+      "variable": "V_EVENT",
+      "relation": "public.weekly_work_events",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_03_private_weekly_source_kept_as_paid_context_v1.sqlinc",
+      "signature": "private.weekly_source_kept_as_paid_context_v1(uuid,uuid)",
+      "variable": "V_EVENT",
+      "relation": "public.weekly_work_events",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_03_private_weekly_source_kept_as_paid_context_v1.sqlinc",
+      "signature": "private.weekly_source_kept_as_paid_context_v1(uuid,uuid)",
+      "variable": "V_RESOLUTION",
+      "relation": "public.weekly_source_row_resolutions",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_04_private_weekly_source_missing_snapshot_movement_v1.sqlinc",
+      "signature": "private.weekly_source_missing_snapshot_movement_v1(uuid)",
+      "variable": "V_REQUESTED",
+      "relation": "public.weekly_source_final_snapshot_lines",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_04_private_weekly_source_missing_snapshot_movement_v1.sqlinc",
+      "signature": "private.weekly_source_missing_snapshot_movement_v1(uuid)",
+      "variable": "V_REQUESTED_LINEAGE",
+      "relation": "public.weekly_source_row_timesheet_lineages",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_04_private_weekly_source_missing_snapshot_movement_v1.sqlinc",
+      "signature": "private.weekly_source_missing_snapshot_movement_v1(uuid)",
+      "variable": "V_LINE",
+      "relation": "public.weekly_source_final_snapshot_lines",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_04_private_weekly_source_missing_snapshot_movement_v1.sqlinc",
+      "signature": "private.weekly_source_missing_snapshot_movement_v1(uuid)",
+      "variable": "V_T",
+      "relation": "public.weekly_source_state_transitions",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_04_private_weekly_source_missing_snapshot_movement_v1.sqlinc",
+      "signature": "private.weekly_source_missing_snapshot_movement_v1(uuid)",
+      "variable": "V_M",
+      "relation": "public.weekly_source_billing_movements",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_04_private_weekly_source_missing_snapshot_movement_v1.sqlinc",
+      "signature": "private.weekly_source_missing_snapshot_movement_v1(uuid)",
+      "variable": "V_PREVIOUS",
+      "relation": "public.weekly_source_final_snapshot_lines",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_04_private_weekly_source_missing_snapshot_movement_v1.sqlinc",
+      "signature": "private.weekly_source_missing_snapshot_movement_v1(uuid)",
+      "variable": "V_RESOLUTION",
+      "relation": "public.weekly_source_row_resolutions",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_04_private_weekly_source_missing_snapshot_movement_v1.sqlinc",
+      "signature": "private.weekly_source_missing_snapshot_movement_v1(uuid)",
+      "variable": "V_LINEAGE",
+      "relation": "public.weekly_source_row_timesheet_lineages",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_04_private_weekly_source_missing_snapshot_movement_v1.sqlinc",
+      "signature": "private.weekly_source_missing_snapshot_movement_v1(uuid)",
+      "variable": "V_ECONOMIC",
+      "relation": "public.weekly_source_row_economic_snapshots",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_05_private_weekly_source_kept_as_paid_read_for_publication_v1.sqlinc",
+      "signature": "private.weekly_source_kept_as_paid_read_for_publication_v1(uuid,uuid,uuid)",
+      "variable": "V_EVENT",
+      "relation": "public.weekly_work_events",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_05_private_weekly_source_kept_as_paid_read_for_publication_v1.sqlinc",
+      "signature": "private.weekly_source_kept_as_paid_read_for_publication_v1(uuid,uuid,uuid)",
+      "variable": "V_RESOLUTION",
+      "relation": "public.weekly_source_row_resolutions",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_06_private_weekly_source_kept_as_paid_read_admit_v1.sqlinc",
+      "signature": "private.weekly_source_kept_as_paid_read_admit_v1(uuid,uuid)",
+      "variable": "V_EVENT",
+      "relation": "public.weekly_work_events",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_06_private_weekly_source_kept_as_paid_read_admit_v1.sqlinc",
+      "signature": "private.weekly_source_kept_as_paid_read_admit_v1(uuid,uuid)",
+      "variable": "V_RESOLUTION",
+      "relation": "public.weekly_source_row_resolutions",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_08_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "variable": "V_SCOPE",
+      "relation": "public.weekly_source_report_scopes",
+      "multiplicity": 2,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_08_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "variable": "V_CYCLE",
+      "relation": "public.weekly_source_cycles",
+      "multiplicity": 3,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_08_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "variable": "V_GROUP",
+      "relation": "public.weekly_source_groups",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_08_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "variable": "V_GROUP",
+      "relation": "public.weekly_source_groups",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_08_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "variable": "V_SCOPE",
+      "relation": "public.weekly_source_report_scopes",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_08_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "variable": "V_UPLOAD",
+      "relation": "public.weekly_source_uploads",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_08_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "variable": "V_UPLOAD",
+      "relation": "public.weekly_source_uploads",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_08_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "variable": "V_PUBLICATION",
+      "relation": "public.weekly_source_projection_publications",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_08_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "variable": "V_PUBLICATION",
+      "relation": "public.weekly_source_projection_publications",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_08_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "variable": "V_PROFILE",
+      "relation": "public.weekly_source_format_profiles",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_08_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "variable": "V_CORRECTION",
+      "relation": "public.weekly_final_source_correction_sessions",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_08_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "variable": "V_CORRECTION",
+      "relation": "public.weekly_final_source_correction_sessions",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_08_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "variable": "V_EXISTING_REVISION",
+      "relation": "public.weekly_source_final_revisions",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_08_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "variable": "V_ECONOMIC",
+      "relation": "public.weekly_source_row_economic_snapshots",
+      "multiplicity": 2,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_08_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "variable": "V_PRIOR_SNAPSHOT",
+      "relation": "public.weekly_source_final_snapshot_lines",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_08_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "variable": "V_CURRENT_SNAPSHOT",
+      "relation": "public.weekly_source_final_snapshot_lines",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_08_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "variable": "V_ECONOMIC",
+      "relation": "public.weekly_source_row_economic_snapshots",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_08_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "variable": "V_EXPENSE_POLICY",
+      "relation": "public.weekly_source_row_expense_policy_snapshots",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_08_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "variable": "V_CURRENT_EXPENSE",
+      "relation": "public.weekly_expense_authority_generations",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_08_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "variable": "V_CHARGE_CHECK",
+      "relation": "public.weekly_source_charge_checks",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_08_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "variable": "V_CHARGE_ACCEPTANCE",
+      "relation": "public.weekly_source_charge_acceptances",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_09_private_weekly_source_missing_cancel_transition_assert_v1.sqlinc",
+      "signature": "private.weekly_source_missing_cancel_transition_assert_v1(uuid)",
+      "variable": "V_T",
+      "relation": "public.weekly_source_state_transitions",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_09_private_weekly_source_missing_cancel_transition_assert_v1.sqlinc",
+      "signature": "private.weekly_source_missing_cancel_transition_assert_v1(uuid)",
+      "variable": "V_REVISION",
+      "relation": "public.weekly_source_final_revisions",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_09_private_weekly_source_missing_cancel_transition_assert_v1.sqlinc",
+      "signature": "private.weekly_source_missing_cancel_transition_assert_v1(uuid)",
+      "variable": "V_SNAPSHOT",
+      "relation": "public.weekly_source_final_snapshot_lines",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_09_private_weekly_source_missing_cancel_transition_assert_v1.sqlinc",
+      "signature": "private.weekly_source_missing_cancel_transition_assert_v1(uuid)",
+      "variable": "V_EVENT",
+      "relation": "public.weekly_work_events",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_09_private_weekly_source_missing_cancel_transition_assert_v1.sqlinc",
+      "signature": "private.weekly_source_missing_cancel_transition_assert_v1(uuid)",
+      "variable": "V_PUBLICATION",
+      "relation": "public.weekly_source_projection_publications",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_10_private_weekly_source_missing_cancel_native_insert_guard_v1.sqlinc",
+      "signature": "private.weekly_source_missing_cancel_native_insert_guard_v1()",
+      "variable": "V_REVISION",
+      "relation": "public.weekly_source_final_revisions",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_11_private_weekly_source_missing_current_selection_v1.sqlinc",
+      "signature": "private.weekly_source_missing_current_selection_v1(uuid,uuid,uuid)",
+      "variable": "V_TRANSITION",
+      "relation": "public.weekly_source_state_transitions",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_12_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean)",
+      "variable": "V_SCOPE",
+      "relation": "public.weekly_source_report_scopes",
+      "multiplicity": 2,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_12_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean)",
+      "variable": "V_CYCLE",
+      "relation": "public.weekly_source_cycles",
+      "multiplicity": 3,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_12_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean)",
+      "variable": "V_GROUP",
+      "relation": "public.weekly_source_groups",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_12_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean)",
+      "variable": "V_GROUP",
+      "relation": "public.weekly_source_groups",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_12_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean)",
+      "variable": "V_SCOPE",
+      "relation": "public.weekly_source_report_scopes",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_12_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean)",
+      "variable": "V_UPLOAD",
+      "relation": "public.weekly_source_uploads",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_12_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean)",
+      "variable": "V_UPLOAD",
+      "relation": "public.weekly_source_uploads",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_12_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean)",
+      "variable": "V_PUBLICATION",
+      "relation": "public.weekly_source_projection_publications",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_12_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean)",
+      "variable": "V_PUBLICATION",
+      "relation": "public.weekly_source_projection_publications",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_12_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean)",
+      "variable": "V_PROFILE",
+      "relation": "public.weekly_source_format_profiles",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_12_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean)",
+      "variable": "V_CORRECTION",
+      "relation": "public.weekly_final_source_correction_sessions",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_12_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean)",
+      "variable": "V_CORRECTION",
+      "relation": "public.weekly_final_source_correction_sessions",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_12_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean)",
+      "variable": "V_EXISTING_REVISION",
+      "relation": "public.weekly_source_final_revisions",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_12_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean)",
+      "variable": "V_ECONOMIC",
+      "relation": "public.weekly_source_row_economic_snapshots",
+      "multiplicity": 2,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_12_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean)",
+      "variable": "V_PRIOR_SNAPSHOT",
+      "relation": "public.weekly_source_final_snapshot_lines",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_12_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean)",
+      "variable": "V_CURRENT_SNAPSHOT",
+      "relation": "public.weekly_source_final_snapshot_lines",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_12_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean)",
+      "variable": "V_ECONOMIC",
+      "relation": "public.weekly_source_row_economic_snapshots",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_12_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean)",
+      "variable": "V_EXPENSE_POLICY",
+      "relation": "public.weekly_source_row_expense_policy_snapshots",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_12_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean)",
+      "variable": "V_CURRENT_EXPENSE",
+      "relation": "public.weekly_expense_authority_generations",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_12_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean)",
+      "variable": "V_CHARGE_CHECK",
+      "relation": "public.weekly_source_charge_checks",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_12_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean)",
+      "variable": "V_CHARGE_ACCEPTANCE",
+      "relation": "public.weekly_source_charge_acceptances",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_13_private_weekly_source_invoice_duty_v1.sqlinc",
+      "signature": "private.weekly_source_invoice_duty_v1(uuid)",
+      "variable": "V_ROOT",
+      "relation": "public.timesheets",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_13_private_weekly_source_invoice_duty_v1.sqlinc",
+      "signature": "private.weekly_source_invoice_duty_v1(uuid)",
+      "variable": "V_CONTRACT",
+      "relation": "public.contracts",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_13_private_weekly_source_invoice_duty_v1.sqlinc",
+      "signature": "private.weekly_source_invoice_duty_v1(uuid)",
+      "variable": "V_PROFILE",
+      "relation": "public.weekly_source_format_profiles",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_13_private_weekly_source_invoice_duty_v1.sqlinc",
+      "signature": "private.weekly_source_invoice_duty_v1(uuid)",
+      "variable": "V_PUBLICATION",
+      "relation": "public.weekly_source_projection_publications",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_13_private_weekly_source_invoice_duty_v1.sqlinc",
+      "signature": "private.weekly_source_invoice_duty_v1(uuid)",
+      "variable": "V_RESOLUTION",
+      "relation": "public.weekly_source_row_resolutions",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_13_private_weekly_source_invoice_duty_v1.sqlinc",
+      "signature": "private.weekly_source_invoice_duty_v1(uuid)",
+      "variable": "V_OPERATION",
+      "relation": "public.invoice_operations",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_14_private_weekly_source_correct_final_prepared_context_v1.sqlinc",
+      "signature": "private.weekly_source_correct_final_prepared_context_v1(uuid)",
+      "variable": "V_SESSION",
+      "relation": "public.weekly_final_source_correction_sessions",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_14_private_weekly_source_correct_final_prepared_context_v1.sqlinc",
+      "signature": "private.weekly_source_correct_final_prepared_context_v1(uuid)",
+      "variable": "V_REVISION",
+      "relation": "public.weekly_source_final_revisions",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_14_private_weekly_source_correct_final_prepared_context_v1.sqlinc",
+      "signature": "private.weekly_source_correct_final_prepared_context_v1(uuid)",
+      "variable": "V_CYCLE",
+      "relation": "public.weekly_source_cycles",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_14_private_weekly_source_correct_final_prepared_context_v1.sqlinc",
+      "signature": "private.weekly_source_correct_final_prepared_context_v1(uuid)",
+      "variable": "V_UPLOAD",
+      "relation": "public.weekly_source_uploads",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_14_private_weekly_source_correct_final_prepared_context_v1.sqlinc",
+      "signature": "private.weekly_source_correct_final_prepared_context_v1(uuid)",
+      "variable": "V_PROFILE",
+      "relation": "public.weekly_source_format_profiles",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_14_private_weekly_source_correct_final_prepared_context_v1.sqlinc",
+      "signature": "private.weekly_source_correct_final_prepared_context_v1(uuid)",
+      "variable": "V_MANIFEST",
+      "relation": "public.weekly_source_client_manifests",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_15_public_weekly_source_correct_final_prepare_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_prepare_atomic_v1(jsonb)",
+      "variable": "V_SESSION",
+      "relation": "public.weekly_final_source_correction_sessions",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_15_public_weekly_source_correct_final_prepare_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_prepare_atomic_v1(jsonb)",
+      "variable": "V_CYCLE",
+      "relation": "public.weekly_source_cycles",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_15_public_weekly_source_correct_final_prepare_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_prepare_atomic_v1(jsonb)",
+      "variable": "V_GROUP",
+      "relation": "public.weekly_source_groups",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_15_public_weekly_source_correct_final_prepare_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_prepare_atomic_v1(jsonb)",
+      "variable": "V_SCOPE",
+      "relation": "public.weekly_source_report_scopes",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_15_public_weekly_source_correct_final_prepare_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_prepare_atomic_v1(jsonb)",
+      "variable": "V_SESSION",
+      "relation": "public.weekly_final_source_correction_sessions",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_15_public_weekly_source_correct_final_prepare_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_prepare_atomic_v1(jsonb)",
+      "variable": "V_PRIOR_REVISION",
+      "relation": "public.weekly_source_final_revisions",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_15_public_weekly_source_correct_final_prepare_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_prepare_atomic_v1(jsonb)",
+      "variable": "V_PRIOR_UPLOAD",
+      "relation": "public.weekly_source_uploads",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_15_public_weekly_source_correct_final_prepare_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_prepare_atomic_v1(jsonb)",
+      "variable": "V_PRIOR_PUBLICATION",
+      "relation": "public.weekly_source_projection_publications",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_15_public_weekly_source_correct_final_prepare_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_prepare_atomic_v1(jsonb)",
+      "variable": "V_PRIOR_PROFILE",
+      "relation": "public.weekly_source_format_profiles",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_15_public_weekly_source_correct_final_prepare_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_prepare_atomic_v1(jsonb)",
+      "variable": "V_REPLACEMENT_UPLOAD",
+      "relation": "public.weekly_source_uploads",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_15_public_weekly_source_correct_final_prepare_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_prepare_atomic_v1(jsonb)",
+      "variable": "V_REPLACEMENT_PUBLICATION",
+      "relation": "public.weekly_source_projection_publications",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_15_public_weekly_source_correct_final_prepare_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_prepare_atomic_v1(jsonb)",
+      "variable": "V_REPLACEMENT_PROFILE",
+      "relation": "public.weekly_source_format_profiles",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_16_public_weekly_source_correct_final_apply_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_apply_atomic_v1(jsonb)",
+      "variable": "V_SESSION",
+      "relation": "public.weekly_final_source_correction_sessions",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_16_public_weekly_source_correct_final_apply_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_apply_atomic_v1(jsonb)",
+      "variable": "V_CYCLE",
+      "relation": "public.weekly_source_cycles",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_16_public_weekly_source_correct_final_apply_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_apply_atomic_v1(jsonb)",
+      "variable": "V_GROUP",
+      "relation": "public.weekly_source_groups",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_16_public_weekly_source_correct_final_apply_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_apply_atomic_v1(jsonb)",
+      "variable": "V_SCOPE",
+      "relation": "public.weekly_source_report_scopes",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_16_public_weekly_source_correct_final_apply_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_apply_atomic_v1(jsonb)",
+      "variable": "V_SESSION",
+      "relation": "public.weekly_final_source_correction_sessions",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_16_public_weekly_source_correct_final_apply_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_apply_atomic_v1(jsonb)",
+      "variable": "V_PRIOR_REVISION",
+      "relation": "public.weekly_source_final_revisions",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_16_public_weekly_source_correct_final_apply_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_apply_atomic_v1(jsonb)",
+      "variable": "V_PREPARED_REVISION",
+      "relation": "public.weekly_source_final_revisions",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_16_public_weekly_source_correct_final_apply_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_apply_atomic_v1(jsonb)",
+      "variable": "V_PRIOR_UPLOAD",
+      "relation": "public.weekly_source_uploads",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_16_public_weekly_source_correct_final_apply_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_apply_atomic_v1(jsonb)",
+      "variable": "V_PRIOR_PROFILE",
+      "relation": "public.weekly_source_format_profiles",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_16_public_weekly_source_correct_final_apply_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_apply_atomic_v1(jsonb)",
+      "variable": "V_PRIOR_PUBLICATION",
+      "relation": "public.weekly_source_projection_publications",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_16_public_weekly_source_correct_final_apply_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_apply_atomic_v1(jsonb)",
+      "variable": "V_REPLACEMENT_UPLOAD",
+      "relation": "public.weekly_source_uploads",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_16_public_weekly_source_correct_final_apply_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_apply_atomic_v1(jsonb)",
+      "variable": "V_REPLACEMENT_PUBLICATION",
+      "relation": "public.weekly_source_projection_publications",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_16_public_weekly_source_correct_final_apply_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_apply_atomic_v1(jsonb)",
+      "variable": "V_REPLACEMENT_PROFILE",
+      "relation": "public.weekly_source_format_profiles",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_16_public_weekly_source_correct_final_apply_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_apply_atomic_v1(jsonb)",
+      "variable": "V_PRIOR_RECEIPT",
+      "relation": "public.weekly_source_ordinary_pay_projection_receipts",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/02_scope_rows.sqlinc",
+      "signature": "private.weekly_source_keep_as_paid_scope_rows_v1(uuid,uuid,uuid,uuid,uuid,date)",
+      "variable": "V_CYCLE",
+      "relation": "public.weekly_source_cycles",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/03_complete_canonical_context.sqlinc",
+      "signature": "private.weekly_source_kept_as_paid_context_for_publication_v1(uuid,uuid,uuid)",
+      "variable": "V_EVENT",
+      "relation": "public.weekly_work_events",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/03_complete_canonical_context.sqlinc",
+      "signature": "private.weekly_source_kept_as_paid_context_for_publication_v1(uuid,uuid,uuid)",
+      "variable": "V_RESOLUTION",
+      "relation": "public.weekly_source_row_resolutions",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/03_complete_canonical_context.sqlinc",
+      "signature": "private.weekly_source_kept_as_paid_context_for_publication_v1(uuid,uuid,uuid)",
+      "variable": "V_DECISION",
+      "relation": "public.weekly_source_kept_as_paid_decisions",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/04_complete_office_workspace.sqlinc",
+      "signature": "public.weekly_source_office_workspace_v1(jsonb)",
+      "variable": "V_GROUP",
+      "relation": "public.weekly_source_groups",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/04_complete_office_workspace.sqlinc",
+      "signature": "public.weekly_source_office_workspace_v1(jsonb)",
+      "variable": "V_CYCLE",
+      "relation": "public.weekly_source_cycles",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/04_complete_office_workspace.sqlinc",
+      "signature": "public.weekly_source_office_workspace_v1(jsonb)",
+      "variable": "V_PUBLICATION",
+      "relation": "public.weekly_source_projection_publications",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/04_complete_office_workspace.sqlinc",
+      "signature": "public.weekly_source_office_workspace_v1(jsonb)",
+      "variable": "V_UPLOAD",
+      "relation": "public.weekly_source_uploads",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/05_complete_work_presentation.sqlinc",
+      "signature": "public.weekly_source_office_timesheet_presentation_v1(jsonb)",
+      "variable": "V_TIMESHEET",
+      "relation": "public.timesheets",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/05_complete_work_presentation.sqlinc",
+      "signature": "public.weekly_source_office_timesheet_presentation_v1(jsonb)",
+      "variable": "V_CONTRACT",
+      "relation": "public.contracts",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/05_complete_work_presentation.sqlinc",
+      "signature": "public.weekly_source_office_timesheet_presentation_v1(jsonb)",
+      "variable": "V_CLIENT",
+      "relation": "public.clients",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/05_complete_work_presentation.sqlinc",
+      "signature": "public.weekly_source_office_timesheet_presentation_v1(jsonb)",
+      "variable": "V_CYCLE",
+      "relation": "public.weekly_source_cycles",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/05_complete_work_presentation.sqlinc",
+      "signature": "public.weekly_source_office_timesheet_presentation_v1(jsonb)",
+      "variable": "V_TSFIN",
+      "relation": "public.timesheets_financials",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/06_complete_source_checklist_leaf.sqlinc",
+      "signature": "private.weekly_source_healthroster_checklist_leaf_v1(jsonb)",
+      "variable": "C",
+      "relation": "public.weekly_source_cycles",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/06_complete_source_checklist_leaf.sqlinc",
+      "signature": "private.weekly_source_healthroster_checklist_leaf_v1(jsonb)",
+      "variable": "G",
+      "relation": "public.weekly_source_groups",
+      "multiplicity": 1,
+      "proof": "ONE_ACTUAL_RELATION_COMPLETE_TUPLE_AST"
+    }
+  ],
+  "replayOperator": "JSONB_EXTRACTION_THEN_JSONB_CONCAT",
+  "programs": [
+    {
+      "file": "supabase/migrations/17102026_0126_weekly_source_missing_10_existing_footprint.sql",
+      "topLevelStatements": 6,
+      "parsedBodies": 0,
+      "bodyStatus": "GRAMMAR_ONLY",
+      "native": "NOT_RUN"
+    },
+    {
+      "file": "supabase/migrations/17102026_0126_weekly_source_missing_20_native_guard.sql",
+      "topLevelStatements": 7,
+      "parsedBodies": 1,
+      "bodyStatus": "GRAMMAR_ONLY",
+      "native": "NOT_RUN"
+    },
+    {
+      "file": "supabase/migrations/17102026_0141_weekly_source_later_accept_native_proof.sql",
+      "topLevelStatements": 12,
+      "parsedBodies": 2,
+      "bodyStatus": "GRAMMAR_ONLY",
+      "native": "NOT_RUN"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health_v1.sql",
+      "topLevelStatements": 2,
+      "parsedBodies": 0,
+      "bodyStatus": "GRAMMAR_ONLY",
+      "native": "NOT_RUN"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/00_admission.sqlinc",
+      "topLevelStatements": 3,
+      "parsedBodies": 1,
+      "bodyStatus": "GRAMMAR_ONLY",
+      "native": "NOT_RUN"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/01_head_chain.sqlinc",
+      "topLevelStatements": 3,
+      "parsedBodies": 1,
+      "bodyStatus": "GRAMMAR_ONLY",
+      "native": "NOT_RUN"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/02_current_removal.sqlinc",
+      "topLevelStatements": 3,
+      "parsedBodies": 1,
+      "bodyStatus": "GRAMMAR_ONLY",
+      "native": "NOT_RUN"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/03_inventory_inputs.sqlinc",
+      "topLevelStatements": 3,
+      "parsedBodies": 1,
+      "bodyStatus": "GRAMMAR_ONLY",
+      "native": "NOT_RUN"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/04_proposal_read.sqlinc",
+      "topLevelStatements": 3,
+      "parsedBodies": 1,
+      "bodyStatus": "GRAMMAR_ONLY",
+      "native": "NOT_RUN"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/05_prepare.sqlinc",
+      "topLevelStatements": 3,
+      "parsedBodies": 1,
+      "bodyStatus": "GRAMMAR_ONLY",
+      "native": "NOT_RUN"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/06_proof_guard.sqlinc",
+      "topLevelStatements": 3,
+      "parsedBodies": 1,
+      "bodyStatus": "GRAMMAR_ONLY",
+      "native": "NOT_RUN"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/07_prepare_entry.sqlinc",
+      "topLevelStatements": 4,
+      "parsedBodies": 1,
+      "bodyStatus": "GRAMMAR_ONLY",
+      "native": "NOT_RUN"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/08_context_entry.sqlinc",
+      "topLevelStatements": 4,
+      "parsedBodies": 1,
+      "bodyStatus": "GRAMMAR_ONLY",
+      "native": "NOT_RUN"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/09_complete_current_context.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyStatus": "GRAMMAR_ONLY",
+      "native": "NOT_RUN"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/10_complete_later_change_decide.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyStatus": "GRAMMAR_ONLY",
+      "native": "NOT_RUN"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/11_complete_cancel_basis.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyStatus": "GRAMMAR_ONLY",
+      "native": "NOT_RUN"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/12_complete_prepared_census.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyStatus": "GRAMMAR_ONLY",
+      "native": "NOT_RUN"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_01_private_weekly_source_kept_as_paid_facts_for_publication_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyStatus": "GRAMMAR_ONLY",
+      "native": "NOT_RUN"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_02_private_weekly_source_kept_as_paid_facts_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyStatus": "GRAMMAR_ONLY",
+      "native": "NOT_RUN"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_03_private_weekly_source_kept_as_paid_context_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyStatus": "GRAMMAR_ONLY",
+      "native": "NOT_RUN"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_04_private_weekly_source_missing_snapshot_movement_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyStatus": "GRAMMAR_ONLY",
+      "native": "NOT_RUN"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_05_private_weekly_source_kept_as_paid_read_for_publication_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyStatus": "GRAMMAR_ONLY",
+      "native": "NOT_RUN"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_06_private_weekly_source_kept_as_paid_read_admit_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyStatus": "GRAMMAR_ONLY",
+      "native": "NOT_RUN"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_07_private_weekly_source_missing_finalisation_roots_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyStatus": "GRAMMAR_ONLY",
+      "native": "NOT_RUN"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_08_private_weekly_source_finalise_engine_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 0,
+      "bodyStatus": "NOT_PROVED_INHERITED_CATALOGUE_DEPENDENCY",
+      "native": "NOT_RUN"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_09_private_weekly_source_missing_cancel_transition_assert_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyStatus": "GRAMMAR_ONLY",
+      "native": "NOT_RUN"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_10_private_weekly_source_missing_cancel_native_insert_guard_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyStatus": "GRAMMAR_ONLY",
+      "native": "NOT_RUN"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_11_private_weekly_source_missing_current_selection_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyStatus": "GRAMMAR_ONLY",
+      "native": "NOT_RUN"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_12_private_weekly_source_finalise_engine_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 0,
+      "bodyStatus": "NOT_PROVED_INHERITED_CATALOGUE_DEPENDENCY",
+      "native": "NOT_RUN"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_13_private_weekly_source_invoice_duty_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyStatus": "GRAMMAR_ONLY",
+      "native": "NOT_RUN"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_14_private_weekly_source_correct_final_prepared_context_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyStatus": "GRAMMAR_ONLY",
+      "native": "NOT_RUN"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_15_public_weekly_source_correct_final_prepare_atomic_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyStatus": "GRAMMAR_ONLY",
+      "native": "NOT_RUN"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_16_public_weekly_source_correct_final_apply_atomic_v1.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyStatus": "GRAMMAR_ONLY",
+      "native": "NOT_RUN"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/98_complete_current_classification.sqlinc",
+      "topLevelStatements": 41,
+      "parsedBodies": 8,
+      "bodyStatus": "GRAMMAR_ONLY",
+      "native": "NOT_RUN"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/99_acl.sqlinc",
+      "topLevelStatements": 64,
+      "parsedBodies": 0,
+      "bodyStatus": "GRAMMAR_ONLY",
+      "native": "NOT_RUN"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read_v1.sql",
+      "topLevelStatements": 2,
+      "parsedBodies": 0,
+      "bodyStatus": "GRAMMAR_ONLY",
+      "native": "NOT_RUN"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/01_public_context.sqlinc",
+      "topLevelStatements": 4,
+      "parsedBodies": 1,
+      "bodyStatus": "GRAMMAR_ONLY",
+      "native": "NOT_RUN"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/02_scope_rows.sqlinc",
+      "topLevelStatements": 3,
+      "parsedBodies": 1,
+      "bodyStatus": "GRAMMAR_ONLY",
+      "native": "NOT_RUN"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/03_complete_canonical_context.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyStatus": "GRAMMAR_ONLY",
+      "native": "NOT_RUN"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/04_complete_office_workspace.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyStatus": "GRAMMAR_ONLY",
+      "native": "NOT_RUN"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/05_complete_work_presentation.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyStatus": "GRAMMAR_ONLY",
+      "native": "NOT_RUN"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/06_complete_source_checklist_leaf.sqlinc",
+      "topLevelStatements": 1,
+      "parsedBodies": 1,
+      "bodyStatus": "GRAMMAR_ONLY",
+      "native": "NOT_RUN"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/98_complete_current_classification.sqlinc",
+      "topLevelStatements": 41,
+      "parsedBodies": 8,
+      "bodyStatus": "GRAMMAR_ONLY",
+      "native": "NOT_RUN"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/99_acl.sqlinc",
+      "topLevelStatements": 16,
+      "parsedBodies": 0,
+      "bodyStatus": "GRAMMAR_ONLY",
+      "native": "NOT_RUN"
+    }
+  ],
+  "catalogueDependentBodies": [
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_08_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "error": "\"v_prior_movement.id\" is not a known variable",
+      "actualCompletePredecessorSameError": true,
+      "bodyCompilation": "NOT_PROVED"
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_12_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean)",
+      "error": "\"v_prior_movement.id\" is not a known variable",
+      "actualCompletePredecessorSameError": true,
+      "bodyCompilation": "NOT_PROVED"
+    }
+  ],
+  "sourceTypeClassification": "PASS",
+  "nativeBodyCompilation": "NOT_PROVED",
+  "native": "NOT_RUN",
+  "dbConnections": 0
+}

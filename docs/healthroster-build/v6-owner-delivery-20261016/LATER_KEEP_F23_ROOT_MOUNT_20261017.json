@@ -1,0 +1,205 @@
+{
+  "sourceCommit": "93328c556913c3ed848ca70e83b4e6cf3fda3498",
+  "reviewedRuntimeCommit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+  "frozenPins": [
+    {
+      "path": "docs/healthroster-build/proposals/later-keep-f23-classification-20261017/AST_RESULTS.json",
+      "bytes": 83710,
+      "sha256": "643eb569fa9140d26cb7243cb608f8fab7096c8342052217eb004fe3623bc4f1"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/later-keep-f23-classification-20261017/CENSUS.json",
+      "bytes": 138691,
+      "sha256": "641840d2326ad07e602f856ab63222ce75693793376bbe202aebe3623a7d1afe"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/later-keep-f23-classification-20261017/CLASSIFICATION.json",
+      "bytes": 399102,
+      "sha256": "326fded2189c8076c0c6a3ed8d1c5bbae6350f3815a142de128bf5a39e606140"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/later-keep-f23-classification-20261017/COMPLETE_RELEASE_LOADER_ERRATUM.json",
+      "bytes": 4400,
+      "sha256": "f16e3baeaabcd86ffa4b895f30908c4921abfdd2b2b98216a1e0e545fa8ca170"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/later-keep-f23-classification-20261017/GATE_EDITS.json",
+      "bytes": 4601,
+      "sha256": "ba74a051376e5eeab2c1d524f26b1890c19c21a1d7fe853a227cbce1029d6708"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/later-keep-f23-classification-20261017/ORIGINAL_ALLOWANCE_TRANSFER.json",
+      "bytes": 28047,
+      "sha256": "af4b11b98d60165a0d8a6926f2daccbf18e49bcc184266223539e652380052a1"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/later-keep-f23-classification-20261017/README.md",
+      "bytes": 8760,
+      "sha256": "ea1f4e26f32ff0aaca8adf7ade1a75dea9760eb24172258e88a51d68282a63b6"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/later-keep-f23-classification-20261017/TEST_RESULTS.json",
+      "bytes": 5690,
+      "sha256": "ce2e218eac5e0e5f88175c33add3834e9dcea4d9d13a1074436b213f3a390b3d"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/later-keep-f23-classification-20261017/ast-proof.py",
+      "bytes": 4482,
+      "sha256": "089302bbbc35c007c875463f34af46c9ef28dadd82d6bccb26b0b6693240acc0"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/later-keep-f23-classification-20261017/build-gate-hunks.mjs",
+      "bytes": 3525,
+      "sha256": "633a079fc1c36654279c0b555d3f1e52cbc0c2fc13a14a0fb3078c8cab9cc7a0"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/later-keep-f23-classification-20261017/build.mjs",
+      "bytes": 6666,
+      "sha256": "9ce8efaae559a57a83ff3f4396227de5ef84919bcbb8852b6023229ebb13959f"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/later-keep-f23-classification-20261017/census.mjs",
+      "bytes": 2147,
+      "sha256": "2633b0aa55781b02a7b0ccdb51c6f5c3a94a31fb00e80c36dfef8c156deb5155"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/later-keep-f23-classification-20261017/inputs/owners/01.sqlinc",
+      "bytes": 23725,
+      "sha256": "4b258c320933f50106621db417b90437f5c3f49c7374c08181ac660ae260972f"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/later-keep-f23-classification-20261017/inputs/owners/02.sqlinc",
+      "bytes": 23746,
+      "sha256": "fab3a5495afc3a54d15891c9f1f65a028b4db09ba6d9daeb7b0257ed8c3425bb"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/later-keep-f23-classification-20261017/inputs/owners/03.sqlinc",
+      "bytes": 6444,
+      "sha256": "bcf5c16a22d4fa384489d1a83507091a6466dbf73f6740396d96620ca777608f"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/later-keep-f23-classification-20261017/inputs/owners/04.sqlinc",
+      "bytes": 3728,
+      "sha256": "fb054c5cb218ab78a7fdad34e588fbbb04fd1af08bee8d63b85dc3ee0bf3b9a8"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/later-keep-f23-classification-20261017/inputs/owners/05.sqlinc",
+      "bytes": 109776,
+      "sha256": "4e09617df2d44931d2a9d6423c380dc75caa2cb732bb86f074217977d102f66a"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/later-keep-f23-classification-20261017/inputs/owners/06.sqlinc",
+      "bytes": 103406,
+      "sha256": "562dea3af3dcb33bbced25818362caed65d9740d080c5e4fb8b3c1a45f2929eb"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/later-keep-f23-classification-20261017/inputs/owners/07.sqlinc",
+      "bytes": 36006,
+      "sha256": "4ef2534740ff7994e263e605196e0a8b9355eb3c4d42c0c190543d2a713dad5c"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/later-keep-f23-classification-20261017/inputs/owners/08.sqlinc",
+      "bytes": 7266,
+      "sha256": "7187a5ad8fb51af32718d53cb592145878ce1862445079bf7fa19e95e5e5cc2a"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/later-keep-f23-classification-20261017/inputs/owners/09.sqlinc",
+      "bytes": 16406,
+      "sha256": "640b54c2e5d8fe6c5a325c7219d89466bb42d13374a37de399eb68aed1b8fef5"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/later-keep-f23-classification-20261017/inputs/owners/10.sqlinc",
+      "bytes": 36254,
+      "sha256": "844ccd908d7c509c2ac517b00254793d8ad3b0eedada51f6658023e658fa8d77"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/later-keep-f23-classification-20261017/inputs/owners/11.sqlinc",
+      "bytes": 24664,
+      "sha256": "a040179a16b1c274d47251f4ef908d353e7c23cda9b2b22912c6f6f7d5f4b6a4"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/later-keep-f23-classification-20261017/inputs/owners/12.sqlinc",
+      "bytes": 118581,
+      "sha256": "48c28182274acc2f27de4ee8751135b24b71afa9fcce782a616630b9b9bab028"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/later-keep-f23-classification-20261017/inputs/owners/13.sqlinc",
+      "bytes": 43182,
+      "sha256": "fd6de30fc9d5b621b6c274b93218414f5af31546b42ea1bc9499b89e1f3d0bb1"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/later-keep-f23-classification-20261017/inputs/owners/14.sqlinc",
+      "bytes": 16242,
+      "sha256": "b81564969e02bf7cd56ed5afced892d6fe963861ef564c41b7ad2d8325376545"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/later-keep-f23-classification-20261017/test.mjs",
+      "bytes": 9273,
+      "sha256": "8c38502ae6ef1b3301e32c1106d77b57996e3d8f78473e6a1dd2c1042414c023"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/later-keep-f23-classification-20261017/verify-complete-release-loader.mjs",
+      "bytes": 7839,
+      "sha256": "9013c13cb785fb95daa88ad0f103e9ad376733357e395147a9b16273f9baaaba"
+    },
+    {
+      "path": "scripts/healthroster-later-keep-type-review.mjs",
+      "bytes": 7681,
+      "sha256": "27f947a0810d730142d2157d9da7910f1f256957e283a7320a9326bffa830f4e"
+    }
+  ],
+  "recipe": {
+    "version": "FINITE_LATER_KEEP_GATE_RECIPE_V1",
+    "target": "scripts/bpay-next-source-gates.mjs",
+    "inputSha256": "4f3f73b57b51ece357091ca612c4ca4abe9c33b6f69cf290f81552238580acb1",
+    "outputSha256": "2798cc6178aca812b82194659a6618bd94f12fdb404621783b5822b53a6a965f",
+    "hunks": [
+      {
+        "before": "import {createReviewedKeptEntryClassifier} from './healthroster-kept-entry-type-review.mjs';",
+        "after": "import {createReviewedLaterKeepClassifier} from './healthroster-later-keep-type-review.mjs';\nimport {createReviewedKeptEntryClassifier} from './healthroster-kept-entry-type-review.mjs';",
+        "purpose": "Add separate finite Later/Keep review without changing original nineteen-file proof."
+      },
+      {
+        "before": "export const FROZEN_BASE=",
+        "after": "const reviewedLaterKeepHazards=createReviewedLaterKeepClassifier(repoRoot,{\n  tupleProof:provesSingleTableTuple,hazardCensus:specialConstructViolations,\n  classifyPrior:(source,file,initial=new Map())=>{\n    const violations=specialConstructViolations(source,file),parts=executableParts(source,file);\n    let result=new Map(initial);\n    for(const review of [reviewedContactFiniteHazards,reviewedHealthRowtypeHazards,reviewedHealthUuidHazards,reviewedHealthAggregateHazards,reviewedHealthDynamicHazards,reviewedJoinedNonDynamicHazards,reviewedPrebodyDynamicHazards,reviewedSource13Hazards])\n      result=review(source,file,result,violations,parts);\n    return result;\n  }\n});\n\nexport const FROZEN_BASE=",
+        "purpose": "Invoke existing original statement/type classifiers only after complete current-parent reversal."
+      },
+      {
+        "before": "assertSpecialConstructs(source,file,reviewedKeptEntryHazards(source,file,reviewedSource13Hazards(source,file,reviewedPrebodyDynamicHazards(source,file,reviewedJoinedNonDynamicHazards(source,file,reviewedHealthDynamicHazards(source,file,file===projectionFile?projectionHazards:file===earlyFenceFile?earlyFenceHazards:file===dr15OldFile?dr15OldHazards:reviewedHealthAggregateHazards(source,file,reviewedHealthUuidHazards(source,file,reviewedHealthRowtypeHazards(source,file,sortedStoredCreditHazards(source,file,firstInstallIncomingHazards(source,file,reviewedContactFiniteHazards(source,file,baselineHazards,specialConstructViolations(source,file),executableParts(source,file)))),specialConstructViolations(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)))",
+        "after": "assertSpecialConstructs(source,file,reviewedLaterKeepHazards(source,file,reviewedKeptEntryHazards(source,file,reviewedSource13Hazards(source,file,reviewedPrebodyDynamicHazards(source,file,reviewedJoinedNonDynamicHazards(source,file,reviewedHealthDynamicHazards(source,file,file===projectionFile?projectionHazards:file===earlyFenceFile?earlyFenceHazards:file===dr15OldFile?dr15OldHazards:reviewedHealthAggregateHazards(source,file,reviewedHealthUuidHazards(source,file,reviewedHealthRowtypeHazards(source,file,sortedStoredCreditHazards(source,file,firstInstallIncomingHazards(source,file,reviewedContactFiniteHazards(source,file,baselineHazards,specialConstructViolations(source,file),executableParts(source,file)))),specialConstructViolations(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)))",
+        "purpose": "Compose on the unchanged Kept/Entry allowance map, preserving every existing gate."
+      }
+    ],
+    "fullReverseByteEquality": true,
+    "syntax": "PASS_NODE_CHECK_ONLY",
+    "newModule": "scripts/healthroster-later-keep-type-review.mjs",
+    "newReview": "docs/healthroster-build/proposals/later-keep-f23-classification-20261017/CLASSIFICATION.json",
+    "native": "NOT_RUN",
+    "rootWrites": 0
+  },
+  "wholeGateReverseByteEquality": true,
+  "physicalInputs": 44,
+  "occurrences": 233,
+  "original501ClassificationsUnchanged": true,
+  "uppercaseInventoryErratum": "docs/healthroster-build/proposals/later-keep-f23-classification-20261017/COMPLETE_RELEASE_LOADER_ERRATUM.json",
+  "sourceTests": {
+    "status": "PASS_SOURCE_ONLY",
+    "cases": 11
+  },
+  "fullGate": {
+    "status": "PASS_SOURCE_ONLY",
+    "receipt": "docs/healthroster-build/v6-owner-delivery-20261016/LATER_KEEP_FULL_SOURCE_GATE_20261017.json",
+    "sha256": "139e993122f81763dba889e50119812397f246af8c4b00c9e633ab9927d97bbb",
+    "elapsedMilliseconds": 156398
+  },
+  "native": "NOT_RUN",
+  "pg17TupleProof": {
+    "status": "PASS_SOURCE_ONLY",
+    "tupleOccurrences": 180,
+    "queries": 171,
+    "relations": 33,
+    "catalogueDependentBodiesNotProved": 2,
+    "receiptComparison": "PARSED_JSON_EQUAL_AND_ONLY_WINDOWS_NEWLINE_TRANSLATION",
+    "sourceWrites": 0
+  }
+}

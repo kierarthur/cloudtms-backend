@@ -1,0 +1,155 @@
+{
+  "native": "NOT_RUN",
+  "transfers": [
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_08_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "priorFile": "supabase/repeatable/14102026_0821_healthroster_fin4_rebill_record_fields/01_complete_fin4.sqlinc",
+      "key": "[\"private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)\",\"UUID_CARDINALITY_UNCLASSIFIED\",\"if v_scope_kind='CYCLE' then\\n    select pg_catalog.count(distinct resolution.client_id)::integer,\\n           pg_catalog.min(resolution.client_id::text)::uuid\\n    into v_resolved_client_count,v_resolved_client_id\\n    from public.weekly_source_row_resolutions resolution\\n    join public.weekly_source_upload_rows source_row on source_row.id=resolution.upload_row_id\\n    where source_row.upload_id=v_upload.id and resolution.generation=v_generation;\"]",
+      "count": 1,
+      "completeReverse": true,
+      "originalClassification": true,
+      "frozenBaseline": false
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_08_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "priorFile": "supabase/repeatable/14102026_0821_healthroster_fin4_rebill_record_fields/01_complete_fin4.sqlinc",
+      "key": "[\"private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)\",\"AGGREGATE_TYPE_UNCLASSIFIED\",\"select coalesce(pg_catalog.max(revision.revision_number),0)+1 into v_revision_number\\n  from public.weekly_source_final_revisions revision\\n  where revision.source_cycle_id=v_cycle.id\\n    and revision.authority_scope_kind=v_scope_kind\\n    and revision.report_scope_id is not distinct from v_report_scope_id;\"]",
+      "count": 1,
+      "completeReverse": true,
+      "originalClassification": true,
+      "frozenBaseline": false
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_08_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "priorFile": "supabase/repeatable/14102026_0821_healthroster_fin4_rebill_record_fields/01_complete_fin4.sqlinc",
+      "key": "[\"private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)\",\"AGGREGATE_TYPE_UNCLASSIFIED\",\"select coalesce(pg_catalog.max(expense.generation),0)+1 into v_expense_generation\\n          from public.weekly_expense_authority_generations expense\\n          where expense.work_event_id=v_expense_observation.work_event_id;\"]",
+      "count": 1,
+      "completeReverse": true,
+      "originalClassification": true,
+      "frozenBaseline": false
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_08_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "priorFile": "supabase/repeatable/14102026_0821_healthroster_fin4_rebill_record_fields/01_complete_fin4.sqlinc",
+      "key": "[\"private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)\",\"AGGREGATE_TYPE_UNCLASSIFIED\",\"select coalesce(pg_catalog.max(completion.completion_generation),0)+1\\n  into v_completion_generation\\n  from public.weekly_source_client_cycle_completions completion\\n  where completion.source_cycle_id=v_cycle.id and completion.client_id=v_client_id;\"]",
+      "count": 1,
+      "completeReverse": true,
+      "originalClassification": true,
+      "frozenBaseline": false
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_12_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean)",
+      "priorFile": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition/04_complete_fin3_dispatch.sqlinc",
+      "key": "[\"private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean)\",\"UUID_CARDINALITY_UNCLASSIFIED\",\"if v_scope_kind='CYCLE' then\\n    select pg_catalog.count(distinct resolution.client_id)::integer,\\n           pg_catalog.min(resolution.client_id::text)::uuid\\n    into v_resolved_client_count,v_resolved_client_id\\n    from public.weekly_source_row_resolutions resolution\\n    join public.weekly_source_upload_rows source_row on source_row.id=resolution.upload_row_id\\n    where source_row.upload_id=v_upload.id and resolution.generation=v_generation;\"]",
+      "count": 1,
+      "completeReverse": true,
+      "originalClassification": true,
+      "frozenBaseline": true
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_12_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean)",
+      "priorFile": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition/04_complete_fin3_dispatch.sqlinc",
+      "key": "[\"private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean)\",\"AGGREGATE_TYPE_UNCLASSIFIED\",\"select coalesce(pg_catalog.max(revision.revision_number),0)+1 into v_revision_number\\n  from public.weekly_source_final_revisions revision\\n  where revision.source_cycle_id=v_cycle.id\\n    and revision.authority_scope_kind=v_scope_kind\\n    and revision.report_scope_id is not distinct from v_report_scope_id;\"]",
+      "count": 1,
+      "completeReverse": true,
+      "originalClassification": true,
+      "frozenBaseline": true
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_12_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean)",
+      "priorFile": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition/04_complete_fin3_dispatch.sqlinc",
+      "key": "[\"private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean)\",\"AGGREGATE_TYPE_UNCLASSIFIED\",\"select coalesce(pg_catalog.max(expense.generation),0)+1 into v_expense_generation\\n          from public.weekly_expense_authority_generations expense\\n          where expense.work_event_id=v_expense_observation.work_event_id;\"]",
+      "count": 1,
+      "completeReverse": true,
+      "originalClassification": true,
+      "frozenBaseline": true
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_12_private_weekly_source_finalise_engine_v1.sqlinc",
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean)",
+      "priorFile": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition/04_complete_fin3_dispatch.sqlinc",
+      "key": "[\"private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean)\",\"AGGREGATE_TYPE_UNCLASSIFIED\",\"select coalesce(pg_catalog.max(completion.completion_generation),0)+1\\n  into v_completion_generation\\n  from public.weekly_source_client_cycle_completions completion\\n  where completion.source_cycle_id=v_cycle.id and completion.client_id=v_client_id;\"]",
+      "count": 1,
+      "completeReverse": true,
+      "originalClassification": true,
+      "frozenBaseline": true
+    },
+    {
+      "file": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_16_public_weekly_source_correct_final_apply_atomic_v1.sqlinc",
+      "signature": "public.weekly_source_correct_final_apply_atomic_v1(jsonb)",
+      "priorFile": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10c_complete_root_report_consumer_union.sqlinc",
+      "key": "[\"public.weekly_source_correct_final_apply_atomic_v1(jsonb)\",\"AGGREGATE_TYPE_UNCLASSIFIED\",\"select coalesce(pg_catalog.max(completion.completion_generation),0)+1\\n  into v_completion_generation\\n  from public.weekly_source_client_cycle_completions completion\\n  where completion.source_cycle_id=v_cycle.id and completion.client_id=v_client_id;\"]",
+      "count": 1,
+      "completeReverse": true,
+      "originalClassification": true,
+      "frozenBaseline": true
+    },
+    {
+      "file": "supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/04_complete_office_workspace.sqlinc",
+      "signature": "public.weekly_source_office_workspace_v1(jsonb)",
+      "priorFile": "supabase/repeatable/16102026_1205_weekly_contact_20_producer_completion/28_native_contact_workspace.sqlinc",
+      "key": "[\"public.weekly_source_office_workspace_v1(jsonb)\",\"AGGREGATE_TYPE_UNCLASSIFIED\",\"select coalesce(pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(\\n      'row_key','authority-ready-'||ready.timesheet_id::text,\\n      'candidate',ready.candidate_name,\\n      'day_date',to_char(ready.work_date,'Dy FMDD Mon YYYY'),\\n      'attention','Source reference added',\\n      'reference',ready.source_reference_number,\\n      'status',pg_catalog.jsonb_build_object('text','Ready for Office authorisation','tone','positive'),\\n      'actions',pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object(\\n        'label','View Timesheet','enabled',true,\\n        'payload',pg_catalog.jsonb_build_object('timesheet_id',ready.timesheet_id)))\\n    ) order by private.weekly_source_query_ascii_fold_v1(\\n        ready.candidate_name) collate C,ready.work_date,ready.timesheet_id),'[]'::jsonb)\\n      into v_import_ready_rows\\n    from (\\n      select timesheet_row.timesheet_id,\\n        coalesce(candidate.display_name,candidate.tms_ref,'Candidate') as candidate_name,\\n        pg_catalog.min(comparison.work_date) as work_date,\\n        pg_catalog.min(comparison.source_reference_number) as source_reference_number\\n      from public.weekly_timesheet_source_comparisons comparison\\n      join public.timesheets timesheet_row on timesheet_row.timesheet_id=comparison.timesheet_id\\n        and timesheet_row.is_current and timesheet_row.authorised_at_server is null\\n      join public.contracts contract on contract.id=timesheet_row.contract_id\\n      left join public.candidates candidate on candidate.id=contract.candidate_id\\n      where comparison.projection_publication_id=v_publication_id\\n        and comparison.comparison_state='EXACT_MATCH'\\n        and not exists(select 1 from pg_catalog.jsonb_array_elements(v_import_waiting_rows) waiting\\n          where waiting->>'timesheet_id'=comparison.timesheet_id::text)\\n        and not exists (\\n          select 1 from public.weekly_timesheet_source_comparisons other\\n          where other.projection_publication_id=v_publication_id\\n            and other.timesheet_id=comparison.timesheet_id\\n            and other.comparison_state<>'EXACT_MATCH'\\n        )\\n        and exists (\\n          select 1 from public.weekly_timesheet_reference_apply_operations operation\\n          where operation.projection_publication_id=v_publication_id\\n            and operation.timesheet_id=comparison.timesheet_id\\n            and operation.state='APPLIED'\\n        )\\n      group by timesheet_row.timesheet_id,candidate.display_name,candidate.tms_ref\\n    ) ready;\"]",
+      "count": 1,
+      "completeReverse": true,
+      "originalClassification": true,
+      "frozenBaseline": true
+    },
+    {
+      "file": "supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/05_complete_work_presentation.sqlinc",
+      "signature": "public.weekly_source_office_timesheet_presentation_v1(jsonb)",
+      "priorFile": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "key": "[\"public.weekly_source_office_timesheet_presentation_v1(jsonb)\",\"AGGREGATE_TYPE_UNCLASSIFIED\",\"select coalesce(pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(\\n      'item_id',event.id,'work_event_id',event.durable_work_event_id,'state',event.state,\\n      'primary_action','AMEND_PROTECTED_HOURS',\\n      'available_actions',pg_catalog.jsonb_build_array('AMEND_PROTECTED_HOURS','WITHDRAW_PROTECTED_HOURS','WAIT_FOR_SOURCE','ACCEPT_SOURCE_AND_RECONCILE','RECORD_NOT_WORKED'),\\n      'command_payload',pg_catalog.jsonb_build_object(\\n        'source_cycle_id',approval.source_cycle_id,'candidate_id',approval.candidate_id,\\n        'client_id',approval.client_id,'contract_id',approval.contract_id,\\n        'week_ending_date',approval.week_ending,'family_id',v_family.id,\\n        'work_event_id',event.durable_work_event_id,'evidence_timesheet_id',approval.evidence_timesheet_id,\\n        'work_date',event.work_date,'start_at_local',to_char(event.start_at_local,'HH24:MI'),\\n        'end_at_local',to_char(event.end_at_local,'HH24:MI'),'break_minutes',event.break_minutes),\\n      'schedule',pg_catalog.jsonb_build_object('work_date',event.work_date,\\n        'start_at_local',to_char(event.start_at_local,'HH24:MI'),\\n        'end_at_local',to_char(event.end_at_local,'HH24:MI'),'break_minutes',event.break_minutes)\\n    ) order by event.work_date,event.start_at_local,event.id),'[]'::jsonb)\\n    into v_manage_items\\n    from public.weekly_exceptional_pay_family_events event\\n    join lateral (select max(latest.event_sequence) sequence from public.weekly_exceptional_pay_family_events latest\\n      where latest.family_id=event.family_id and latest.durable_work_event_id=event.durable_work_event_id) latest\\n      on latest.sequence=event.event_sequence\\n    join public.weekly_exceptional_payment_approvals approval on approval.id=event.evidence_approval_id\\n    where event.family_id=v_family.id and event.state='WAIT';\"]",
+      "count": 1,
+      "completeReverse": true,
+      "originalClassification": true,
+      "frozenBaseline": true
+    },
+    {
+      "file": "supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/05_complete_work_presentation.sqlinc",
+      "signature": "public.weekly_source_office_timesheet_presentation_v1(jsonb)",
+      "priorFile": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "key": "[\"public.weekly_source_office_timesheet_presentation_v1(jsonb)\",\"AGGREGATE_TYPE_UNCLASSIFIED\",\"select pg_catalog.count(*)::integer into v_unprotected_issue_count\\n    from public.weekly_discrepancy_incidents incident\\n    join public.weekly_issue_comparison_revisions comparison\\n      on comparison.id=incident.current_comparison_revision_id\\n    join public.weekly_work_events issue_event on issue_event.id=incident.work_event_id\\n    where incident.candidate_id=v_contract.candidate_id\\n      and incident.client_id=v_contract.client_id\\n      and incident.state='OPEN'\\n      and comparison.contract_id=v_timesheet.contract_id\\n      and issue_event.work_date between v_timesheet.week_ending_date-6\\n        and v_timesheet.week_ending_date\\n      and not exists(\\n        select 1\\n        from public.weekly_exceptional_pay_family_events protected_event\\n        where protected_event.family_id=v_family.id\\n          and protected_event.durable_work_event_id=incident.work_event_id\\n          and protected_event.state='WAIT'\\n          and protected_event.event_sequence=(\\n            select pg_catalog.max(latest.event_sequence)\\n            from public.weekly_exceptional_pay_family_events latest\\n            where latest.family_id=protected_event.family_id\\n              and latest.durable_work_event_id=protected_event.durable_work_event_id\\n          )\\n      );\"]",
+      "count": 1,
+      "completeReverse": true,
+      "originalClassification": true,
+      "frozenBaseline": true
+    },
+    {
+      "file": "supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/05_complete_work_presentation.sqlinc",
+      "signature": "public.weekly_source_office_timesheet_presentation_v1(jsonb)",
+      "priorFile": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "key": "[\"public.weekly_source_office_timesheet_presentation_v1(jsonb)\",\"AGGREGATE_TYPE_UNCLASSIFIED\",\"if v_policy->>'authority_mode'='SOURCE_AUTHORITY' then\\n    select coalesce(pg_catalog.jsonb_agg(row_value order by work_date,start_at_local,row_key),'[]'::jsonb)\\n    into v_approved_rows\\n    from (\\n      select source_row.work_date,source_row.start_at_local,'approved-'||source_row.id::text row_key,\\n        pg_catalog.jsonb_build_object('row_key','approved-'||source_row.id::text,\\n          'day_date',to_char(source_row.work_date,'Dy FMDD Mon YYYY'),\\n          'hours',to_char(source_row.start_at_local,'HH24:MI')||'-'||to_char(source_row.end_at_local,'HH24:MI'),\\n          'reference_number',source_row.bounded_raw_columns_json->>'reference_number',\\n          'break_text',coalesce(source_row.break_minutes,0)||' min','state',case when incident.id is null then 'READY' else 'MISMATCH' end,\\n          'status_text',case when incident.id is null then 'Ready' else 'Needs attention' end) row_value\\n      from public.weekly_source_upload_rows source_row\\n      join public.weekly_source_final_revisions final_revision\\n        on final_revision.upload_id=source_row.upload_id\\n       and final_revision.source_cycle_id=v_cycle.id\\n       and final_revision.state='CURRENT'\\n      join public.weekly_source_billing_movements movement\\n        on movement.nhsp_upload_row_id=source_row.id\\n       and movement.final_revision_id=final_revision.id\\n       and movement.movement_role='POSITIVE'\\n       and movement.invoice_timesheet_id=any(v_root_family)\\n      left join public.weekly_discrepancy_incidents incident\\n        on incident.source_cycle_id=final_revision.source_cycle_id\\n       and incident.work_event_id=movement.work_event_id and incident.state='OPEN'\\n      where movement.candidate_id=v_contract.candidate_id and movement.actual_client_id=v_contract.client_id\\n        and movement.contract_id=v_contract.id\\n        and (date_trunc('week',source_row.work_date)::date+6)=v_timesheet.week_ending_date\\n        and source_row.row_finalisation_state in ('NOT_APPLICABLE','SOURCE_WORKED')\\n        and not exists(select 1 from public.weekly_exceptional_pay_family_events event\\n          where event.family_id=v_family.id and event.durable_work_event_id=movement.work_event_id and event.state='WAIT'\\n            and event.event_sequence=(select max(latest.event_sequence) from public.weekly_exceptional_pay_family_events latest\\n              where latest.family_id=event.family_id and latest.durable_work_event_id=event.durable_work_event_id))\\n      union all\\n      select snapshot.work_date,snapshot.start_at_local,'approved-'||snapshot.id::text,\\n        pg_catalog.jsonb_build_object('row_key','approved-'||snapshot.id::text,\\n          'day_date',to_char(snapshot.work_date,'Dy FMDD Mon YYYY'),\\n          'hours',to_char(snapshot.start_at_local,'HH24:MI')||'-'||to_char(snapshot.end_at_local,'HH24:MI'),\\n          'reference_number',coalesce(source_row.bounded_raw_columns_json->>'reference_number',\\n            source_row.bounded_raw_columns_json->>'booking_reference'),\\n          'break_text',snapshot.break_minutes||' min',\\n          'state',case when incident.id is null then 'READY' else 'MISMATCH' end,\\n          'status_text',case when incident.id is null then 'Ready' else 'Needs attention' end)\\n      from public.weekly_source_final_snapshot_lines snapshot\\n      join public.weekly_source_final_revisions final_revision\\n        on final_revision.id=snapshot.final_revision_id\\n       and final_revision.source_cycle_id=v_cycle.id\\n       and final_revision.state='CURRENT'\\n      join public.weekly_source_upload_rows source_row on source_row.id=snapshot.upload_row_id\\n      left join public.weekly_discrepancy_incidents incident\\n        on incident.source_cycle_id=final_revision.source_cycle_id\\n       and incident.work_event_id=snapshot.work_event_id and incident.state='OPEN'\\n      where snapshot.candidate_id=v_contract.candidate_id and snapshot.client_id=v_contract.client_id\\n        and snapshot.contract_id=v_contract.id\\n        and (date_trunc('week',snapshot.work_date)::date+6)=v_timesheet.week_ending_date\\n        and exists(select 1 from public.weekly_source_row_timesheet_lineages lineage\\n          where lineage.row_resolution_id=snapshot.row_resolution_id\\n            and lineage.timesheet_id=any(v_root_family))\\n        and not exists(select 1 from public.weekly_exceptional_pay_family_events event\\n          where event.family_id=v_family.id and event.durable_work_event_id=snapshot.work_event_id and event.state='WAIT'\\n            and event.event_sequence=(select max(latest.event_sequence) from public.weekly_exceptional_pay_family_events latest\\n              where latest.family_id=event.family_id and latest.durable_work_event_id=event.durable_work_event_id))\\n      union all\\n      select event.work_date,event.start_at_local,'protected-'||event.id::text,\\n        pg_catalog.jsonb_build_object('row_key','protected-'||event.id::text,\\n          'day_date',to_char(event.work_date,'Dy FMDD Mon YYYY'),\\n          'hours',to_char(event.start_at_local,'HH24:MI')||'-'||to_char(event.end_at_local,'HH24:MI'),\\n          'break_text',event.break_minutes||' min','state','PROTECTED','status_text','Office-approved hours',\\n          'context_text','Client system hours are still being checked.')\\n      from public.weekly_exceptional_pay_family_events event\\n      where event.family_id=v_family.id and event.state='WAIT'\\n        and event.event_sequence=(select max(latest.event_sequence) from public.weekly_exceptional_pay_family_events latest\\n          where latest.family_id=event.family_id and latest.durable_work_event_id=event.durable_work_event_id)\\n    ) approved;\"]",
+      "count": 1,
+      "completeReverse": true,
+      "originalClassification": true,
+      "frozenBaseline": true
+    },
+    {
+      "file": "supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/06_complete_source_checklist_leaf.sqlinc",
+      "signature": "private.weekly_source_healthroster_checklist_leaf_v1(jsonb)",
+      "priorFile": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_client_week_context.sqlinc",
+      "key": "[\"private.weekly_source_healthroster_checklist_leaf_v1(jsonb)\",\"AGGREGATE_TYPE_UNCLASSIFIED\",\"with scoped as materialized (\\n    select t.*,s.witness,rctx.route_read,tv.status::text validation_status,tv.last_source validation_import_id,tf.processing_status::text processing_status,\\n      exists(select 1 from private.timesheet_correction_requests r where r.state='WAITING'\\n        and r.reversed_timesheet_id=t.timesheet_id) correction_waiting\\n    from public.timesheets t left join public.contracts con on con.id=t.contract_id\\n    left join public.timesheets_financials tf on tf.timesheet_id=t.timesheet_id and tf.is_current and tf.timesheet_version=t.version\\n    cross join lateral(select case when v_route='SIGNED_TIMESHEETS'\\n      then private.weekly_source_signed_submission_read_context_v1(t.timesheet_id,g.id)\\n      else jsonb_build_object('eligible',true,'submission_witness',private.weekly_source_actual_timesheet_submission_v1(t.timesheet_id)) end route_read) rctx\\n    cross join lateral(select rctx.route_read->'submission_witness' witness) s\\n    left join lateral(select * from public.timesheet_validations v where v.timesheet_id=t.timesheet_id\\n      order by v.updated_at desc,v.created_at desc,v.id desc limit 1) tv on true\\n    where t.is_current and t.archived_at_utc is null and t.revoked_at is null\\n      and coalesce(con.client_id,case when t.contract_id is null and t.sheet_scope::text='DAILY' then tf.client_id end)=v_client\\n      and t.week_ending_date<v_today\\n      and exists(select 1 from public.weekly_source_group_clients m where m.source_group_id=g.id and m.client_id=v_client\\n        and t.week_ending_date between m.valid_from and coalesce(m.valid_to,'infinity'::date))\\n  ), counted as (\\n    select *,authorised_at_server is null or validation_status is distinct from 'VALIDATION_OK'\\n      or processing_status='READY_FOR_HR' or correction_waiting\\n      or exists(select 1 from public.import_review_decisions d join public.import_review_states st on st.import_id=d.import_id\\n          and st.preview_generation=d.preview_generation and st.superseded_at_utc is null and st.abandoned_at_utc is null\\n        join public.hr_imports hi on hi.id=d.import_id and hi.pruned_at is null\\n        where d.timesheet_id=scoped.timesheet_id and d.client_id=v_client and d.is_current\\n          and d.action_kind in('EMAIL_WEEKLY_ISSUES','EMAIL_DAILY_ISSUES','EMAIL_MISSING_FROM_IMPORT')\\n          and hi.id=(select current_import.id from public.hr_imports current_import\\n            where current_import.pruned_at is null and (current_import.id=scoped.validation_import_id\\n              or exists(select 1 from public.import_review_decisions current_decision\\n              join public.import_review_states current_state on current_state.import_id=current_decision.import_id\\n                and current_state.preview_generation=current_decision.preview_generation\\n                and current_state.superseded_at_utc is null and current_state.abandoned_at_utc is null\\n              where current_decision.import_id=current_import.id and current_decision.timesheet_id=scoped.timesheet_id\\n                and current_decision.client_id=v_client and current_decision.is_current))\\n            order by current_import.uploaded_at_utc desc,current_import.id desc limit 1)) open_read_item\\n    from scoped where (witness->>'actual_submitted')::boolean is true and (route_read->>'eligible')::boolean is true\\n  ) select max(week_ending_date),count(*) filter(where week_ending_date=v_week)::integer,\\n    count(*) filter(where week_ending_date=v_week and open_read_item)::integer,\\n    coalesce(jsonb_agg(jsonb_build_object('timesheet_id',timesheet_id,'witness',witness,'submission_read_context',route_read,\\n      'ordinary_authorised',authorised_at_server is not null,'validation_status',validation_status,\\n      'processing_status',processing_status,'correction_waiting',correction_waiting,'open_read_item',open_read_item)\\n      order by timesheet_id) filter(where week_ending_date=v_week),'[]'::jsonb),\\n    count(distinct week_ending_date) filter(where open_read_item and week_ending_date<v_latest_week)::integer,\\n    coalesce((select jsonb_agg(jsonb_build_object('code',reason,'unproved_timesheet_count',number) order by reason)\\n      from(select witness->>'reason' reason,count(distinct timesheet_id) number from scoped\\n        where week_ending_date=v_week and witness->>'support_state'='UNPROVED'\\n        group by witness->>'reason') unproved),'[]'::jsonb)\\n    into v_latest_timesheet_week,v_count,v_open,v_actual,v_earlier_open,v_unproved from counted;\"]",
+      "count": 1,
+      "completeReverse": true,
+      "originalClassification": true,
+      "frozenBaseline": false
+    },
+    {
+      "file": "supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/06_complete_source_checklist_leaf.sqlinc",
+      "signature": "private.weekly_source_healthroster_checklist_leaf_v1(jsonb)",
+      "priorFile": "supabase/repeatable/healthroster_wp_u3_source_proposals/wp_u3_client_week_context.sqlinc",
+      "key": "[\"private.weekly_source_healthroster_checklist_leaf_v1(jsonb)\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"else\\n    for v_event in select e.id from public.weekly_work_events e where e.client_id=v_client\\n      and e.first_source_group_id=g.id and e.work_date between v_week-6 and v_week order by e.id loop\\n      begin\\n        execute 'select private.weekly_source_protected_wait_witness_v1($1,$2)' into v_wait_fact using v_event.id,c.id;\"]",
+      "count": 1,
+      "completeReverse": true,
+      "originalClassification": true,
+      "frozenBaseline": false
+    }
+  ]
+}

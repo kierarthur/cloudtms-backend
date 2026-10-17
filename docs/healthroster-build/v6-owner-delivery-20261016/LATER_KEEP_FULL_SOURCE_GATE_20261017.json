@@ -1,0 +1,25 @@
+{
+  "version": "LATER_KEEP_FULL_SOURCE_GATE_V1",
+  "runtimeCommit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+  "classificationSource": "93328c556913c3ed848ca70e83b4e6cf3fda3498",
+  "gateSha256": "2798cc6178aca812b82194659a6618bd94f12fdb404621783b5822b53a6a965f",
+  "helperSha256": "27f947a0810d730142d2157d9da7910f1f256957e283a7320a9326bffa830f4e",
+  "scopedSourceCases": 11,
+  "astTupleOccurrences": 180,
+  "relations": 33,
+  "catalogueDependentBodies": 2,
+  "native": "NOT_RUN",
+  "release": "NOT_RUN",
+  "result": {
+    "frozenFiles": 7,
+    "frozenTriggers": 18,
+    "frozenTables": 45,
+    "protectedSignatures": 24,
+    "sqlSources": 2148,
+    "rpcRoots": 76,
+    "routineWorkSignatures": 183,
+    "typedTransportSignatures": 41
+  },
+  "status": "PASS_SOURCE_ONLY",
+  "elapsedMilliseconds": 156398
+}

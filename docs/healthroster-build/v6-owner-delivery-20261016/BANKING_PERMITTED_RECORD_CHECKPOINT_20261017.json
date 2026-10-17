@@ -1,0 +1,32 @@
+{
+  "version": "HEALTH_BANKING_PERMITTED_RECORD_CHECKPOINT_V1",
+  "checkedAt": "2026-10-17T01:30:30.140Z",
+  "bankingWorktree": "D:/Development/GitHub/.codex-worktrees/bpay-next-build-backend-20261009",
+  "bankingHead": "47a7b9a412ab817c79f22d3286d8036bc236a028",
+  "files": [
+    {
+      "path": "D:\\Development\\GitHub\\.codex-worktrees\\bpay-next-build-backend-20261009\\docs\\bpay-next\\FIRST_INSTALL_CANDIDATE.md",
+      "sha256": "0ef8fb04b2e7f01ae285f335856ed7456022165014517c56e0fc9104f506c69a",
+      "bytes": 21482
+    },
+    {
+      "path": "D:\\Development\\GitHub\\.codex-worktrees\\bpay-next-build-backend-20261009\\docs\\bpay-next\\TEST_INSTALLS.md",
+      "sha256": "d7eed66e7a0dde18defa4628fbbbb3137e50017742195b387ab1a817f17cc1ca",
+      "bytes": 6628
+    }
+  ],
+  "firstInstall": "RECORD_COMPLETE_07e66fb2_LEGACY_1_SHARED_UNLOCK_RECORDED",
+  "nextSwitchOn": "NO_SWITCH_ON_INSTALL_RECORDED_IN_PERMITTED_TEST_INSTALLS",
+  "installedRuntimeFreshness": "NOT_RECHECKED_BY_THIS_RECORD_ONLY_INSPECTION",
+  "genuineNewBankABI": "NOT_SUPPLIED_BY_THESE_RECORDS",
+  "extraFailedLookup": {
+    "path": "D:\\Development\\GitHub\\.codex-worktrees\\bpay-next-build-backend-20261009\\docs\\bpay-next\\PUBLISHED_HELPERS.md",
+    "result": "ENOENT",
+    "contentsRead": false
+  },
+  "furtherBankingSearches": false,
+  "bankingSourceBodiesRead": false,
+  "bankingFilesChanged": false,
+  "bankingChatMessaged": false,
+  "featureActivation": false
+}

@@ -7098,5 +7098,33 @@
     "install2": "NOT_INSTALLED",
     "finalPartB": "NOT_RUN",
     "original92ObjectsUnchanged": true
+  },
+  "later_keep_f23_source_continuation_20261017": {
+    "status": "PASS_SOURCE_ONLY",
+    "runtimeCommit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+    "classificationSource": "93328c556913c3ed848ca70e83b4e6cf3fda3498",
+    "physicalInputs": 44,
+    "occurrences": 233,
+    "scopedCases": 11,
+    "wholeOwnerReversals": 14,
+    "tupleOccurrences": 180,
+    "relations": 33,
+    "catalogueDependentBodiesNotProved": 2,
+    "sourceGate": {
+      "sqlSources": 2148,
+      "rpcRoots": 76,
+      "elapsedMilliseconds": 156398
+    },
+    "actualInventory": {
+      "migrations": 423,
+      "repeatables": 1090
+    },
+    "uppercaseInventoryErratum": "docs/healthroster-build/proposals/later-keep-f23-classification-20261017/COMPLETE_RELEASE_LOADER_ERRATUM.json",
+    "priorEvidencePreserved": true,
+    "original92ObjectsUnchanged": true,
+    "native": "NOT_RUN",
+    "contract": "NOT_SEALED",
+    "install2": "NOT_INSTALLED",
+    "finalPartB": "NOT_RUN"
   }
 }
