@@ -1,0 +1,7 @@
+{
+  "commit": "783d97c8e844fedce9e300d5051aabf7f484ed7a",
+  "file": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_S0_FIXED_NATIVE_METADATA_SUMMARY_20261017.json",
+  "sha256": "c1e91c6507d3624dd69e92707f6f7fd0e8614479b3f5a75c3b4fd9268f152f8c",
+  "bytes": 119766,
+  "qualification": "Actual root read-only fixed metadata, not author native invocation. Does not prove absent inheritance/foreign/domain or extension membership; proposed catalogue-only probe supplies those exact missing dimensions."
+}

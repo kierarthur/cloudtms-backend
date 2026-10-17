@@ -1,0 +1,37 @@
+{
+  "version": "DAILY_GENUINE_BATCH_PREFLIGHT_TIMING_V1",
+  "calls": [
+    {
+      "invocation": "parent-sourcePreflight",
+      "elapsedMs": 1235,
+      "operatorCommit": "163646cb752fc64d4221ac70b685ecd952afe7b0",
+      "rootCommit": "4d0392c7d7f542de5e0efe3599e3e390e8a044f0"
+    },
+    {
+      "invocation": "child-sourcePreflight",
+      "elapsedMs": 1242,
+      "operatorCommit": "163646cb752fc64d4221ac70b685ecd952afe7b0",
+      "rootCommit": "4d0392c7d7f542de5e0efe3599e3e390e8a044f0"
+    },
+    {
+      "invocation": "submit-reviewed-execution-sourcePreflight",
+      "elapsedMs": 1292,
+      "operatorCommit": "163646cb752fc64d4221ac70b685ecd952afe7b0",
+      "rootCommit": "4d0392c7d7f542de5e0efe3599e3e390e8a044f0"
+    }
+  ],
+  "historicalImageMs": 337,
+  "image": {
+    "reviewedCommit": "163646cb752fc64d4221ac70b685ecd952afe7b0",
+    "executionCommit": "163646cb752fc64d4221ac70b685ecd952afe7b0",
+    "selectedImagesUnchanged": true
+  },
+  "entryPreflightMs": 2477,
+  "submitPreflightMs": 4106,
+  "qualification": "Real original public source images and actual Git refs. New helper receives the exact original source location, and preserves all path/image guards. No simulated Git, native or browser.",
+  "privateContentsRead": false,
+  "browser": false,
+  "ipc": false,
+  "network": false,
+  "native": false
+}

@@ -1,0 +1,32 @@
+{
+  "version": "DAILY_GENUINE_BATCH_TARGET_SELECTION_V1",
+  "parentCommit": "163646cb752fc64d4221ac70b685ecd952afe7b0",
+  "targetRoot": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+  "executionContext": "REGISTERED_REPORT_CODE_WITH_SEPARATE_I2_DATA_EFFECT_SETUP",
+  "targets": [
+    {
+      "target": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/source.mjs",
+      "payload": "payload/source.mjs",
+      "bytes": 1950,
+      "sha256": "01d4acb9309eb71a315f4cc5fbe315b90bf29f69d62742f0152c6ee28ad937b2",
+      "beforeSha256": "79d1f181cf21d270352382cdc16f20e36569d68857a7bbbb35b2053b76aa79f8"
+    },
+    {
+      "target": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/git-image-batch.mjs",
+      "payload": "payload/git-image-batch.mjs",
+      "bytes": 9138,
+      "sha256": "4dd8842ca35206870d3a410b43f4358433cb67aee6f50dc586401f4049973e20",
+      "beforeSha256": null
+    },
+    {
+      "target": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/MANIFEST.json",
+      "payload": "payload/MANIFEST.json",
+      "bytes": 24284,
+      "sha256": "31670977b5ee45ba146015c16bd6264b8eaea35612d56a370447ca29b8b9c6f6",
+      "beforeSha256": "0a908ee36e34c41457b797a7609676c46373c89d924f66846100c87a2dc47f0d"
+    }
+  ],
+  "originalI2Evidence": "PRESERVE_UNCHANGED",
+  "freshnessMilliseconds": 30000,
+  "nativeApiAuthBrowser": "NOT_RUN"
+}

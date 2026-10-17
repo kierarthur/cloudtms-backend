@@ -1,0 +1,50 @@
+{
+  "version": "DAILY_GENUINE_BATCH_F4_ROOT_REVIEW_V1",
+  "status": "ACCEPT_BOUNDED_THREE_TARGET_REPORT_SOURCE_FORWARD",
+  "parentRootCommit": "783d97c8e844fedce9e300d5051aabf7f484ed7a",
+  "authorCommit": "8d13d7035db66a125b9b78cf4f96fc70b80b3ecc",
+  "authorFolder": "docs/healthroster-build/proposals/daily-health-genuine-staged-preflight-batch-forward-20261017",
+  "authorFileCount": 30,
+  "authorManifestSha256": "f50ee8f459ee92fbdb2de08fe05dbe0b7b6f75ff746eb284d504f92205ed4888",
+  "selectionSha256": "dd7b08211a1a6dc982e1c0dbd17c4ccae21b00def2bd33447311a205ac8748fe",
+  "peerCommit": "4915e9233950ce68c0ed2f631d3541501d3179c1",
+  "peerFolder": "docs/healthroster-build/proposals/daily-health-staged-preflight-batch-independent-peer-20261017",
+  "peerFileCount": 42,
+  "peerManifestSha256": "3d33c16ab943568402dbe2e41d1748954d0e255d9fdcf664baf05b8617201b6f",
+  "peerVerdict": "ACCEPT_BOUNDED_THREE_TARGET_SOURCE_FORWARD",
+  "rootChecks": {
+    "completeRawBatchHelperAndSourceGuardFlows": "REVIEWED",
+    "strictBinaryFramingAndInvocationLocalCache": "REVIEWED",
+    "savedIndexCurrentHistoricalImagesAndAncestry": "RETAINED",
+    "registeredReportCodeSeparateFromI2Data": "REQUIRED",
+    "realGitTestsIndependentlyReplayed": 3,
+    "wholeRawParentReversals": 2,
+    "finiteEdits": 8,
+    "oldGuardCodesTransferred": 25,
+    "otherOriginalManifestRowsUnchanged": 130,
+    "catalogueProbePg17Statements": 3,
+    "exactOriginalHeapSet": 15,
+    "businessHeapRangeVarsInProbe": 0,
+    "allReplayedChecks": "PASS"
+  },
+  "timing": {
+    "originalMeasuredEntrySourceMs": 37263,
+    "forwardMeasuredEntrySourceMs": 2435,
+    "forwardMeasuredSubmitSourceAndHistoryMs": 3950,
+    "freshnessLimitMsUnchanged": 30000,
+    "qualification": "Author source/path-metadata observations only. Full actual stage timing remains unmeasured and must fail closed if stale."
+  },
+  "mount": {
+    "authorisedTargetCount": 3,
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "targets": ["docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/source.mjs", "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/git-image-batch.mjs", "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/MANIFEST.json"],
+    "executionRequires": "Exact mounted Report commit pushed and fresh remote verified; freeze while a stage is live. I2 original132 evidence remains unchanged."
+  },
+  "fixesThisForward": {"appliedSourceFixes": 1, "rejectedSourceFixes": 0, "id": "F4"},
+  "catalogueProbe": "Finite metadata-only source accepted. Actual original A input, genuine direct Kier main/fresh envelope and root review required before separate business-scope evaluation. Synthetic grammar input must never be dispatched. No blanket owner-policy gate is added.",
+  "businessProducerOrRuntimeChanges": 0,
+  "privateStateContentsReadHashedCopied": false,
+  "nativeApiBrowserExecution": "NOT_RUN",
+  "install2": "NOT_INSTALLED",
+  "finalPartBCritics": "NOT_RUN"
+}

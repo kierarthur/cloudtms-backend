@@ -1,0 +1,11 @@
+{
+  "version": "DAILY_BATCH_PEER_FINITE_TARGET_PROOF_V1",
+  "targets": 3,
+  "registeredReportOnly": true,
+  "original132StillSavedIndexHeadAndHistoryEqual": true,
+  "unchangedOtherManifestRows": 130,
+  "newHelpers": 1,
+  "batchCacheInvocationLocal": true,
+  "privatePreflightNotExecuted": true,
+  "native": "NOT_RUN"
+}

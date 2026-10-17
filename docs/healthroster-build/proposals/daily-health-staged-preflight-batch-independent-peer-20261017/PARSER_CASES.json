@@ -1,0 +1,18 @@
+{
+  "version": "DAILY_BATCH_PEER_ACTUAL_PARSER_CASES_V1",
+  "results": [
+    "binary bytes preserved",
+    "empty blob preserved",
+    "missing record refused",
+    "wrong object type refused",
+    "noncanonical size refused",
+    "payload truncated refused",
+    "missing payload delimiter refused",
+    "extra output refused",
+    "size bound refused",
+    "header absent refused"
+  ],
+  "calls": 10,
+  "privateActualStateReads": 0,
+  "native": "NOT_RUN"
+}
