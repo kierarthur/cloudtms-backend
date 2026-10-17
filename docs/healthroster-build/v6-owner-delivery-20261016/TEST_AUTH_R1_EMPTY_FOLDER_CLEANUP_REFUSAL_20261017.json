@@ -1,0 +1,19 @@
+{
+  "version": "ROOT_AUTH_R1_EMPTY_FOLDER_CLEANUP_REFUSAL_V1",
+  "recordedAt": "2026-10-17T08:30:59.570Z",
+  "exactFolder": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\.codex-tmp\\test-auth-refresh-20261017-baac8008ac2425224d6c667b1f0dda73",
+  "precheckAlreadyObserved": {
+    "files": 0,
+    "privateData": false,
+    "reparsePoint": false
+  },
+  "requestedAction": "Native PowerShell verify exact own empty path, then nonrecursive Remove-Item -LiteralPath",
+  "automaticApprovalReview": "REJECTED_BEFORE_COMMAND_EXECUTION",
+  "statedReason": "blocked by policy",
+  "deletionRefused": true,
+  "deleted": false,
+  "retained": true,
+  "workaroundAttempted": false,
+  "buildBlocked": false,
+  "originalR1ReceiptPreserved": true
+}
