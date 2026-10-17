@@ -1,0 +1,25 @@
+{
+  "version": "ROOT_DAILY_TOOLS_ORCHESTRATION_INDEPENDENT_SOURCE_PEER_V1",
+  "files": [
+    {
+      "file": "README.md",
+      "bytes": 2070,
+      "sha256": "585181a0919003c40133d8a37f8ef077bb9cec9f449da5251e96dd2615fd38e4"
+    },
+    {
+      "file": "reference.js.txt",
+      "bytes": 10610,
+      "sha256": "d1ccd688dbab5a5465993719f602d6e54a9ddb5ee0dd466e231d5696a96c8341"
+    },
+    {
+      "file": "RESULTS.json",
+      "bytes": 876,
+      "sha256": "df0ce68c93be5089030f959c74d82397b680add8aa2b657b56a53ef29bbe81bb"
+    },
+    {
+      "file": "test.mjs",
+      "bytes": 7628,
+      "sha256": "1cfc5e5d54896356c87ace1b489752491cc02c4e1c946696930a4b70a5dd4ff1"
+    }
+  ]
+}

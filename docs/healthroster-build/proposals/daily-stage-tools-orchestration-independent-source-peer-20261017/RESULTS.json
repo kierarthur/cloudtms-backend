@@ -1,0 +1,22 @@
+{
+  "verdict": "ACCEPT_BOUNDED_SOURCE_ONLY",
+  "sourceFile": "docs/healthroster-build/proposals/daily-genuine-stage-tools-orchestration-20261017.js.txt",
+  "sourceBytes": 10610,
+  "sourceSha256": "d1ccd688dbab5a5465993719f602d6e54a9ddb5ee0dd466e231d5696a96c8341",
+  "tests": 11,
+  "pass": 11,
+  "fail": 0,
+  "fakeFullBodyStagePaths": 5,
+  "actualPureOriginalBuilderFrames": 10,
+  "actualPureAuxBuilderFrames": 6,
+  "outerAsyncFunctionCompiled": true,
+  "allGeneratedModulesCompiledWithoutEvaluation": true,
+  "onlyPacketGeneratedCodeEvaluatedWithInMemoryFs": true,
+  "actualClosedQualifierCodeTestedWithInMemoryFs": true,
+  "originalNativeEnvelopeAdmission": "DELEGATED_TO_ORIGINAL_BOOKKEEPER_AND_COMPOSER",
+  "capAndPerformanceQualification": "NOT_CLAIMED",
+  "realToolsNativeBrowserAuthIPC": 0,
+  "actualPrivateStateAccess": 0,
+  "otherWorktreeEdits": 0,
+  "findings": []
+}
