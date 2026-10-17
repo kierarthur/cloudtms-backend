@@ -1,0 +1,37 @@
+{
+  "version": "QT_FIXED_BATCH_TIMING_ROOT_SOURCE_REVIEW_V1",
+  "parent": "be7bee50c5b034daa28fbc05bd15ed13c5e66212",
+  "targets": [
+    {
+      "target": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/fixed-metadata-reader.mjs",
+      "bytes": 24981,
+      "sha256": "45d6079e1b6b38dbbd9e376c7c18eeeddc13007f50cc7b359c0f8929a5d88053",
+      "beforeBytes": 20596,
+      "beforeSha256": "7c2810461e8b3b671b7ac2e5e553487258a3cc36e3c196ff8dccdde79da5335b"
+    },
+    {
+      "target": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/batch-timing-diagnostic.mjs",
+      "bytes": 6689,
+      "sha256": "0df911bb6d99cbb9b94c5798040562d3a1f73ff6afde571bd1b7cd672c00dbe7"
+    },
+    {
+      "target": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/hold-batch-timing.mjs",
+      "bytes": 5043,
+      "sha256": "b24241fb383360bffe2e19268f1aa97c3e3379c6a103cd9bf4c4b4efee5e5a51"
+    },
+    {
+      "target": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/MANIFEST.json",
+      "bytes": 8848,
+      "sha256": "f875ddec0ac4fb365ad7b04435284bfbdd734b4d8a763b627d6153d608013d99",
+      "beforeBytes": 8530,
+      "beforeSha256": "67a58d8125ae4bbb51a2e8dc447d88af65f3f5b348abdfb1520d9189ef6d6f40"
+    }
+  ],
+  "rootTests": 50,
+  "peer": "ACCEPT_BOUNDED_SOURCE_TIMING_DIAGNOSTIC",
+  "allOriginalSqlBytesAndCapsRetained": true,
+  "bDispatchFixturesBusinessRequests": 0,
+  "timingAuthority": "HOST_RECEIVED_COMPLETION_BOUNDS_NOT_SERVER_COST",
+  "native": "NOT_RUN",
+  "restoration": "NOT_CLAIMED"
+}

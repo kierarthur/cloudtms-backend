@@ -1,0 +1,25 @@
+// Diagnostic-only lifecycle. It cannot return a C packet or restoration proof.
+export async function createFixedBatchTimingDiagnostic({root,turn,caseId}){
+ const phases=[];let state='BUILDING';
+ const timed=async(name,fn)=>{const start=performance.now(),startedAt=new Date().toISOString();let ok=false;try{const value=await fn();ok=true;return value;}finally{check(phases.length<16,'LOCAL_METADATA_TIMING_PHASE_BOUND');phases.push({phase:name,startedAt,finishedAt:new Date().toISOString(),elapsedMilliseconds:performance.now()-start,completed:ok});}};
+ const reader=await timed('C_READER_AND_INPUT_BUILD',()=>createFixedBatchMetadataReader({root,turn,caseId}));
+ const original=reader.inspectSource(),managed=await import(pathToFileURL(path.join(root,'scripts/cloudtms-managed-release-sql.mjs')).href),built=await timed('TIMING_META_BUILD',async()=>compileBatchTimingInput(original.batch,managed));
+ state='READY';return Object.freeze({
+  sourceDescriptor:Object.freeze({...built.descriptor,scope:SCOPE,limits:LIMITS}),
+  async run(){check(state==='READY','LOCAL_METADATA_TIMING_ONESHOT_REQUIRED');state='RUNNING';let result=null,bInput=null;
+   try{
+    assertPins(root);check(!turn.signal.aborted,'LOCAL_METADATA_TURN_LOST');
+    const wrapped={...turn,assertHeld:phase=>{check(['before-fixed-read-only-metadata','after-fixed-read-only-metadata'].includes(phase),'LOCAL_METADATA_TIMING_HELD_PHASE_REFUSED');return timed(phase==='before-fixed-read-only-metadata'?'HELD_BEFORE_NATIVE':'HELD_AFTER_NATIVE',()=>turn.assertHeld(phase));}};
+    const helpers=await import(pathToFileURL(path.join(root,'scripts/healthroster-rehearsal-turn.mjs')).href),env=helpers.agencyChildEnvironment('healthroster_contact_qt_fixed_metadata');env.PGCLIENTENCODING='UTF8';env.PGCONNECT_TIMEOUT=String(LIMITS.connectSeconds);env.PGOPTIONS+=' -c default_transaction_read_only=on -c statement_timeout='+LIMITS.statementMilliseconds+' -c lock_timeout='+LIMITS.lockMilliseconds;
+    result=await runFixedChild({input:built.input,env,turn:wrapped,phase:'BEFORE',batch:true,batchTiming:true});const p=result.peer,s=result.snapshot;
+    check(p.database==='cloudtms_test_clone'&&p.databaseOid===turn.identity.databaseOid&&Number.isSafeInteger(p.readerPid)&&p.readerPid>0&&p.readerPid!==turn.identity.backendPid&&p.holderPid===turn.identity.backendPid&&p.readOnly===true&&p.isolation==='repeatable read'&&p.noRoleSwitch===true,'LOCAL_METADATA_NATIVE_PEER_REFUSED');
+    check(s.physicalDatabase==='cloudtms_test_clone'&&s.identityTest===true&&s.customerKeyNull===true&&s.module==='LEGACY:1'&&s.applyingCount===0&&s.markerAbsent===true&&s.backgroundRows&&s.backgroundWriterRoutines&&Array.isArray(s.businessRelations),'LOCAL_METADATA_CANONICAL_IDENTITY_REFUSED');
+    // Original READY preparation is source-only, in memory, never saved/sent.
+    const inputOwner=await import(pathToFileURL(path.join(root,'docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/input-builder.mjs')).href);
+    bInput=await timed('ORIGINAL_PURE_BUILD_INPUT',()=>inputOwner.buildInput({root,identity:turn.identity,caseId}));check(bInput.receipt.canonicalSqlSha256===reader.sourceDescriptor.canonicalSqlSha256,'LOCAL_METADATA_CANONICAL_QUERY_EQUALITY_REQUIRED');bInput=null;
+    await timed('HELD_AFTER_PURE_INPUT',()=>turn.assertHeld('before-contact-qt-mcp-ready'));assertPins(root);state='DONE';
+    return{status:'FIXED_BATCH_TIMINGS_CAPTURED_NOT_RESTORATION',peer:p,queryProgress:result.timingProgress,phaseTimings:phases.map(x=>({...x})),source:built.descriptor,childClosed:true,transport:{instrumentedStdoutBytes:result.transport.instrumentedStdoutBytes,originalStdoutBytes:result.transport.stdoutBytes,nativeFrameCount:result.transport.nativeFrameCount,completionMarkers:result.transport.completionMarkers},noBDispatched:true,noFixture:true,completeMapsPersisted:false,restorationQualified:false};
+   }catch(error){state='FAILED';error.batchTimingPhases=phases.map(x=>({...x}));throw error;}finally{result=null;bInput=null;}
+  }
+ });
+}

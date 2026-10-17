@@ -43,8 +43,8 @@
     },
     {
       "file": "fixed-metadata-reader.mjs",
-      "bytes": 20596,
-      "sha256": "7c2810461e8b3b671b7ac2e5e553487258a3cc36e3c196ff8dccdde79da5335b"
+      "bytes": 24981,
+      "sha256": "45d6079e1b6b38dbbd9e376c7c18eeeddc13007f50cc7b359c0f8929a5d88053"
     },
     {
       "file": "freeze.mjs",
@@ -260,6 +260,16 @@
       "file": "timing.mjs",
       "bytes": 1313,
       "sha256": "0cc645a9c17fc5340b04adfc7ad79b6f134d655f3d1a959dc6baa526b44b19c9"
+    },
+    {
+      "file": "batch-timing-diagnostic.mjs",
+      "bytes": 6689,
+      "sha256": "0df911bb6d99cbb9b94c5798040562d3a1f73ff6afde571bd1b7cd672c00dbe7"
+    },
+    {
+      "file": "hold-batch-timing.mjs",
+      "bytes": 5043,
+      "sha256": "b24241fb383360bffe2e19268f1aa97c3e3379c6a103cd9bf4c4b4efee5e5a51"
     }
   ],
   "parentManifestSha256": "f46fb60686b41f5357ae9f43e079529e5ccb7645aae250ffe93c5a8bfca0de51",

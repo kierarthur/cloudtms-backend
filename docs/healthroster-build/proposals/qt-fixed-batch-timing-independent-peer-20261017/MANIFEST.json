@@ -1,0 +1,25 @@
+{
+  "version": "INDEPENDENT_FIXED_BATCH_TIMING_SOURCE_PEER_V1",
+  "files": [
+    {
+      "file": "AUTHOR_PINS.json",
+      "bytes": 5215,
+      "sha256": "ef78e6d2ee23231958af3358f61ab48bde2ea0f72630695ea262118a3558012b"
+    },
+    {
+      "file": "independent.test.mjs",
+      "bytes": 4582,
+      "sha256": "ccb0395fb421d3d8e7b91983d9f18583a8c935bb839f2144dea6bf1d6b951f83"
+    },
+    {
+      "file": "RESULTS.json",
+      "bytes": 777,
+      "sha256": "49ef842ee10b10c50c66252d2a66aa260fdd8629aad573f7a5dddb8c44cb907e"
+    },
+    {
+      "file": "REVIEW.md",
+      "bytes": 1458,
+      "sha256": "a67e356f43e090019a4bb6ed86ad9752c41ec95796413fd450290ce9cc7d8662"
+    }
+  ]
+}

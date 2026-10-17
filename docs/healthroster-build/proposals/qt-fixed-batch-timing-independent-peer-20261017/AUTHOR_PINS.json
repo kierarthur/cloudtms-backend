@@ -1,0 +1,165 @@
+{
+  "version": "CONTACT_FIXED_BATCH_TIMING_FROZEN_SOURCE_V1",
+  "files": [
+    {
+      "file": "factory.test.mjs",
+      "bytes": 6409,
+      "sha256": "9f813ab6881e85d7385d556c141256edf512c570e9e4f0f2eb1cef4ec68f48e9"
+    },
+    {
+      "file": "factory.txt",
+      "bytes": 4019,
+      "sha256": "f5880a5e958a2dbe74576416aef60e1d8ef6ef9b2cbc66ec4b79f99b5e4e9ca6"
+    },
+    {
+      "file": "FORWARD.json",
+      "bytes": 79244,
+      "sha256": "c1713760679eed6b04b72fd5574b0a9903977f38b26a806a300c7b02235c850c"
+    },
+    {
+      "file": "holder.test.mjs",
+      "bytes": 5669,
+      "sha256": "c4d021a6084340d56b43bcf31785754b5bc6a062d70926141a1c61c56c37030e"
+    },
+    {
+      "file": "parent/batch-source.mjs",
+      "bytes": 9947,
+      "sha256": "d8ae4bd26c310f610a1549edbe4baf00dd9b0bcb0fb63fdb6db5f907e80bee4d"
+    },
+    {
+      "file": "parent/component-source.mjs",
+      "bytes": 4277,
+      "sha256": "fca06c65bf1040d3e583078cedc0ab534e8081d51be93db6ce6ea85f8b8c4872"
+    },
+    {
+      "file": "parent/control.mjs",
+      "bytes": 3227,
+      "sha256": "1d7fa008cd0945eba92b301d55fcc96be17fff7ffa115f55120b418be5c99ab8"
+    },
+    {
+      "file": "parent/fixed-metadata-reader.mjs",
+      "bytes": 20596,
+      "sha256": "7c2810461e8b3b671b7ac2e5e553487258a3cc36e3c196ff8dccdde79da5335b"
+    },
+    {
+      "file": "parent/hold-case.mjs",
+      "bytes": 8180,
+      "sha256": "01522035ba4a2fc3bc505ddd6a58c9418ce684ab296b0ff6eeab780af2c37501"
+    },
+    {
+      "file": "parent/input-builder.mjs",
+      "bytes": 8048,
+      "sha256": "5809dcbd703fb95450ef9dd782cf7d36192d454b07805f2b46030ad7bd606426"
+    },
+    {
+      "file": "parent/MANIFEST.json",
+      "bytes": 8530,
+      "sha256": "67a58d8125ae4bbb51a2e8dc447d88af65f3f5b348abdfb1520d9189ef6d6f40"
+    },
+    {
+      "file": "parent/metadata-diagnostic.mjs",
+      "bytes": 3613,
+      "sha256": "a16b0a67e5c333e39c23fed4c5287d1929aa0baf9ac2107b9b93112de55f6794"
+    },
+    {
+      "file": "parent/metadata-progress-diagnostic.mjs",
+      "bytes": 9824,
+      "sha256": "d6aaf6580e733a90dc5e71397cb1e62e0edcae61d8d7b9979cb7d65be879cb35"
+    },
+    {
+      "file": "parent/shared/cloudtms-managed-release-sql.mjs",
+      "bytes": 7853,
+      "sha256": "ff391fccf7f690d4d476e935870d740667e4dfd92b972bfd5d7d80b1b3bb912b"
+    },
+    {
+      "file": "parent/shared/export_contract.sql",
+      "bytes": 14978,
+      "sha256": "05a904bd4f7739409b28e0459b9f68d7c54a5e51796aefbe2829b370ce1dfe43"
+    },
+    {
+      "file": "parent/shared/healthroster-install1-full-rehearsal.mjs",
+      "bytes": 48330,
+      "sha256": "31acd390acf2ef6dbbd062fbb157feea66f9b5d328440414e67b2bfd4a3f78ab"
+    },
+    {
+      "file": "parent/shared/healthroster-live-test-restoration.mjs",
+      "bytes": 15050,
+      "sha256": "a91c1bf04f868ff372b20fb6beca239a7807fe9cc92c0c2682afffcd79554adc"
+    },
+    {
+      "file": "parent/shared/healthroster-rehearsal-turn.mjs",
+      "bytes": 12827,
+      "sha256": "2a4078b744545a4b4c15a9842947e222ffae75dcadf9b087f49b3c8a30cd36aa"
+    },
+    {
+      "file": "parent/shared/healthroster-turn-control.mjs",
+      "bytes": 9580,
+      "sha256": "ae6aa38307faf3fdc7a1c1a0fe20ff6aab3589c420c5bfd5642566e3a0c23ad8"
+    },
+    {
+      "file": "parent/source.mjs",
+      "bytes": 14702,
+      "sha256": "24449c3b195c6b552547536c0ce93c3ce88e3059b105724d014d33d2a0468313"
+    },
+    {
+      "file": "parent/SOURCE_PINS.json",
+      "bytes": 27619,
+      "sha256": "3a2afc97ba4d43ce4212d103c9723122b22ae6cd1e7b27c43989558d066c3751"
+    },
+    {
+      "file": "payload/batch-timing-diagnostic.mjs",
+      "bytes": 6689,
+      "sha256": "0df911bb6d99cbb9b94c5798040562d3a1f73ff6afde571bd1b7cd672c00dbe7"
+    },
+    {
+      "file": "payload/fixed-metadata-reader.mjs",
+      "bytes": 24981,
+      "sha256": "45d6079e1b6b38dbbd9e376c7c18eeeddc13007f50cc7b359c0f8929a5d88053"
+    },
+    {
+      "file": "payload/hold-batch-timing.mjs",
+      "bytes": 5043,
+      "sha256": "b24241fb383360bffe2e19268f1aa97c3e3379c6a103cd9bf4c4b4efee5e5a51"
+    },
+    {
+      "file": "payload/MANIFEST.json",
+      "bytes": 8848,
+      "sha256": "f875ddec0ac4fb365ad7b04435284bfbdd734b4d8a763b627d6153d608013d99"
+    },
+    {
+      "file": "prepare.py",
+      "bytes": 5255,
+      "sha256": "ba507fefc6a5b9511960a9a91cefbadc17ea67659c66a08c835cb0d082a525b1"
+    },
+    {
+      "file": "R11_OVERLAP.json",
+      "bytes": 1618,
+      "sha256": "1de05b09768bd52aaeb538ba02015ca3f9594163129907d9a0745e35b6897f46"
+    },
+    {
+      "file": "README.md",
+      "bytes": 6058,
+      "sha256": "24f3b1e0aded1af222435240fec54de0bfb23f86939f121cc36dc89b8b25d969"
+    },
+    {
+      "file": "test.mjs",
+      "bytes": 10201,
+      "sha256": "490cd37de1a73919eb1186e6c0a3812dc30177926e2f25c4b6ece436e2860943"
+    },
+    {
+      "file": "TEST_RESULTS.txt",
+      "bytes": 3856,
+      "sha256": "7e4b1041e05c861a24b8523acbd3b0a31b2a04bf22525334b3a14b592d58ea65"
+    },
+    {
+      "file": "verify.mjs",
+      "bytes": 4002,
+      "sha256": "b84b5c75f0853ee15576df3a121b0d0c514bc3fb1eefc942f20707de8359e55b"
+    },
+    {
+      "file": "VERIFY_RESULTS.json",
+      "bytes": 257,
+      "sha256": "b872520be0036cf5ffde43671c988482d9f6af200038219692e1292097ba9eed"
+    }
+  ]
+}

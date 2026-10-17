@@ -1,0 +1,38 @@
+{
+  "version": "QT_BATCH_TIMING_R11_SELECTED_SOURCE_OVERLAP_V1",
+  "watchedPaths": 231,
+  "watchedRootPaths": 56,
+  "targets": [
+    "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/fixed-metadata-reader.mjs",
+    "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/batch-timing-diagnostic.mjs",
+    "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/hold-batch-timing.mjs",
+    "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/MANIFEST.json"
+  ],
+  "selectedOverlap": [],
+  "unchangedSharedWatched": [
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+      "file": "scripts/cloudtms-managed-release-sql.mjs",
+      "sources": [
+        "FULL_PREFLIGHT_MAPPING"
+      ]
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+      "file": "scripts/healthroster-rehearsal-turn.mjs",
+      "sources": [
+        "B2_BASELINE62",
+        "R11_PARENTS77"
+      ]
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+      "file": "scripts/healthroster-turn-control.mjs",
+      "sources": [
+        "B2_BASELINE62",
+        "R11_PARENTS77"
+      ]
+    }
+  ],
+  "note": "Exact source-path comparison against the prepared R11 parent/baseline/coordinator/holder/full audit+mapping preflight closure. No source admission is invoked. Unchanged shared files are captured as parents, never selected mount targets. Root still owns all adoption timing and live-turn freezes."
+}

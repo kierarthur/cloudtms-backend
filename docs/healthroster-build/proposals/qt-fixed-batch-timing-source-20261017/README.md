@@ -1,0 +1,30 @@
+# Fixed C batch completion/source timing diagnostic
+
+Source-only finite proposal, with four selected targets in the existing Contact/QT adapter: new `batch-timing-diagnostic.mjs`, new `hold-batch-timing.mjs`, a timing-only private branch/factory in `fixed-metadata-reader.mjs`, and its exact nested manifest successor. Nothing has been adopted, admitted, committed, pushed or run against a database by the author. No normal QT retry is proposed here.
+
+The diagnostic reuses the original actual fixed C batch: the same repeatable-read/read-only transaction, guard, native peer,12complete scopes, ledger/catalogue/full-row hashes, ordering, two complete background arrays and statement snapshot. Eight fixed psql echo markers report completion of BEGIN, guard, peer, search_path, the existing audit bag, the nine-other bag, the final catalogue/background query and ROLLBACK. Removing only those echo lines restores the complete original executed batch byte-for-byte, with exactly its two gset sends and one final query. No SQL expression, canonical hash, field/member representation or WeakMap qualifier changes. There is no arbitrary SQL, mode or provider execution parameter.
+
+The strict streaming filter bounds total wire stdout at the original64MiB and marker lines at256bytes. It delegates every original peer/base/background byte to the **unchanged** original BoundedMemoryCapture, retaining exact raw canonical members and all original decode/shape checks. Unknown/extra/duplicate/out-of-order/missing/partial output, native stderr, truncation, child loss or signal hold. Every complete line in each delivered chunk is consumed; trailing output cannot be silently discarded. Control timing is collected on receipt using the host monotonic clock plus host ISO timestamp. These are completion delivery bounds, not PostgreSQL execution durations; coalesced markers may legitimately have equal elapsed times and do not prove zero query cost.
+
+The new factory measures C-reader/source/input construction, timing meta construction, original held checks and the original pure buildInput READY-preparation step. That B input exists only in memory for timing and canonical-source hash equality. It is never saved, returned, sent or executed; there is no B dispatcher or root PREPARE protocol in this diagnostic. Maps are decoded only inside the owned process, validated by the original reader, then discarded. Public output contains only fixed progress/phase timings, closed peer/source metadata and byte/frame counts. It cannot provide a C packet, native B result, current financial success, fixture absence or restoration qualification. "No fixture" means this read-only diagnostic creates no fixture, not that it has observed arbitrary fixture absence.
+
+The new holder reuses original withSharedRehearsalTurn/serialized own A, actual source/committed-adapter/setup gates and original environment constructor. It measures the same source gate at initial/before-work/held/callback phases. Original C limits remain connect10s,statement45s,lock2s,child70s,terminate2s,close3s,stdout64MiB/stderr16KiB; work120s,cleanup60s,whole180s and owned release remain. The work timer is cleared before original shared-turn cleanup. External interruption, source drift, uncertain child/A close, BUSY/cooldown or deadline cannot become a timing capture. No broad process search, sibling cancellation, job pause, settings change, private auth path or credential output is added.
+
+The normal reader's private timing option defaults false. Its entire original bounded capture class, canonical SQL/data source, standard before/after lifecycle and original restore qualifier are retained. The complete reader has five finite source edits including a new diagnostic-only factory, with a whole raw inverse. The manifest changes one existing file row and adds exactly two rows; its complete raw inverse retains every other adapter row. Seventeen complete actual saved/index/HEAD/historical parent images are pinned, including six unchanged shared canonical/A/control/export/managed sources. `R11_OVERLAP.json` records zero selected-target intersection with231prepared R11 watched paths (56I2); unchanged watched shared inputs are identified. Root must still respect its actual live-turn/source freezes and run actual committed admission after any adoption.
+
+After independent/root review and an exact real source commit, root's finite invocation is:
+
+```text
+node D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/hold-batch-timing.mjs D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026 D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/.codex-tmp/contact-qt-batch-timing-20261017-<fresh32lowerhex> --authorised-root-holder
+```
+
+No root native-tool call follows: this exact local fixed read-only child executes only C. Root owns the real trial and any setup record. A successful result is explicitly `FIXED_BATCH_TIMINGS_CAPTURED_OWN_TURN_RELEASED_NOT_RESTORATION`, written only after normal original A unlock/close; HOLD stays HOLD. No actual invocation occurred here.
+
+Safe offline replay from the registered D workspace:
+
+```text
+node --experimental-vm-modules --test test.mjs factory.test.mjs holder.test.mjs
+node verify.mjs
+```
+
+The50controlled tests use fictional frames/native peers/owned turns/filesystem/environment capabilities, never an actual gate or provider. They exercise the original capture bytewise/Unicode/control edges, full original source-derived12scope batch/echo inverse, corruption/order/banner/HOLD/duplicate/partial/clock/byte-bound refusals, actual new factory one-shot/identity/source coupling and actual new holder BUSY/signal/source/uncertain-close/release behavior. The actual standard shared source renderers are used purely to derive source; source(),buildInput(),the actual holder,private files and database tools are not called. `prepare.py` is retained preparation provenance; do not rerun it for peer review.

@@ -1,0 +1,23 @@
+{
+  "verdict": "ACCEPT_BOUNDED_SOURCE_TIMING_DIAGNOSTIC",
+  "scopedFindings": [],
+  "authorSourceFiles": 33,
+  "authorTestsPassed": 50,
+  "independentTestsPassed": 8,
+  "actualParents": 17,
+  "targets": 4,
+  "newTargets": 2,
+  "readerRawEdits": 5,
+  "wholeReaderInverse": true,
+  "wholeManifestInverse": true,
+  "unchangedManifestRows": 50,
+  "r11SelectedOverlap": 0,
+  "originalBoundedCaptureUnchanged": true,
+  "originalCanonicalBatchExcept8EchoesUnchanged": true,
+  "noBTransport": true,
+  "native": "NOT_RUN",
+  "performanceCause": "NOT_PROVED",
+  "restorationQualification": "NOT_CLAIMED",
+  "authorManifestSha256": "ef78e6d2ee23231958af3358f61ab48bde2ea0f72630695ea262118a3558012b",
+  "forwardSha256": "c1713760679eed6b04b72fd5574b0a9903977f38b26a806a300c7b02235c850c"
+}

@@ -11,6 +11,8 @@ import {SqlstateStderrCapture,diagnosticContext,diagnosticError,preserveMetadata
 import {DiagnosticMemoryCapture,diagnosticMarker} from './metadata-progress-diagnostic.mjs';
 import {COMPONENTS,compileComponentInputs} from './component-source.mjs';
 import {compileNativeBatch,joinNativeSnapshotFrames} from './batch-source.mjs';
+import {BatchTimingCapture,compileBatchTimingInput,batchTimingProgressFor} from './batch-timing-diagnostic.mjs';
+export {batchTimingProgressFor};
 
 export const LIMITS=Object.freeze({stdoutBytes:64*1024*1024,stderrBytes:16*1024,
  connectSeconds:10,statementMilliseconds:45000,lockMilliseconds:2000,
@@ -59,16 +61,17 @@ export class BoundedMemoryCapture {
 function assertPins(root){
  for(const row of protectedFiles)check(sha(fs.readFileSync(path.join(root,row.file)))===row.sha256,'LOCAL_METADATA_REVIEWED_SOURCE_CHANGED');
 }
-async function runFixedChild({input,env,turn,phase,diagnosticMode=null,batch=false}){
+async function runFixedChild({input,env,turn,phase,diagnosticMode=null,batch=false,batchTiming=false}){
+ check(!batchTiming||(phase==='BEFORE'&&batch&&diagnosticMode===null),'LOCAL_METADATA_BATCH_TIMING_MODE_REFUSED');
  const diagnostic=diagnosticContext(phase);
  try{await turn.assertHeld('before-fixed-read-only-metadata');}catch{throw diagnosticError('LOCAL_METADATA_TURN_LOST',diagnostic);}
  check(!turn.signal.aborted,'LOCAL_METADATA_TURN_LOST');
  let child;try{child=spawn(psql,['-X','-q','-A','-t','-v','ON_ERROR_STOP=on','-v','VERBOSITY=sqlstate'],
   {windowsHide:true,env,stdio:['pipe','pipe','pipe']});diagnostic.spawnReturnedAt=new Date().toISOString();}catch{throw diagnosticError('LOCAL_METADATA_START_FAILED',diagnostic);}
  return new Promise((resolve,reject)=>{
-  const capture=diagnosticMode===null?new BoundedMemoryCapture(phase,batch):new DiagnosticMemoryCapture(diagnosticMode);let failure=null,closed=false,settled=false,termTimer,closeTimer;
+  const capture=batchTiming?new BatchTimingCapture(new BoundedMemoryCapture(phase,true)):diagnosticMode===null?new BoundedMemoryCapture(phase,batch):new DiagnosticMemoryCapture(diagnosticMode);let failure=null,closed=false,settled=false,termTimer,closeTimer;
   const clean=()=>{clearTimeout(deadline);clearTimeout(termTimer);clearTimeout(closeTimer);turn.signal.removeEventListener('abort',lost);};
-  const finishError=code=>{if(settled)return;settled=true;clean();const error=diagnosticError(code,diagnostic,capture.diagnosticSqlstate(closed));if(diagnosticMode!==null)capture.attachFailure(error,closed);reject(error);};
+  const finishError=code=>{if(settled)return;settled=true;clean();const error=diagnosticError(code,diagnostic,capture.diagnosticSqlstate(closed));if(diagnosticMode!==null||batchTiming)capture.attachFailure(error,closed);reject(error);};
   const stop=code=>{
    failure??=code;if(closed)return;
    child.kill('SIGTERM');
@@ -207,6 +210,32 @@ export async function createFixedComponentDiagnostic({root,turn,caseId}){
   }catch(error){state='FAILED';throw error;}
  };
  return Object.freeze({component:run,sourceDescriptor:Object.freeze({...built.descriptor,limits:LIMITS}),inspectSource:()=>built});
+}
+
+// Diagnostic-only lifecycle. It cannot return a C packet or restoration proof.
+export async function createFixedBatchTimingDiagnostic({root,turn,caseId}){
+ const phases=[];let state='BUILDING';
+ const timed=async(name,fn)=>{const start=performance.now(),startedAt=new Date().toISOString();let ok=false;try{const value=await fn();ok=true;return value;}finally{check(phases.length<16,'LOCAL_METADATA_TIMING_PHASE_BOUND');phases.push({phase:name,startedAt,finishedAt:new Date().toISOString(),elapsedMilliseconds:performance.now()-start,completed:ok});}};
+ const reader=await timed('C_READER_AND_INPUT_BUILD',()=>createFixedBatchMetadataReader({root,turn,caseId}));
+ const original=reader.inspectSource(),managed=await import(pathToFileURL(path.join(root,'scripts/cloudtms-managed-release-sql.mjs')).href),built=await timed('TIMING_META_BUILD',async()=>compileBatchTimingInput(original.batch,managed));
+ state='READY';return Object.freeze({
+  sourceDescriptor:Object.freeze({...built.descriptor,scope:SCOPE,limits:LIMITS}),
+  async run(){check(state==='READY','LOCAL_METADATA_TIMING_ONESHOT_REQUIRED');state='RUNNING';let result=null,bInput=null;
+   try{
+    assertPins(root);check(!turn.signal.aborted,'LOCAL_METADATA_TURN_LOST');
+    const wrapped={...turn,assertHeld:phase=>{check(['before-fixed-read-only-metadata','after-fixed-read-only-metadata'].includes(phase),'LOCAL_METADATA_TIMING_HELD_PHASE_REFUSED');return timed(phase==='before-fixed-read-only-metadata'?'HELD_BEFORE_NATIVE':'HELD_AFTER_NATIVE',()=>turn.assertHeld(phase));}};
+    const helpers=await import(pathToFileURL(path.join(root,'scripts/healthroster-rehearsal-turn.mjs')).href),env=helpers.agencyChildEnvironment('healthroster_contact_qt_fixed_metadata');env.PGCLIENTENCODING='UTF8';env.PGCONNECT_TIMEOUT=String(LIMITS.connectSeconds);env.PGOPTIONS+=' -c default_transaction_read_only=on -c statement_timeout='+LIMITS.statementMilliseconds+' -c lock_timeout='+LIMITS.lockMilliseconds;
+    result=await runFixedChild({input:built.input,env,turn:wrapped,phase:'BEFORE',batch:true,batchTiming:true});const p=result.peer,s=result.snapshot;
+    check(p.database==='cloudtms_test_clone'&&p.databaseOid===turn.identity.databaseOid&&Number.isSafeInteger(p.readerPid)&&p.readerPid>0&&p.readerPid!==turn.identity.backendPid&&p.holderPid===turn.identity.backendPid&&p.readOnly===true&&p.isolation==='repeatable read'&&p.noRoleSwitch===true,'LOCAL_METADATA_NATIVE_PEER_REFUSED');
+    check(s.physicalDatabase==='cloudtms_test_clone'&&s.identityTest===true&&s.customerKeyNull===true&&s.module==='LEGACY:1'&&s.applyingCount===0&&s.markerAbsent===true&&s.backgroundRows&&s.backgroundWriterRoutines&&Array.isArray(s.businessRelations),'LOCAL_METADATA_CANONICAL_IDENTITY_REFUSED');
+    // Original READY preparation is source-only, in memory, never saved/sent.
+    const inputOwner=await import(pathToFileURL(path.join(root,'docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/input-builder.mjs')).href);
+    bInput=await timed('ORIGINAL_PURE_BUILD_INPUT',()=>inputOwner.buildInput({root,identity:turn.identity,caseId}));check(bInput.receipt.canonicalSqlSha256===reader.sourceDescriptor.canonicalSqlSha256,'LOCAL_METADATA_CANONICAL_QUERY_EQUALITY_REQUIRED');bInput=null;
+    await timed('HELD_AFTER_PURE_INPUT',()=>turn.assertHeld('before-contact-qt-mcp-ready'));assertPins(root);state='DONE';
+    return{status:'FIXED_BATCH_TIMINGS_CAPTURED_NOT_RESTORATION',peer:p,queryProgress:result.timingProgress,phaseTimings:phases.map(x=>({...x})),source:built.descriptor,childClosed:true,transport:{instrumentedStdoutBytes:result.transport.instrumentedStdoutBytes,originalStdoutBytes:result.transport.stdoutBytes,nativeFrameCount:result.transport.nativeFrameCount,completionMarkers:result.transport.completionMarkers},noBDispatched:true,noFixture:true,completeMapsPersisted:false,restorationQualified:false};
+   }catch(error){state='FAILED';error.batchTimingPhases=phases.map(x=>({...x}));throw error;}finally{result=null;bInput=null;}
+  }
+ });
 }
 
 if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.url))throw Error('SOURCE_ONLY_ROOT_METADATA_CALLBACK_REQUIRED');
