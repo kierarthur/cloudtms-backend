@@ -1,0 +1,17 @@
+✔ synthetic full seven-field/11-scope/7aux observations yield data only, then unchanged core afterProof only after exact committed reader returns every record (16.1961ms)
+✔ unsafe response shape/status/baseline/IDs/unknown/closed browser never authors positive records (11.7305ms)
+✔ all original scopes, metadata, identities and actor/currentness main/fresh guards remain (10.5093ms)
+✔ every auxiliary reserved count/hash/phase/guard is checked in main and fresh (54.209ms)
+✔ shared monotonic observations permit nonexclusive unequal deltas but refuse resets/counter regression and stale current or historical observations (11.9335ms)
+✔ recorder source has no executor, writer, control, Git, auth, fake restoration or cap change (0.6122ms)
+✔ four separate original stages reuse exact source scopes/prefixes/IDs and return no financial or auxiliary success (7.4177ms)
+✔ other-stage response refusal, malformed/extra projections, nonzero drain and wrong native IDs or leaked scope never qualify (28.6999ms)
+✔ original180-second historical before remains distinct from30-second current after; real7 fields and source/caps never relax (7.2722ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 9
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 267.8875

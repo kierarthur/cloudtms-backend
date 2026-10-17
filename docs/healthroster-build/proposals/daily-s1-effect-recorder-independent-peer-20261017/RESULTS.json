@@ -1,0 +1,40 @@
+{
+  "version": "DAILY_S1_ACTUAL_EFFECT_RECORDER_INDEPENDENT_SOURCE_PEER_V1",
+  "verdict": "ACCEPT_PURE_DATA_SOURCE_ONLY",
+  "sourceManifestSha256": "4995dd2ef2b268cb242c610f4c24a8e456fe42274876b2ae7ff505f0ad914346",
+  "recorderSha256": "a247aca92d5be78878766b12793c7399089574446633a6fd0b6dcc656a1f46a1",
+  "frozenFiles": 7,
+  "sourcePins": 7,
+  "checks": {
+    "authorUnamendedTests": 9,
+    "independentTests": 7,
+    "syntax": "PASS",
+    "frozenAndCurrentSavedIndexHeadHistoricalSource": "PASS",
+    "actualOriginalCoreAfterProof": "RETAINED",
+    "hardcoded8d2RuntimeHeadGate": false,
+    "losslessInt63CounterVectors": "PASS",
+    "allFourReturnedRecordByteRefusals": "PASS"
+  },
+  "findings": [],
+  "callerIntegration": {
+    "status": "NOT_PROVIDED_NOT_QUALIFIED",
+    "actualRootReaderAdapterAuthored": false,
+    "required": "Original root bookkeeper run-local physical D + saved/index/HEAD committed reader capability, or a separately reviewed exact equivalent; actual admitted new K4 source must be bound by root.",
+    "reason": "typeof readPublic checks only the declared trusted callback boundary. Synthetic maps do not prove commits. Author explicitly confirms no actual caller adapter was authored.",
+    "validateCommittedAloneProvesGit": false,
+    "actualRecordsPrepared": false
+  },
+  "sourceBinding": {
+    "sourceParameter": "Exact plan/admission/prior-bound actual admitted successor; no fixed author HEAD asserted.",
+    "historicalSevenPins": "Current seven files match raw saved/index/HEAD/history at peer time. R10 changes the whole contract.mjs raw path literal; root must bind its actual reviewed R10 contract postimage/finite path inverse, while the other six module bodies remain required. Do not enforce old8d2 as a future HEAD or treat historical whole-contract SHA as a new postimage.",
+    "rawAuthStateAccess": false
+  },
+  "limits": {
+    "actualAuthNativeApiBrowserIpc": false,
+    "actualSourcePreflight": false,
+    "privateBindingOrJournalOrStateContentsOrPathLookup": false,
+    "rootOrAuthorWorktreeEdits": false,
+    "reportCommitOrRuntimeChange": false,
+    "financialOrBankGlobalSuccessClaimed": false
+  }
+}

@@ -1,0 +1,50 @@
+{
+  "version": "S23_AUXILIARY_OBSERVATION_GUARD_SOURCE_MANIFEST_V1",
+  "files": [
+    {
+      "file": "EFFECT_GUIDANCE.md",
+      "bytes": 4927,
+      "sha256": "65ffd73934a70577736814b92186b4f84968bac8cd7e76588c3792858fff3c54"
+    },
+    {
+      "file": "EFFECT_SOURCE_PINS.json",
+      "bytes": 2361,
+      "sha256": "11fe9eb98fa5bbe3765b8e97d30472e41823a30f0342060d96beb14f64004e98"
+    },
+    {
+      "file": "FULL_PARENT_FORWARD.json",
+      "bytes": 5046,
+      "sha256": "7caa1c35e2ee1bb899103d42eae1fa38bf120c597206ce96a6df4e5950518f93"
+    },
+    {
+      "file": "README.md",
+      "bytes": 3139,
+      "sha256": "234afc5e69472120221c7223736765755eae8761d2f153d2a29177cff4e0c1eb"
+    },
+    {
+      "file": "RESULTS.json",
+      "bytes": 592,
+      "sha256": "e19510d51f71360c40fdf72fc3adac9ea698d5ed10a4408e8382e812e5685d7b"
+    },
+    {
+      "file": "s23-observation.mjs",
+      "bytes": 3099,
+      "sha256": "272c368536518ccfb1009112cd171a7054e2ea1e1435e9bbc9336fa40a9df951"
+    },
+    {
+      "file": "SOURCE_PINS.json",
+      "bytes": 2321,
+      "sha256": "3a0626cacf2023387c1bd5bff84512e5042a757dce3b398b016d5204b888e2e4"
+    },
+    {
+      "file": "test.mjs",
+      "bytes": 8282,
+      "sha256": "5f51fa1f2841fc13743977a52ded30b575d87f000aa686ad35e8e6c3bae860d5"
+    },
+    {
+      "file": "verify.mjs",
+      "bytes": 1817,
+      "sha256": "3939c7f8948f4e93caca250b586e6aa349194201ff568af9153e8116010d353d"
+    }
+  ]
+}

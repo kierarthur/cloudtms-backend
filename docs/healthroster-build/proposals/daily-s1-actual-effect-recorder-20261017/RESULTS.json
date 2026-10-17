@@ -1,0 +1,13 @@
+{
+  "version": "S1_RECORDER_SOURCE_ONLY_OFFLINE_RESULTS_V1",
+  "testedAt": "2026-10-17T14:41:24.780Z",
+  "tests": 9,
+  "failures": 0,
+  "grammar": "PASS_NODE_CHECK",
+  "originalSourcePins": 7,
+  "originalSourceChanged": false,
+  "actualResultsConsumed": false,
+  "actualPositivePublicDossiersWritten": false,
+  "authNativeApiControlSqlGitMutations": 0,
+  "qualification": "SYNTHETIC_BOUNDARY_SOURCE_ONLY"
+}

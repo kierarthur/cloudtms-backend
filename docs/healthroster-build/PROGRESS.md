@@ -1,5 +1,14 @@
 # HealthRoster v2 TEST build progress
 
+## Current continuation — 17 October 2026, 15:00 UTC
+
+Install1 remains COMPLETE/features OFF. Install2 remains NOT_INSTALLED; genuine staged fixture qualification, remaining native/API/financial/security checks, clean PostgreSQL17 contract seal, exact full rehearsal/protected release, activation/acceptance, TestFlight/phone and final critics remain outstanding. No owner answer is pending.
+
+The actual four-commit source-binding forward completed and passed the complete original current-source guards at Report62226fa587bf5ad977043d6abd9d103002212b65; its exact commits and safe actual receipt are in DAILY_LATER_REGISTRY_FOUR_ACTUAL_SOURCE_MOUNTS_20261017.json. This binds the reviewed91b Later int63 registry change without weakening the original registry qualifiers, runtime image checks or bookkeeper history. All four commits are normally pushed with fresh remote equality. Original R7 S0 PASS and later real R9 ME401 remain immutable. No new auth, fixture business call or TEST installation accompanied this source work.
+
+The pure S1 effect recorder and independent source peer are preserved, and the bounded S2/S3 auxiliary envelope guard passed49 root-replayed tests plus its full five-edit parent inverse/verifier. Actual S1 caller committed-reader integration is still under review. Finish this evidence preparation before fresh authentication and a new genuine S0; do not relabel the old completed prefix. A bounded read-only QT EXPLAIN/settings diagnostic is being prepared to investigate the repeated audit aggregate timeout without executing another full scan. Normal background jobs remain on. Overall completion time remains dependent on real native results and current published Banking contributions; the prior per-complete-rehearsal/release estimate remains unchanged.
+
+
 ## V6 resumed implementation — 16 October 2026
 
 The owner delivered the final self-contained V6 pack and resumed work as kier@arthur-rai.co.uk. All3076 manifest-listed files verified; matching final release contentafaf162e59b2e7901ef0dbc3f484ce51c741f0971557f80fdc877bb8b9ecaa88. Exact434 guarded existing-record amendments are adopted at pushed4bbfb82ed65c29e848d86b93693606b1e03f97b9; read-only repetition reports0changes/434alreadyadopted. Original IDs/history and8target boundaries preserved. CURRENT_CONTEXT.md and ADOPTION_RECEIPT.json in v6-owner-delivery-20261016 establish current release authority over retained preparation labels. Health sole integration and exact cross-parent contributions are active; no Banking-owned bodies/dialog/HTTP duplicates are commissioned. Future reviews use Sol6.1 extra-high only.

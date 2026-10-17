@@ -1,0 +1,21 @@
+{
+  "version": "S23_AUXILIARY_GUARD_SOURCE_RESULTS_V1",
+  "tests": 49,
+  "pass": 49,
+  "fail": 0,
+  "syntheticStageModePhasePaths": 12,
+  "literalEdits": 5,
+  "completeS1ParentInverse": true,
+  "originalReadEnvelopeUnchanged": true,
+  "acceptedObserverValidateFrameUnchanged": true,
+  "sevenFieldIdentityPreserved": true,
+  "actorFromGenuineOriginalReceipt": true,
+  "scopeOrCapsChanged": false,
+  "executor": false,
+  "effectQualified": false,
+  "restorationClaimed": false,
+  "native": "NOT_RUN",
+  "authBrowserIPC": "NOT_RUN",
+  "privateTargetAccess": "NONE",
+  "otherWorktreeWrites": 0
+}

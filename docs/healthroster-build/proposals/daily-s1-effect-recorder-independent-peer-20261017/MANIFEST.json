@@ -1,0 +1,65 @@
+{
+  "version": "DAILY_S1_RECORDER_INDEPENDENT_SOURCE_PEER_MANIFEST_V1",
+  "files": [
+    {
+      "file": "FIXTURE_DERIVATION.json",
+      "bytes": 307,
+      "sha256": "579326e6577b0ce4af2d0239692858c3bf02457e150d49057a5582fda67fe09a"
+    },
+    {
+      "file": "frozen/MANIFEST.json",
+      "bytes": 1020,
+      "sha256": "4995dd2ef2b268cb242c610f4c24a8e456fe42274876b2ae7ff505f0ad914346"
+    },
+    {
+      "file": "frozen/README.md",
+      "bytes": 5778,
+      "sha256": "abe4f5081c8af781734f2930b9911ebd53701a81f27335cf679d1ce7e1a1928a"
+    },
+    {
+      "file": "frozen/recorder.mjs",
+      "bytes": 14975,
+      "sha256": "a247aca92d5be78878766b12793c7399089574446633a6fd0b6dcc656a1f46a1"
+    },
+    {
+      "file": "frozen/RESULTS.json",
+      "bytes": 407,
+      "sha256": "c90a3b0cb1c5611c3181d0a669683aab5dede566feaac07cfbea3e1d64546da2"
+    },
+    {
+      "file": "frozen/SOURCE_PINS.json",
+      "bytes": 3483,
+      "sha256": "857d42074136bdd2149a95286c769d76bbd367662f46daeb0bd186410b94f788"
+    },
+    {
+      "file": "frozen/synthetic-fixtures.mjs",
+      "bytes": 16344,
+      "sha256": "810282d6050c40886bd73ec6a7523bc37f3177bbacd525297cd8d4931a5cae18"
+    },
+    {
+      "file": "frozen/TEST_RESULTS.txt",
+      "bytes": 1273,
+      "sha256": "40bed722742255c0bae616d19777af4efc7b5fd93de9f6434a6afce5888e40a3"
+    },
+    {
+      "file": "frozen/test.mjs",
+      "bytes": 16317,
+      "sha256": "a5dac3d483df8041fece9db020bd955c8520dbba0309da4781b5ee1b3dd34d8b"
+    },
+    {
+      "file": "peer.test.mjs",
+      "bytes": 3226,
+      "sha256": "e1b26e25460afbee1d46e660261d519cb14904393b70b4289474cf57c2c3dc4e"
+    },
+    {
+      "file": "RESULTS.json",
+      "bytes": 2154,
+      "sha256": "57da087d15248f0066426f74ad0bc2e522c7aafff982c28c9414cf7ec40409f5"
+    },
+    {
+      "file": "REVIEW.md",
+      "bytes": 1114,
+      "sha256": "f2252f834c3da307be809603e174444c7eee63505eb5bd07c0939552623be38e"
+    }
+  ]
+}
