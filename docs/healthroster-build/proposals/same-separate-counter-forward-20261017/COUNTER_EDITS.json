@@ -1,0 +1,374 @@
+{
+  "base": "9c791fa971c97a198c09c4e3579c01b589486c14",
+  "rootParent": "ef3d20f4513a6f9fd1aa5e4cf6a69d258f6cd87c",
+  "files": [
+    {
+      "target": "broker/src/weekly-source/correct-final-source-orchestrator.mjs",
+      "input": {
+        "commit": "9c791fa971c97a198c09c4e3579c01b589486c14",
+        "path": "docs/healthroster-build/proposals/same-separate-health-current-successor-20261017/payload/broker/src/weekly-source/correct-final-source-orchestrator.mjs",
+        "sha256": "905e51fa2c36587650b6afea2246d6cd5039abda075531a5673e7acb9585a8a5",
+        "definitionOnly": false
+      },
+      "outputSha256": "e7d251bb5a93cdab7f50c76d8cccf87635d0a2a39565459e2723a7bd7bfe2672",
+      "bytes": 47431,
+      "hunks": [
+        {
+          "before": "import{decodePaidMatchQuestion}from'./same-separate-command.mjs';",
+          "after": "import{decodePaidMatchQuestion,positivePaidCounter}from'./same-separate-command.mjs';"
+        },
+        {
+          "before": "function jsonClone(value, code, label) {",
+          "after": "// The new paid context uses canonical decimal strings. Legacy native numeric\n// receipts are accepted only while exactly representable; no unsafe Number is\n// converted into an apparently exact bigint token.\nfunction counterToken(value,code,label,status=409){\n  if(typeof value==='number'){if(!Number.isSafeInteger(value)||value<1)fail(code,`${label} is invalid.`,status);return String(value);}\n  if(!positivePaidCounter(value))fail(code,`${label} is invalid.`,status);return value;\n}\nfunction counterValue(value,code,label,status=409){const token=counterToken(value,code,label,status);return typeof value==='number'?value:token;}\nfunction counterEqual(a,b){return counterToken(a,'WEEKLY_SOURCE_CORRECTION_VERSION_INVALID','Correction version',502)===counterToken(b,'WEEKLY_SOURCE_CORRECTION_VERSION_INVALID','Correction version',502);}\nfunction counterOffsetEqual(actual,expected,offset){const a=counterToken(actual,'WEEKLY_SOURCE_CORRECTION_VERSION_INVALID','Correction version',502),e=counterToken(expected,'WEEKLY_SOURCE_CORRECTION_VERSION_INVALID','Correction version',502),next=BigInt(e)+BigInt(offset);return next<=9223372036854775807n&&BigInt(a)===next;}\n\nfunction jsonClone(value, code, label) {"
+        },
+        {
+          "before": "integer(\n      context.expected_authority_scope_version,",
+          "after": "counterValue(\n      context.expected_authority_scope_version,"
+        },
+        {
+          "before": "integer(\n      context.expected_session_version,",
+          "after": "counterValue(\n      context.expected_session_version,"
+        },
+        {
+          "before": "integer(\n      context.review_expected_session_version,",
+          "after": "counterValue(\n      context.review_expected_session_version,"
+        },
+        {
+          "before": "integer(\n      opened.version,",
+          "after": "counterValue(\n      opened.version,"
+        },
+        {
+          "before": "integer(\n      staged.expected_authority_scope_version,",
+          "after": "counterValue(\n      staged.expected_authority_scope_version,"
+        },
+        {
+          "before": "integer(\n      staged.version,",
+          "after": "counterValue(\n      staged.version,"
+        },
+        {
+          "before": "integer(\n      prepared.version,",
+          "after": "counterValue(\n      prepared.version,"
+        },
+        {
+          "before": "|| published.authority_scope_version !== request.expected_authority_scope_version)",
+          "after": "|| !counterEqual(published.authority_scope_version,request.expected_authority_scope_version))"
+        },
+        {
+          "before": "expectedAuthorityScopeVersion: integer(published.authority_scope_version,",
+          "after": "expectedAuthorityScopeVersion: counterToken(published.authority_scope_version,"
+        },
+        {
+          "before": "const version=integer(published.ready_session_version,",
+          "after": "const version=counterToken(published.ready_session_version,"
+        },
+        {
+          "before": "const reviewed=validateReviewed(await rpc(dependencies,'weekly_source_correct_final_review_atomic_v1',",
+          "after": "const reviewed=validateReviewed(await rpc({...dependencies,dataRpc:dependencies.dataRpc??dependencies.rpc},'weekly_source_correct_final_review_atomic_v1',"
+        },
+        {
+          "before": "const fields = ['schema_version','correction_session_id','source_cycle_id',\n    'expected_current_final_revision_id','expected_final_manifest_hash'];",
+          "after": "const fields = ['schema_version','correction_session_id','source_cycle_id',\n    'expected_current_final_revision_id','expected_final_manifest_hash','authority_scope_kind','report_scope_id'];"
+        },
+        {
+          "before": "    || begun.purpose !== 'FINAL_SOURCE_CORRECTION'",
+          "after": "    || !['CYCLE','NHSP_REPORT_SCOPE'].includes(frame.authority_scope_kind)\n    || (frame.authority_scope_kind==='CYCLE'?frame.report_scope_id!==null:typeof frame.report_scope_id!=='string'||!UUID_PATTERN.test(frame.report_scope_id))\n    || !sameJson(published.correction_review_identity,frame)\n    || begun.purpose !== 'FINAL_SOURCE_CORRECTION'"
+        },
+        {
+          "before": "    scopeKind: 'CYCLE', reportScopeId: null,",
+          "after": "    scopeKind: frame.authority_scope_kind, reportScopeId: frame.report_scope_id,"
+        },
+        {
+          "before": "const version = integer(\n    reviewed.version,",
+          "after": "const version = (typeof expectedRequestVersion==='string'?counterToken:counterValue)(\n    reviewed.version,"
+        },
+        {
+          "before": "if (version !== expectedRequestVersion + 1) {",
+          "after": "if (!counterOffsetEqual(version,expectedRequestVersion,1)) {"
+        },
+        {
+          "before": "|| rebuilt.expected_authority_scope_version !== priorIdentity.expectedAuthorityScopeVersion",
+          "after": "|| !counterEqual(rebuilt.expected_authority_scope_version,priorIdentity.expectedAuthorityScopeVersion)"
+        },
+        {
+          "before": "if (reviewed.version !== context.expectedSessionVersion",
+          "after": "if (!counterEqual(reviewed.version,context.expectedSessionVersion)"
+        },
+        {
+          "before": "if (prepared.version !== context.expectedSessionVersion + 2",
+          "after": "if (!counterOffsetEqual(prepared.version,context.expectedSessionVersion,2)"
+        }
+      ],
+      "completeRawReverse": true
+    },
+    {
+      "target": "broker/src/weekly-source/upload-publication-owner.mjs",
+      "input": {
+        "commit": "9c791fa971c97a198c09c4e3579c01b589486c14",
+        "path": "docs/healthroster-build/proposals/same-separate-health-current-successor-20261017/payload/broker/src/weekly-source/upload-publication-owner.mjs",
+        "sha256": "8fdbb7689053a0377350fbcdef93392443eb03fed0b109288d121b431e88531c",
+        "definitionOnly": false
+      },
+      "outputSha256": "6a086ab44449c9173c0b62e9c9e3a23bd63bf8bbd0bd39bf433e56cdf9bd5e33",
+      "bytes": 58068,
+      "hunks": [
+        {
+          "before": "function requiredPositiveInteger(value, label) {",
+          "after": "function requiredCorrectionCounter(value,label){\n  if(typeof value==='number'){if(!Number.isSafeInteger(value)||value<1)fail('WEEKLY_SOURCE_CORRECTION_VERSION_INVALID',`${label} is invalid.`,502);return value;}\n  if(typeof value!=='string'||!/^([1-9][0-9]*)$/.test(value)||value.length>19||(value.length===19&&value>'9223372036854775807'))fail('WEEKLY_SOURCE_CORRECTION_VERSION_INVALID',`${label} is invalid.`,502);return value;\n}\n\nfunction requiredPositiveInteger(value, label) {"
+        },
+        {
+          "before": "      const correctionVersion = Number(publishedContext.correction_session_version);\n      if (!Number.isSafeInteger(correctionVersion) || correctionVersion < 1) {\n        fail('WEEKLY_SOURCE_CORRECTION_VERSION_INVALID', 'The replacement source version is invalid.', 502);\n      }",
+          "after": "      const correctionVersion = requiredCorrectionCounter(publishedContext.correction_session_version,'Replacement source version');"
+        },
+        {
+          "before": "      const expectedSessionVersion = requiredPositiveInteger(\n        input.expected_session_version,",
+          "after": "      const expectedSessionVersion = requiredCorrectionCounter(\n        input.expected_session_version,",
+          "occurrences": 2
+        },
+        {
+          "before": "      const expectedAuthorityScopeVersion = requiredPositiveInteger(\n        input.expected_authority_scope_version,",
+          "after": "      const expectedAuthorityScopeVersion = requiredCorrectionCounter(\n        input.expected_authority_scope_version,"
+        },
+        {
+          "before": "      const readySessionVersion = requiredPositiveInteger(\n        published.ready_session_version,",
+          "after": "      const readySessionVersion = requiredCorrectionCounter(\n        publishedContext.correction_session_version,"
+        },
+        {
+          "before": "        return correction ? { ...result,\n          correction_review: await reviewWeeklyCorrectFinalPaidMatchRecheck(dependencies,request,begun,result),\n        } : result;",
+          "after": "        if(!correction)return result;\n        // The same immutable native request re-reads its genuine typed ready\n        // receipt. Ordinary publish receipts retain their existing numeric ABI.\n        const ready=await rpc(dependencies,'weekly_source_office_recheck_begin_v1',request);\n        return{...result,correction_review:await reviewWeeklyCorrectFinalPaidMatchRecheck(dependencies,request,begun,ready)};"
+        },
+        {
+          "before": "          || context.source_cycle_id !== begun.correction_review_identity?.source_cycle_id))",
+          "after": "          || context.source_cycle_id !== begun.correction_review_identity?.source_cycle_id\n          || context.authority_scope_kind !== begun.correction_review_identity?.authority_scope_kind\n          || context.report_scope_id !== begun.correction_review_identity?.report_scope_id))"
+        }
+      ],
+      "completeRawReverse": true
+    },
+    {
+      "target": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/006_public_weekly_source_office_recheck_begin_v1.sqlinc",
+      "input": {
+        "commit": "9c791fa971c97a198c09c4e3579c01b589486c14",
+        "path": "docs/healthroster-build/proposals/same-separate-health-current-successor-20261017/payload/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/006_public_weekly_source_office_recheck_begin_v1.sqlinc",
+        "sha256": "6a7a3a25b2cc3bb8f58fc30656da51f570a92d85fe37ddd76d5f0730d03e64de",
+        "definitionOnly": false
+      },
+      "outputSha256": "2aa0ea9059b7226134f0778f37fa5dc90ace78ce5e80af6e6e08a1aafdc5ccbd",
+      "bytes": 21833,
+      "hunks": [
+        {
+          "before": "'authority_scope_version',v_version,'idempotent',true)",
+          "after": "'authority_scope_version',case when p_request ? 'pay_effect' then to_jsonb(v_version::text) else to_jsonb(v_version) end,'idempotent',true)"
+        },
+        {
+          "before": "'ready_session_version',v_publication.ready_session_version,",
+          "after": "'ready_session_version',case when p_request ? 'pay_effect' then to_jsonb(v_publication.ready_session_version::text) else to_jsonb(v_publication.ready_session_version) end,"
+        },
+        {
+          "before": "'correction_session_id',v_correction.id,'source_cycle_id',v_cycle.id,",
+          "after": "'correction_session_id',v_correction.id,'source_cycle_id',v_cycle.id,\n          'authority_scope_kind',v_correction.authority_scope_kind,'report_scope_id',v_correction.report_scope_id,",
+          "occurrences": 2
+        },
+        {
+          "before": "    select * into strict v_publication from public.weekly_source_projection_publications where id=v_prior.publication_id;",
+          "after": "    select * into strict v_publication from public.weekly_source_projection_publications where id=v_prior.publication_id;\n    if v_correct and (v_publication.authority_scope_kind is distinct from v_correction.authority_scope_kind\n      or v_publication.report_scope_id is distinct from v_correction.report_scope_id) then\n      raise exception 'WEEKLY_SOURCE_PAID_MATCH_CORRECTION_SCOPE_STALE' using errcode='40001';end if;"
+        }
+      ],
+      "completeRawReverse": true
+    },
+    {
+      "target": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/009_public_weekly_source_upload_context_v1.sqlinc",
+      "input": {
+        "commit": "9c791fa971c97a198c09c4e3579c01b589486c14",
+        "path": "docs/healthroster-build/proposals/same-separate-health-current-successor-20261017/payload/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/009_public_weekly_source_upload_context_v1.sqlinc",
+        "sha256": "b350c1af79d51d65b75fe1f19a2cc443879874286cd6c3ed17b948662a08b8c2",
+        "definitionOnly": false
+      },
+      "outputSha256": "bca137c5d0f189082d0ea609f7410c7eb393b7db0106395b8898e708a739d633",
+      "bytes": 32181,
+      "hunks": [
+        {
+          "before": "      select correction.version\n      from public.weekly_final_source_correction_sessions correction",
+          "after": "      select correction.version::text\n      from public.weekly_final_source_correction_sessions correction"
+        }
+      ],
+      "completeRawReverse": true
+    },
+    {
+      "target": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/011_private_weekly_source_finalise_engine_v1.sqlinc",
+      "input": {
+        "commit": "9c791fa971c97a198c09c4e3579c01b589486c14",
+        "path": "docs/healthroster-build/proposals/same-separate-health-current-successor-20261017/payload/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/011_private_weekly_source_finalise_engine_v1.sqlinc",
+        "sha256": "29d612601c8e9a60d0f1edb46c37126d2a57b9fdbaf04766ab30ef40835bbd52",
+        "definitionOnly": false
+      },
+      "outputSha256": "56333dc5ea10704bd6532b96845ae2f9931a6769ed96e02385e1118e29acfc28",
+      "bytes": 116624,
+      "hunks": [
+        {
+          "before": "       where source_row.upload_id=v_upload.id and resolution.generation=v_generation\n       group by resolution.work_event_id having pg_catalog.count(*)<>1\n     )) then",
+          "after": "       where source_row.upload_id=v_upload.id and resolution.generation=v_generation\n         and resolution.pay_effect='NORMAL'\n       group by resolution.work_event_id having pg_catalog.count(*)<>1\n     ))\n     or exists(\n       select 1 from public.weekly_source_row_resolutions companion\n       join public.weekly_source_upload_rows source_row on source_row.id=companion.upload_row_id\n       where source_row.upload_id=v_upload.id and companion.generation=v_generation\n         and companion.pay_effect='NONE' and not exists(\n           select 1 from private.weekly_source_office_row_choices choice\n           where choice.id=companion.paid_overlap_choice_id and choice.upload_row_id=source_row.id\n             and choice.pay_effect='NONE' and not choice.separate_shift\n             and choice.work_event_id=companion.work_event_id\n             and choice.paid_overlap_target_work_event_id=companion.work_event_id\n             and choice.candidate_id=companion.candidate_id and choice.client_id=companion.client_id\n             and choice.contract_id=companion.contract_id\n         )\n     ) then"
+        }
+      ],
+      "completeRawReverse": true
+    },
+    {
+      "target": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/018_public_weekly_source_invoice_admit_atomic_v1.sqlinc",
+      "input": {
+        "commit": "9c791fa971c97a198c09c4e3579c01b589486c14",
+        "path": "docs/healthroster-build/proposals/same-separate-health-current-successor-20261017/payload/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/018_public_weekly_source_invoice_admit_atomic_v1.sqlinc",
+        "sha256": "3eacf88d26ccac85435b6b9331748d9537f75dba274a144de59198fa8859eec5",
+        "definitionOnly": false
+      },
+      "outputSha256": "cd08f0a936d330a5491c9a51b03ee9f2c390bfb497f70357bd85ea09ae3c25fa",
+      "bytes": 57077,
+      "hunks": [
+        {
+          "before": "movement.source_line_kind not in ('SOURCE_INVOICE_CORRECTION','INVOICE_VAT_ROUNDING')",
+          "after": "not (movement.source_line_kind in ('SOURCE_INVOICE_CORRECTION','INVOICE_VAT_ROUNDING')\n             or case when movement.pay_effect='NONE' and movement.invoice_only_snapshot_line_id is not null\n                 and movement.source_line_kind='SOURCE_REBILL_LINE' then\n               private.weekly_source_paid_match_invoice_origin_assert_v1(movement.id)->>'schema_version'='WEEKLY_SOURCE_PAID_MATCH_INVOICE_ORIGIN_V1'\n               when movement.pay_effect='NONE' and movement.invoice_only_snapshot_line_id is not null\n                 and movement.source_line_kind='SOURCE_FIXED_EXPENSE' then\n               private.weekly_source_paid_match_expense_invoice_origin_assert_v1(movement.id)->>'schema_version'='WEEKLY_SOURCE_PAID_MATCH_FIXED_EXPENSE_ORIGIN_V1'\n               else false end)"
+        },
+        {
+          "before": "      -- Genuine Source hours are presentation evidence. Native pay rates and\n      -- total remain zero; no payable position is minted from these hours.\n      v_hours_day:=(v_snapshot.pay_vector_json#>>'{hours,day}')::numeric;\n      v_hours_night:=(v_snapshot.pay_vector_json#>>'{hours,night}')::numeric;\n      v_hours_sat:=(v_snapshot.pay_vector_json#>>'{hours,sat}')::numeric;\n      v_hours_sun:=(v_snapshot.pay_vector_json#>>'{hours,sun}')::numeric;\n      v_hours_bh:=(v_snapshot.pay_vector_json#>>'{hours,bh}')::numeric;\n",
+          "after": "      -- NONE hours are projected after the native aggregate below.\n"
+        },
+        {
+          "before": "      if v_movement.pay_effect='NONE' then\n        select e.hours_day,e.hours_night,e.hours_sat,e.hours_sun,e.hours_bh\n          into strict v_hours_day,v_hours_night,v_hours_sat,v_hours_sun,v_hours_bh\n          from public.weekly_source_row_economic_snapshots e\n          where e.row_resolution_id=(v_movement.source_facts_json->>'bound_row_resolution_id')::uuid;\n      end if;\n",
+          "after": "      -- NHSP NONE hours are projected after the native aggregate below.\n"
+        },
+        {
+          "before": "    from public.weekly_source_billing_movements movement where movement.id=any(v_ids);\n    select receipt.id,m.id into v_release_id,v_release_member",
+          "after": "    from public.weekly_source_billing_movements movement where movement.id=any(v_ids);\n    -- The aggregate above deliberately retains the native zero pay vector.\n    -- Only the already validated exact NONE hours origin supplies presentation\n    -- hours afterwards; fixed expenses continue through the zero-hours arm.\n    if v_movement.pay_effect='NONE' and not v_is_expense then\n      if v_movement.invoice_only_snapshot_line_id is not null then\n        v_hours_day:=(v_snapshot.pay_vector_json#>>'{hours,day}')::numeric;\n        v_hours_night:=(v_snapshot.pay_vector_json#>>'{hours,night}')::numeric;\n        v_hours_sat:=(v_snapshot.pay_vector_json#>>'{hours,sat}')::numeric;\n        v_hours_sun:=(v_snapshot.pay_vector_json#>>'{hours,sun}')::numeric;\n        v_hours_bh:=(v_snapshot.pay_vector_json#>>'{hours,bh}')::numeric;\n      elsif v_movement.source_profile_kind='NHSP_TRUST_BACKING_REPORT' then\n        select e.hours_day,e.hours_night,e.hours_sat,e.hours_sun,e.hours_bh\n          into strict v_hours_day,v_hours_night,v_hours_sat,v_hours_sun,v_hours_bh\n          from public.weekly_source_row_economic_snapshots e\n          where e.row_resolution_id=(v_movement.source_facts_json->>'bound_row_resolution_id')::uuid;\n      else raise exception 'WEEKLY_SOURCE_PAID_MATCH_INVOICE_PRESENTATION_UNBOUND' using errcode='55000';end if;\n    end if;\n    select receipt.id,m.id into v_release_id,v_release_member"
+        }
+      ],
+      "completeRawReverse": true
+    },
+    {
+      "target": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/019_private_weekly_source_shift_on_self_bill_v1.sqlinc",
+      "input": {
+        "commit": "9c791fa971c97a198c09c4e3579c01b589486c14",
+        "path": "docs/healthroster-build/proposals/same-separate-health-current-successor-20261017/payload/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/019_private_weekly_source_shift_on_self_bill_v1.sqlinc",
+        "sha256": "ee2ec48bd7a7b7988701f614124166c2c28a906c30ee7921ffcc5b71e568e1aa",
+        "definitionOnly": false
+      },
+      "outputSha256": "26e2186e4b2026f6aa2576ec3145e56ff2823214c8bbbf7f80a98545e3ad58e2",
+      "bytes": 12646,
+      "hunks": [
+        {
+          "before": "and item#>>'{native_payment_facts,paid_evidence_state}'='SETTLED_ORIGINAL'",
+          "after": "and item#>>'{native_payment_facts,paid_evidence_state}' in ('SETTLED_ORIGINAL','SETTLED_LEGACY_SOURCE_COMPONENT')"
+        }
+      ],
+      "completeRawReverse": true
+    },
+    {
+      "target": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/026_private_weekly_source_paid_match_question_v1.sqlinc",
+      "input": {
+        "commit": "9c791fa971c97a198c09c4e3579c01b589486c14",
+        "path": "docs/healthroster-build/proposals/same-separate-health-current-successor-20261017/payload/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/026_private_weekly_source_paid_match_question_v1.sqlinc",
+        "sha256": "f4c4e4bd4585951b38d0e0b720b181af5382ad40f07e166fc69203887395096f",
+        "definitionOnly": false
+      },
+      "outputSha256": "9fc6cc1c6b34fe5f240766cf3987f83a25a1e8c67a5609bd8b13a61b1559caf2",
+      "bytes": 10449,
+      "hunks": [
+        {
+          "before": "            and scope.current_projection_publication_id=v_publication.id and profile.profile_code='NHSP_FINAL_BACKING_V1'",
+          "after": "            and profile.profile_code='NHSP_FINAL_BACKING_V1'\n            and ((v_upload.purpose='ORDINARY' and scope.current_projection_publication_id=v_publication.id)\n              or (v_upload.purpose='FINAL_SOURCE_CORRECTION' and exists(\n                select 1 from public.weekly_final_source_correction_sessions correction\n                where correction.id=v_upload.correction_session_id and correction.actor_user_id=p_actor_user_id\n                  and correction.state in ('READY','REVIEWED')\n                  and correction.authority_scope_kind='NHSP_REPORT_SCOPE' and correction.report_scope_id=scope.id\n                  and correction.source_cycle_id=v_cycle.id\n                  and correction.replacement_correction_upload_id=v_upload.id\n                  and correction.replacement_projection_publication_id=v_publication.id\n                  and scope.current_final_revision_id=correction.expected_current_final_revision_id\n                  and scope.current_projection_publication_id is not null\n                  and scope.current_projection_publication_id<>v_publication.id)))"
+        }
+      ],
+      "completeRawReverse": true
+    },
+    {
+      "target": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/034_public_weekly_source_correct_final_prepare_atomic_v1.sqlinc",
+      "input": {
+        "commit": "9c791fa971c97a198c09c4e3579c01b589486c14",
+        "path": "docs/healthroster-build/proposals/same-separate-health-current-successor-20261017/payload/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/034_public_weekly_source_correct_final_prepare_atomic_v1.sqlinc",
+        "sha256": "c7823e594e609cc76e8cff59c6f508072050d667898538ebd7d5e506ad80ec41",
+        "definitionOnly": false
+      },
+      "outputSha256": "2caeef10311fe59dd6376ef4566c3d9fa6ba2007e565f48a1f66c3192fcc2f2f",
+      "bytes": 17315,
+      "hunks": [
+        {
+          "before": "'version',v_prepared_session_version,",
+          "after": "'version',case when jsonb_typeof(p_request->'expected_session_version')='string' then to_jsonb(v_prepared_session_version::text) else to_jsonb(v_prepared_session_version) end,"
+        },
+        {
+          "before": "  begin\n    v_actor:=",
+          "after": "  if exists(select 1 from unnest(array['expected_session_version','expected_authority_scope_version']) field\n    where jsonb_typeof(p_request->field)='string' and (p_request->>field !~ '^[1-9][0-9]*$'\n      or length(p_request->>field)>19 or (length(p_request->>field)=19 and p_request->>field>'9223372036854775807'))) then\n    raise exception 'WEEKLY_SOURCE_CORRECTION_COUNTER_INVALID' using errcode='22023';end if;\n  begin\n    v_actor:="
+        }
+      ],
+      "completeRawReverse": true
+    },
+    {
+      "target": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/035_public_weekly_source_correct_final_apply_atomic_v1.sqlinc",
+      "input": {
+        "commit": "9c791fa971c97a198c09c4e3579c01b589486c14",
+        "path": "docs/healthroster-build/proposals/same-separate-health-current-successor-20261017/payload/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/035_public_weekly_source_correct_final_apply_atomic_v1.sqlinc",
+        "sha256": "49bf701bcd0f2cc8693d1a84a8e3418f0840a5b63638ef3a6f8534f4a560d251",
+        "definitionOnly": false
+      },
+      "outputSha256": "da7d8d23edff6441d4f94c3da635437506efa176d8094e3053337385a06c4223",
+      "bytes": 37443,
+      "hunks": [
+        {
+          "before": "'version',v_expected_session_version+2,",
+          "after": "'version',case when jsonb_typeof(p_request->'expected_session_version')='string' then to_jsonb((v_expected_session_version+2)::text) else to_jsonb(v_expected_session_version+2) end,"
+        },
+        {
+          "before": "  begin\n    v_actor:=",
+          "after": "  if exists(select 1 from unnest(array['expected_session_version','expected_authority_scope_version']) field\n    where jsonb_typeof(p_request->field)='string' and (p_request->>field !~ '^[1-9][0-9]*$'\n      or length(p_request->>field)>19 or (length(p_request->>field)=19 and p_request->>field>'9223372036854775807'))) then\n    raise exception 'WEEKLY_SOURCE_CORRECTION_COUNTER_INVALID' using errcode='22023';end if;\n  begin\n    v_actor:="
+        }
+      ],
+      "completeRawReverse": true
+    },
+    {
+      "target": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/039_private_weekly_source_correct_final_office_preview_v1.sqlinc",
+      "input": {
+        "commit": "9c791fa971c97a198c09c4e3579c01b589486c14",
+        "path": "docs/healthroster-build/proposals/same-separate-health-current-successor-20261017/payload/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/039_private_weekly_source_correct_final_office_preview_v1.sqlinc",
+        "sha256": "954a8288e2fed8880e7df06d427cf34646b263250fa1ff4c75d181ad991d4f71",
+        "definitionOnly": false
+      },
+      "outputSha256": "c7dcd26f34a6472d7ebafd59bf03c8078cfffad2fde1182a3bbe1bf45c5549ae",
+      "bytes": 19905,
+      "hunks": [
+        {
+          "before": "  if v_session.authority_scope_kind='CYCLE' and v_session.state in ('READY','REVIEWED')\n    and exists(select 1 from public.weekly_source_cycles cycle join public.weekly_source_groups source_group\n      on source_group.id=cycle.source_group_id and source_group.source_family='ROSTER'\n      where cycle.id=v_session.source_cycle_id) then",
+          "after": "  if v_session.state in ('READY','REVIEWED') and (\n    (v_session.authority_scope_kind='CYCLE' and exists(\n      select 1 from public.weekly_source_cycles cycle join public.weekly_source_groups source_group\n        on source_group.id=cycle.source_group_id and source_group.source_family='ROSTER'\n      where cycle.id=v_session.source_cycle_id))\n    or (v_session.authority_scope_kind='NHSP_REPORT_SCOPE' and exists(\n      select 1 from public.weekly_source_report_scopes scope\n      join public.weekly_source_cycles cycle on cycle.id=scope.source_cycle_id\n      join public.weekly_source_groups source_group on source_group.id=cycle.source_group_id\n      where scope.id=v_session.report_scope_id and scope.source_cycle_id=v_session.source_cycle_id\n        and source_group.source_family='NHSP' and scope.self_bill_report_id is null\n        and scope.current_final_revision_id=v_session.expected_current_final_revision_id\n        and v_publication.authority_scope_kind='NHSP_REPORT_SCOPE'\n        and v_publication.report_scope_id=scope.id\n        and v_publication.correction_session_id=v_session.id\n        and v_publication.state='CORRECTION_READY'))) then"
+        }
+      ],
+      "completeRawReverse": true
+    },
+    {
+      "target": "native/04_complete_current_review.sqlinc",
+      "input": {
+        "commit": "ef3d20f4513a6f9fd1aa5e4cf6a69d258f6cd87c",
+        "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10c_complete_root_report_consumer_union.sqlinc",
+        "sha256": "f62727e880288024562eed90d2f67486059301512767fd47b8d1ce4c513a1565",
+        "definitionOnly": true
+      },
+      "outputSha256": "4e5918839b4a0ab8f17ff026ea66773d1f91fa3bbf07c66d5c2c7693e41c2b85",
+      "bytes": 13723,
+      "hunks": [
+        {
+          "before": "'version',v_expected_session_version+1",
+          "after": "'version',case when jsonb_typeof(p_request->'expected_session_version')='string' then to_jsonb((v_expected_session_version+1)::text) else to_jsonb(v_expected_session_version+1) end",
+          "occurrences": 2
+        },
+        {
+          "before": "'version',v_expected_session_version",
+          "after": "'version',case when jsonb_typeof(p_request->'expected_session_version')='string' then to_jsonb((v_expected_session_version)::text) else to_jsonb(v_expected_session_version) end",
+          "occurrences": 1
+        },
+        {
+          "before": "  begin\n    v_actor:=",
+          "after": "  if exists(select 1 from unnest(array['expected_session_version','expected_authority_scope_version']) field\n    where jsonb_typeof(p_request->field)='string' and (p_request->>field !~ '^[1-9][0-9]*$'\n      or length(p_request->>field)>19 or (length(p_request->>field)=19 and p_request->>field>'9223372036854775807'))) then\n    raise exception 'WEEKLY_SOURCE_CORRECTION_COUNTER_INVALID' using errcode='22023';end if;\n  begin\n    v_actor:="
+        }
+      ],
+      "completeRawReverse": true
+    }
+  ],
+  "nativeReviewPending": false,
+  "ordinaryNumericReceiptAbiRetained": true,
+  "unsafeNumericCountersRefused": true,
+  "native": "NOT_RUN"
+}

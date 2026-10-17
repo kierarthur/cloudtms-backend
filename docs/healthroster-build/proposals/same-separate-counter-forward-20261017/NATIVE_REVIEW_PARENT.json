@@ -1,0 +1,27 @@
+{
+  "signature": "public.weekly_source_correct_final_review_atomic_v1(jsonb)",
+  "physical": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10c_complete_root_report_consumer_union.sqlinc",
+  "rootParent": "ef3d20f4513a6f9fd1aa5e4cf6a69d258f6cd87c",
+  "chain": {
+    "signature": "public.weekly_source_correct_final_review_atomic_v1(jsonb)",
+    "finalRoot": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt_v1.sql",
+    "finalPhysical": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10c_complete_root_report_consumer_union.sqlinc",
+    "allowedPhysical": [
+      "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+      "supabase/repeatable/13102026_1344_weekly_source_self_bill_report/13102026_1344_correct_final_refusals.sqlinc",
+      "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10_complete_source_readers_correction.sqlinc",
+      "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10c_complete_root_report_consumer_union.sqlinc"
+    ],
+    "predecessors": [
+      "supabase/repeatable/15092026_1534_weekly_source_correct_final_source_v1.sql",
+      "supabase/repeatable/13102026_1544_weekly_source_self_bill_report_scope_v1.sql"
+    ],
+    "finalClosures": [
+      "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt_v1.sql"
+    ],
+    "owner": "HEALTH source integration; exact HEALTH_CURRENT_OWNER_REVIEW",
+    "healthSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/FINAL_DEFINER_REGISTRY_REVIEW.json"
+  },
+  "definitionSha256": "44b85ac76af73cc19104d7a897bb827bcac1f3fe581969cd0aeb057d6a79d2ed",
+  "fullPhysicalSha256": "798fddd1dc4c243d9c8a2fd01cab0bd8a8ef6b85148a6145dba523cf7cdab920"
+}

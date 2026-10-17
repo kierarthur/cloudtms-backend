@@ -1,0 +1,19 @@
+{
+  "passed": 9,
+  "failed": 0,
+  "checks": [
+    "all84-composed-payloads-are-exact-pinned-bytes",
+    "twelve-complete-current-owner-forwards-and-reversals",
+    "ten-registry-forwards-reverse-and-all-six-Daily-chains-remain",
+    "actual-loader-has-separate-before-original-and-corrected-counts",
+    "sixty-two-final-owners-and-zero-extra-mandatory-array-delta",
+    "ten-actual-native-bodies-parse-and-native-proof-stays-unrun",
+    "forty-prior-tests-and-twenty-five-genuine-current-route-vectors-pass",
+    "new-counter-root-is-monotonic-with-no-backdated-schema-page",
+    "actual-presentation-assignment-AST-preserves-source-hours-after-aggregate"
+  ],
+  "sourceOnly": true,
+  "native": "NOT_RUN",
+  "dbConnections": 0,
+  "rootWrites": 0
+}
