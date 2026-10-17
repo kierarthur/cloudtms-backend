@@ -1,0 +1,154 @@
+{
+  "version": "S2_S3_SOURCE_EFFECT_SELECTION_V1",
+  "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+  "rootCommit": "148fc0c36ea82867532368b9578d727713ef993e",
+  "parents": [
+    {
+      "file": "broker/src/index.js",
+      "bytes": 8936784,
+      "sha256": "a360e1147b0f6e7902c16b4c6109df0db203af36a981600f84371c17d0e1f6db"
+    },
+    {
+      "file": "supabase/baseline/22082026_1503_cloudtms_test_routines_19.sql",
+      "bytes": 280735,
+      "sha256": "114fe1b3f66d44d45a7328e242f859bb1cc561203fd506e596cc9b45f5e8609d"
+    },
+    {
+      "file": "supabase/release/current-contract.json",
+      "bytes": 7865503,
+      "sha256": "da0e0870442c151534c04d108757a0d76a812879aafae71f01486c7077ce674a"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/reference/daily-health-genuine-fixture-recipe-20261017/RECIPE.json",
+      "bytes": 11525,
+      "sha256": "f910e657771b8530f10c3a73527fede7c837dfd90f11945ed023e188f27a658c"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/native-read.mjs",
+      "bytes": 18744,
+      "sha256": "b8449f6bc901f41c2d058c6618b11bab70337579133fd99360c6988eb820cf07"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/contract.mjs",
+      "bytes": 7643,
+      "sha256": "98a4f7d49bd25d8cd88aed5454e33e0a04605a60073eda59affb7db740b571fc"
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_S0_FIXED_NATIVE_METADATA_SUMMARY_20261017.json",
+      "bytes": 119766,
+      "sha256": "c1e91c6507d3624dd69e92707f6f7fd0e8614479b3f5a75c3b4fd9268f152f8c"
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_PRODUCERS_ACTIVE_RUNTIME_SOURCE_BINDING_20261017.json",
+      "bytes": 5618,
+      "sha256": "b9ba019fc9f2ec59e5ae9ddd7d2257f214c5bc76246e2e3089bb76e38a588275"
+    }
+  ],
+  "functions": [
+    {
+      "name": "handleCreateCandidate",
+      "file": "broker/src/index.js",
+      "start": 6622132,
+      "end": 6630533,
+      "bytes": 8415,
+      "sha256": "42642fcfbe70961b2b8276e875e75c69a673a15a3442a04fe3c2d4e6046b4231",
+      "capture": "reference/worker/handleCreateCandidate.js.txt",
+      "publishedCompleteFunctionRawEqual": true
+    },
+    {
+      "name": "handleUpsertClientRate",
+      "file": "broker/src/index.js",
+      "start": 6968640,
+      "end": 6976498,
+      "bytes": 7868,
+      "sha256": "5e6c7f3b1a5dc5302971c91d5cf80a5ea464e76b6119312e6ee9b981bc43d518",
+      "capture": "reference/worker/handleUpsertClientRate.js.txt",
+      "publishedCompleteFunctionRawEqual": true
+    },
+    {
+      "name": "tsfinTargetedDrainNow",
+      "file": "broker/src/index.js",
+      "start": 7535903,
+      "end": 7544323,
+      "bytes": 8426,
+      "sha256": "af80a52b263df6e769d797eaa2a3739512ef594800da9d79a76e26d8fef8c74f",
+      "capture": "reference/worker/tsfinTargetedDrainNow.js.txt",
+      "publishedCompleteFunctionRawEqual": true
+    },
+    {
+      "name": "enqueueTsfinRecomputeForClient",
+      "file": "broker/src/index.js",
+      "start": 7041331,
+      "end": 7042317,
+      "bytes": 986,
+      "sha256": "787e0be9d2018fb0754462c736fef321a176ad4ba15cd2971b8b77e8dd678827",
+      "capture": "reference/worker/enqueueTsfinRecomputeForClient.js.txt",
+      "publishedCompleteFunctionRawEqual": true
+    },
+    {
+      "name": "loadSettingsDefaults",
+      "file": "broker/src/index.js",
+      "start": 55098,
+      "end": 116730,
+      "bytes": 61656,
+      "sha256": "973fc5a6f63ddfdc13b28bf69ad100b9ac0b1cc19a4491842ee5cb8f42d0f3fe",
+      "capture": "reference/worker/loadSettingsDefaults.js.txt",
+      "publishedCompleteFunctionRawEqual": true
+    },
+    {
+      "name": "requireUser",
+      "file": "broker/src/index.js",
+      "start": 6251255,
+      "end": 6252640,
+      "bytes": 1385,
+      "sha256": "72cb3dc069bbec6c973eff2e7258f1649b721978c47cd56d75dd8ad81089ca2a",
+      "capture": "reference/worker/requireUser.js.txt",
+      "publishedCompleteFunctionRawEqual": true
+    }
+  ],
+  "nativeStatements": [
+    {
+      "signature": "public.trg_set_tms_ref()",
+      "file": "supabase/baseline/22082026_1503_cloudtms_test_routines_19.sql",
+      "start": 115615,
+      "end": 116183,
+      "bytes": 568,
+      "sha256": "6910a1b92d26f6330e906dd273902c07cd4a4e091a7593a7d5fb10dc6df61187",
+      "capture": "reference/native/public__trg_set_tms_ref.sql",
+      "repeatableOwner": null,
+      "nativeBinding": "NOT_PROVED"
+    },
+    {
+      "signature": "public.trg_tsfin_candidates_wakeup()",
+      "file": "supabase/baseline/22082026_1503_cloudtms_test_routines_19.sql",
+      "start": 146796,
+      "end": 149640,
+      "bytes": 2846,
+      "sha256": "d508547ded756a1fe4be25646eabf8d7340f8c428995d0c041250ccd10583cdd",
+      "capture": "reference/native/public__trg_tsfin_candidates_wakeup.sql",
+      "repeatableOwner": null,
+      "nativeBinding": "NOT_PROVED"
+    }
+  ],
+  "published": "f743b81fe537830d81b1de93ec4f9cb0331532a7",
+  "routes": [
+    "if (req.method === 'POST' && p === '/api/candidates')                 return handleCreateCandidate(env, req);",
+    "if (req.method === 'POST' && p === '/api/rates/client-defaults')      return handleUpsertClientRate(env, req);"
+  ],
+  "existingOperatorScopes": [
+    "clients",
+    "settings",
+    "mappings",
+    "candidates",
+    "candidateJobs",
+    "rates",
+    "overrides",
+    "timesheets",
+    "financials",
+    "outbox",
+    "audit"
+  ],
+  "productTargets": [],
+  "native": "NOT_RUN",
+  "semanticBankBodies": []
+}

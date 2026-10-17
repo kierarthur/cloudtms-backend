@@ -1,0 +1,21 @@
+{
+  "version": "S2_S3_SETTINGS_EFFECT_DISPOSITION_V1",
+  "supersededPacket": "92ec880ade00bc1119a7e6a900dbe32467ee0ad6",
+  "loaderSha256": "973fc5a6f63ddfdc13b28bf69ad100b9ac0b1cc19a4491842ee5cb8f42d0f3fe",
+  "externalHelper": "normalizeBankingPayWorkbenchSourceBuildParallelism",
+  "callsites": [
+    {
+      "line": 393,
+      "call": "source_build_parallelism: normalizeBankingPayWorkbenchSourceBuildParallelism(_firstConfiguredValue(row.banking_pay_workbench_cron_source_build_parallelism, bpwCronCfg.source_build_parallelism, bpwCronCfg.sourceBuildParallelism)),"
+    },
+    {
+      "line": 414,
+      "call": "source_build_parallelism: normalizeBankingPayWorkbenchSourceBuildParallelism(_firstConfiguredValue(row.banking_pay_workbench_nudge_source_build_parallelism, bpwNudgeCfg.source_build_parallelism, bpwNudgeCfg.sourceBuildParallelism)),"
+    }
+  ],
+  "helperBodyRead": false,
+  "helperEffect": "EXISTING_OWNER_BOUNDARY_NOT_PROVED_HERE",
+  "emptyDrainTests": "POST_LOADER_CHOREOGRAPHY_ONLY",
+  "runtimeChanges": 0,
+  "native": "NOT_RUN"
+}

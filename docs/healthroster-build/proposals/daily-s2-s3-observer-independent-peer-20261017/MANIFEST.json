@@ -1,0 +1,25 @@
+{
+  "version": "DAILY_S2_S3_OBSERVER_INDEPENDENT_PEER_V1",
+  "files": [
+    {
+      "file": "extra.test.mjs",
+      "bytes": 3994,
+      "sha256": "19698a8e869c06c286335b57afed6b73adc291a2c0d1cc49b68c5f076d184c45"
+    },
+    {
+      "file": "replay.py",
+      "bytes": 3423,
+      "sha256": "09e6417e6a8da0741d7b34bbbc28533e634aa1a8bb5a2a8018d9eb2362d45b8b"
+    },
+    {
+      "file": "RESULTS.json",
+      "bytes": 1322,
+      "sha256": "22db0b18d8248fe3a7222b974941762488f303a69cad18c032ceb639931af781"
+    },
+    {
+      "file": "REVIEW.md",
+      "bytes": 4657,
+      "sha256": "477bf77310bebc7095223717d67ccf484db5258930b199a72c0d47cc5a5d5187"
+    }
+  ]
+}

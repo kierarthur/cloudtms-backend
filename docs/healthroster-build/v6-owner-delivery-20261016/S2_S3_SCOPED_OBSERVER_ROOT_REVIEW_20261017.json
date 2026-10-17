@@ -1,0 +1,62 @@
+{
+  "version": "S2_S3_SCOPED_OBSERVER_ROOT_REVIEW_V1",
+  "recordedAt": "2026-10-17T13:39:37.260314+00:00",
+  "rootParent": "3722ad90ca8bbaf759ca0a7acaa9e8a40652757d",
+  "verdict": "ACCEPT_BOUNDED_SOURCE_ONLY_WITH_BOTH_IMMUTABLE_DISPOSITIONS",
+  "packs": [
+    {
+      "folder": "docs/healthroster-build/proposals/daily-health-s2-s3-scoped-effects-observer-20261017",
+      "commit": "92ec880ade00bc1119a7e6a900dbe32467ee0ad6",
+      "manifest": "MANIFEST.json",
+      "manifestSha256": "26cfe35e7193fffcf4d31bf4d3cd8d2a6a8192eb93d513707ab5b938458f4a9f",
+      "files": 23
+    },
+    {
+      "folder": "docs/healthroster-build/proposals/daily-health-s2-s3-settings-effect-disposition-20261017",
+      "commit": "a72d3387a3489d0f483da2d6066218aee70b971d",
+      "manifest": "MANIFEST.json",
+      "manifestSha256": "df606dc03d4e1dfcfdc5d2bad8833725465cdb5cbfe2487c3df83dfeb3fb9670",
+      "files": 4
+    },
+    {
+      "folder": "docs/healthroster-build/proposals/daily-health-s2-s3-settings-effect-disposition-20261017",
+      "commit": "fa55ae0c9c701cad3419d143732e0c46711020ab",
+      "manifest": "COMMON_HELPER_FORWARD_MANIFEST.json",
+      "manifestSha256": "04fcd81e72f40ad360e087df71023a69b744e6b6e6101db532c6c1036337fa38",
+      "files": 2
+    },
+    {
+      "folder": "docs/healthroster-build/proposals/daily-s2-s3-observer-independent-peer-20261017",
+      "commit": "fe093f181715fff42fe8e9f430a309f40d67eaa4",
+      "manifest": "MANIFEST.json",
+      "manifestSha256": "1d73d24cdf281cc5f51b1973c41fe1d3651a098c9c88e9ef8557f3f07a3c95b3",
+      "files": 5
+    }
+  ],
+  "rootRead": "Complete observer, effect map, actual disposition and independent review/replay",
+  "proofs": {
+    "authorTests": 10,
+    "independentTests": 4,
+    "fixedPg17Inputs": 4,
+    "completeCurrentHistoricalParents": 8,
+    "publishedEqualCompleteWorkerFunctions": 6,
+    "completeHealthNativeStatements": 2,
+    "plTriggerGrammars": 2,
+    "nativeOutboxInsertAsts": 2,
+    "readonlyAstRefusals": 6
+  },
+  "fixes": {
+    "applied": 1,
+    "rejected": 0,
+    "finding": "Superseded pure settings-loader claim corrected by two exact external normalizer callsites and common helper note. Controlled spies prove reachability/cache/post-loader empty choreography only; helper semantic effects are not inferred."
+  },
+  "runtimeTargets": 0,
+  "operatorScopes": 11,
+  "capsChanged": false,
+  "native": "NOT_RUN",
+  "completeCallbackEffects": "NOT_PROVED",
+  "bankSemanticBodiesRead": false,
+  "rootAdmission": "Only fixed metadata/effect builders; genuine native envelope authentication, actual metadata read admission and separately reviewed business effect evidence remain required. No producer success or full restoration claimed.",
+  "install2": "NOT_INSTALLED",
+  "finalCritics": "NOT_RUN"
+}
