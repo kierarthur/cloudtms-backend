@@ -1,0 +1,41 @@
+{
+  "version": "R6_BOOKKEEPER_BOUNDED_SOURCE_PEER_V1",
+  "native": "NOT_RUN",
+  "files": [
+    {
+      "file": "README.md",
+      "bytes": 3480,
+      "sha256": "49e9a09ec2945c295ee17c62f7b79f7a2bfb529c6c38a5fe478343c81924b002"
+    },
+    {
+      "file": "reference/PLAN.json",
+      "bytes": 7694,
+      "sha256": "a7fff206b268fd3b3052d81ee3920f97303aaa2880253523a3d9fec7b751e065"
+    },
+    {
+      "file": "reference/R5.mjs",
+      "bytes": 6295,
+      "sha256": "fd256f8899705074cc437165575ffae876aeb94ecf2b9d23aeaa275b5bbb5cd6"
+    },
+    {
+      "file": "reference/R6.mjs",
+      "bytes": 6302,
+      "sha256": "0c277dd04a09bc4eb663cba7fe621185233428cfa63e5ebdc38468b09f4ae7df"
+    },
+    {
+      "file": "reference/R9_RECIPE_REVIEW.json",
+      "bytes": 1229,
+      "sha256": "39fbb10e4c2631ec8900330644a89a7458c28d5650142459d7549e775a8a46c0"
+    },
+    {
+      "file": "RESULTS.json",
+      "bytes": 1193,
+      "sha256": "dedf2ebbe07af521868426b7602cd04a27c864cc9654e78f09e09ac0ae55b5fd"
+    },
+    {
+      "file": "review.mjs",
+      "bytes": 8187,
+      "sha256": "634f5ef8cae0109d0d0fc3c5bc9af35ba55f2314e86caa00597fc75c005bba27"
+    }
+  ]
+}
