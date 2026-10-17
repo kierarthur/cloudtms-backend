@@ -1,0 +1,180 @@
+{
+  "version": "PREBODY_HISTORICAL_DEPENDENCY_INDEPENDENT_PEER_FREEZE_V1",
+  "files": [
+    {
+      "file": "CAPTURE.json",
+      "bytes": 5210,
+      "sha256": "55e2cbc35e3881d94dd8eacc731ebabb52f7d14f8140684a53676511c280565f"
+    },
+    {
+      "file": "capture.mjs",
+      "bytes": 1865,
+      "sha256": "f323ed2ca3d7b638bd8b8dd4321deaf0eeeb258fae03bf02f2da9ce584b9d094"
+    },
+    {
+      "file": "frozen/binding.test.mjs",
+      "bytes": 6633,
+      "sha256": "d4c2ceaf6dd62e4da6fda7f2ee200b0b8f42e908381363441b90121a2bce4405"
+    },
+    {
+      "file": "frozen/freeze.mjs",
+      "bytes": 1133,
+      "sha256": "50b22d3d686159dc2b7b88060eefe900b7146ed7c5c193848e054e6a08ff33fe"
+    },
+    {
+      "file": "frozen/FULL_HELPER_REVERSES.json",
+      "bytes": 39641,
+      "sha256": "068a6e55b1514b6fcc6430a2fe423f6a880964bf4d6e93b36f7d11bb0b764371"
+    },
+    {
+      "file": "frozen/MANIFEST.json",
+      "bytes": 4852,
+      "sha256": "4f3f10f4a06c946b7f6284e72a1146f7e2e01f998dcffdfc0992d34a21bea845"
+    },
+    {
+      "file": "frozen/original-prebody.test.mjs",
+      "bytes": 11324,
+      "sha256": "ed535e1abf076b6eef1e1151173e6bb1f1c42250f6967d9931371f76dc865ec0"
+    },
+    {
+      "file": "frozen/overlay.mjs",
+      "bytes": 895,
+      "sha256": "e09c1b1f8de690849e5482c005e88414aa608857d36d0826cc4d5649b0b5ac14"
+    },
+    {
+      "file": "frozen/PARENT_PINS.json",
+      "bytes": 2409,
+      "sha256": "01a6f1f7364448e3ab0c7f1018b10308694e60c7af60ff83e235eaadba059ff0"
+    },
+    {
+      "file": "frozen/payload/scripts/healthroster-prebody-dynamic-review.mjs",
+      "bytes": 21119,
+      "sha256": "960ada704674f7993cb4bd558bce5bbce2b311a523d50ed6d34a4d8497faaacc"
+    },
+    {
+      "file": "frozen/payload/scripts/healthroster-same-separate-type-review.mjs",
+      "bytes": 25743,
+      "sha256": "563fcc88819328fd9f18a31675b39814f80fb36a7ba6a5f96807c14a5ceef4b0"
+    },
+    {
+      "file": "frozen/payload/scripts/healthroster-source-read-type-review.mjs",
+      "bytes": 18793,
+      "sha256": "8571c834d9500af8943092d422a738f197c730a327fc0b41e0e79df86044cfc7"
+    },
+    {
+      "file": "frozen/PAYLOAD_SELECTION.json",
+      "bytes": 1120,
+      "sha256": "442795e8181bc8a44d875b0270eaf786adb032f2caeef748d97ffe7d5135b1ff"
+    },
+    {
+      "file": "frozen/prepare-tests.mjs",
+      "bytes": 1861,
+      "sha256": "8120a35a5517c7a3ea57546afacaec2cee1925139cf9b85d7e0f2041f14d9f56"
+    },
+    {
+      "file": "frozen/prepare.py",
+      "bytes": 7673,
+      "sha256": "81de30496b7bd316385d315b3e1ed21bbd37a2dac2ff15eb059265d0458b74c4"
+    },
+    {
+      "file": "frozen/README.md",
+      "bytes": 5049,
+      "sha256": "81462aec8756aaa8b480489f0b2e2c570b8fb96bd9edf7304da668ddc9f33c96"
+    },
+    {
+      "file": "frozen/reference/current/scripts/bpay-next-final-definers.mjs",
+      "bytes": 13639,
+      "sha256": "b6a8143f2bae077a4b72857419b4f8fab9f7652181f6ad3bf1fdcfbd4b77bafa"
+    },
+    {
+      "file": "frozen/reference/current/scripts/healthroster-install1-full-rehearsal.mjs",
+      "bytes": 48330,
+      "sha256": "31acd390acf2ef6dbbd062fbb157feea66f9b5d328440414e67b2bfd4a3f78ab"
+    },
+    {
+      "file": "frozen/reference/current/scripts/healthroster-live-test-restoration.mjs",
+      "bytes": 15050,
+      "sha256": "a91c1bf04f868ff372b20fb6beca239a7807fe9cc92c0c2682afffcd79554adc"
+    },
+    {
+      "file": "frozen/reference/historical/scripts/bpay-next-final-definers.mjs",
+      "bytes": 13611,
+      "sha256": "51ab7fd6d5c582ee7f4cab612502c4fc7ac11088cb1a996dd2cf1e6561468d09"
+    },
+    {
+      "file": "frozen/reference/historical/scripts/healthroster-install1-full-rehearsal.mjs",
+      "bytes": 48190,
+      "sha256": "af2b6b591a8d6c251ad08507130bd2cf0cc9861d966055174e511de9c4102754"
+    },
+    {
+      "file": "frozen/reference/historical/scripts/healthroster-live-test-restoration.mjs",
+      "bytes": 14597,
+      "sha256": "fb4ffa42acf7cf319cdcb45a233babdb9720bb1bc73e4cb1f6ddcd3be696a4a6"
+    },
+    {
+      "file": "frozen/reference/target/scripts/healthroster-prebody-dynamic-review.mjs",
+      "bytes": 10139,
+      "sha256": "3504d0e858e1fdefe95edae2c86f14324944a96e1f27dc1a5caf097266898eef"
+    },
+    {
+      "file": "frozen/reference/target/scripts/healthroster-same-separate-type-review.mjs",
+      "bytes": 14107,
+      "sha256": "897df1661b265921f960c107f5189470475866ad8311aec358b15f8841391259"
+    },
+    {
+      "file": "frozen/reference/target/scripts/healthroster-source-read-type-review.mjs",
+      "bytes": 5814,
+      "sha256": "03504c269e29432de19dc82a93c62b221489b42ac6e62c2c95f6e6bedd149d2f"
+    },
+    {
+      "file": "frozen/SOURCE_RECONSTRUCTIONS.json",
+      "bytes": 12381,
+      "sha256": "5444b9443391d3002863bc33a1a1544bb2f9396bbde7e48f4800c166bbcce5d0"
+    },
+    {
+      "file": "frozen/TEST_PARENT_EDITS.json",
+      "bytes": 1439,
+      "sha256": "8404aa22a470db0c2192443463177d5f05a705377d34805bee98ff27257fbf00"
+    },
+    {
+      "file": "frozen/TEST_RESULTS.tap",
+      "bytes": 5564,
+      "sha256": "df4163f3368db4e6570306bede19ba14fe7681e05c432c810dcc27a3b87e97fc"
+    },
+    {
+      "file": "frozen/VERIFY_PROOF.json",
+      "bytes": 1608,
+      "sha256": "3de8d36557546172ab710c0c6cbcccf78ff888e80db5469eecd96e454d2f7f2e"
+    },
+    {
+      "file": "frozen/verify.mjs",
+      "bytes": 6209,
+      "sha256": "c3db05efc2ad8dcfbe39ab583fd67ec3d741acc134e36440747cea65b78d6f0c"
+    },
+    {
+      "file": "independent.mjs",
+      "bytes": 2765,
+      "sha256": "50d3e94cae774d2a10b1dd0c8cedca2e05ccf715d324a51c5c7aa25faa604b5c"
+    },
+    {
+      "file": "README.md",
+      "bytes": 3605,
+      "sha256": "568115a8d85f46988ef292be928b5d5ec21427b2c5f30bb3eac84cdeca718fe0"
+    },
+    {
+      "file": "REVIEW.json",
+      "bytes": 904,
+      "sha256": "3bd57ebb479f312071114467edc8f7b46d3f5d9c0ce3d19b2000a76b4d428c15"
+    },
+    {
+      "file": "seal.mjs",
+      "bytes": 1809,
+      "sha256": "710b5e3e7c02f0bd5348143a26bb390fb746dbe069b1d8e8abd46227904e63bb"
+    },
+    {
+      "file": "verify.mjs",
+      "bytes": 1279,
+      "sha256": "81c97249ab6bbfb6c0d68f259d91c4597febd39958eb491e602db76c01b4395d"
+    }
+  ]
+}

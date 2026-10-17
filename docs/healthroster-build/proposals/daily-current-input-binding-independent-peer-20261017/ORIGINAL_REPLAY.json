@@ -1,0 +1,26 @@
+{
+  "sourceCommit": "f739b6f603ae840abcf58c12b0abe5407f4d9ca5",
+  "sourceManifestSha256": "c86388fed8ae2ba525b2dfc800de3b37aed55baf42dcc053d8ed136e99c9b829",
+  "caller": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-money-build-13102026",
+  "verifyCommittedExitCode": 0,
+  "verifyCommitted": {
+    "files": 46,
+    "parents": 21,
+    "wholeBatchSourceHunks": 4,
+    "runtimeTargets": 6,
+    "holderTargets": 0,
+    "committed": true,
+    "privateStateAccess": "NONE",
+    "native": "NOT_RUN"
+  },
+  "originalTestToolSession": 15098,
+  "originalTestExitCode": 0,
+  "originalTests": 23,
+  "originalPass": 23,
+  "originalFail": 0,
+  "originalDurationMilliseconds": 16064.9291,
+  "actualOperatorOrSourcePreflightInvoked": false,
+  "offlineFullPreflightPrivatePredicates": "THREE_SYNTHETIC_ONLY",
+  "actualPrivatePathMetadataAccess": "NONE",
+  "native": "NOT_RUN"
+}

@@ -1,0 +1,16 @@
+{
+  "verdict": "ACCEPT_BOUNDED_LOADER_SOURCE_WITH_LITERAL_FRAME_SIZE_NOTE",
+  "file": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/docs/healthroster-build/proposals/root-contact-native-input-loader-20261017.mjs",
+  "bytes": 1578,
+  "sha256": "2c599f28ee2a01bd7ee2ed7906157a1093310ef2f4025e4dc76a39888e225350",
+  "validCases": 2,
+  "controlledRefusals": 14,
+  "fileUrlImportArgument": true,
+  "readSmallFixedNames": 2,
+  "twoActualCryptoDigestPredicates": true,
+  "jsonPayloadBoundBytes": 98304,
+  "maximumStdoutWithTrailingLFBytes": 98305,
+  "originalInputsReceiptsStateReadOrEdited": false,
+  "actualModuleOrNativeDispatch": false,
+  "native": "NOT_RUN"
+}

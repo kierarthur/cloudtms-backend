@@ -1,0 +1,115 @@
+{
+  "version": "CONTACT_CONSTRUCTORS_BACKGROUND_CSE_R3_ACTUAL_V1",
+  "executionCommit": "cf5d4422af6f5177275d7ec10c43775d9f273ea8",
+  "ownedDirectory": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/.codex-tmp/contact-qt-positive-native-20261017-constructors-background-cse-r3",
+  "actualCommittedTwoCaseSourceAdmission": "PASS",
+  "databaseSourceIntegrity": "PASS_427_MIGRATIONS_1097_REPEATABLES",
+  "ready": {
+    "sequenceStartedAt": "2026-10-17T12:59:09.800Z",
+    "workDeadlineAt": "2026-10-17T13:01:09.800Z",
+    "readyAt": "2026-10-17T13:00:03.352Z",
+    "sqlSha256": "9d261257e8f52095ceaba2f4e00122cef7978e6d93373421550d0b744019bb62"
+  },
+  "hold": {
+    "status": "HOLD",
+    "caseId": "CONTACT_CONSTRUCTORS_V1",
+    "code": "ACTOR_SEQUENCE_WORK_BUDGET_HELD",
+    "observedErrorCode": "LOCAL_METADATA_TURN_LOST",
+    "deadlineObserved": true,
+    "localTiming": {
+      "sequenceStartedAt": "2026-10-17T12:59:09.800Z",
+      "workDeadlineAt": "2026-10-17T13:01:09.800Z",
+      "readyAt": "2026-10-17T13:00:03.352Z",
+      "resultReadAt": "2026-10-17T13:00:51.374Z",
+      "workTimerFiredAt": "2026-10-17T13:01:09.813Z"
+    },
+    "metadataDiagnostic": {
+      "version": "CONTACT_QT_FIXED_METADATA_DIAGNOSTIC_V1",
+      "phase": "AFTER",
+      "startedAt": "2026-10-17T13:00:51.425Z",
+      "spawnReturnedAt": "2026-10-17T13:00:52.176Z",
+      "firstStderrAt": null,
+      "finishedAt": "2026-10-17T13:01:09.817Z",
+      "elapsedMilliseconds": 18392,
+      "sqlstate": null
+    },
+    "rootCallTiming": {
+      "version": "ROOT_OBSERVED_MCP_CALL_TIMING_V1",
+      "route": "mcp__cloudtms_miget_operations_kier_codex__miget_db_transaction_rollback",
+      "sqlSha256": "9d261257e8f52095ceaba2f4e00122cef7978e6d93373421550d0b744019bb62",
+      "callStartedAt": "2026-10-17T13:00:48.204Z",
+      "callReturnedAt": "2026-10-17T13:00:50.153Z",
+      "rootObservedCallMilliseconds": 1949,
+      "authority": "ACTUAL_ROOT_ORCHESTRATION_CLOCK_OBSERVATIONS_NOT_SERVER_OR_TRANSPORT_LATENCY"
+    },
+    "nativeClockFrames": [
+      {
+        "phase": "B_GUARD_BEFORE",
+        "readOnly": false,
+        "holderPid": 283267,
+        "backendPid": 283370,
+        "observedAt": "2026-10-17T13:00:50.076153+00:00",
+        "databaseOid": 324139,
+        "holderGranted": true,
+        "physicalDatabase": "cloudtms_test_clone",
+        "statementStartedAt": "2026-10-17T13:00:50.071226+00:00",
+        "transactionStartedAt": "2026-10-17T13:00:49.869862+00:00"
+      },
+      {
+        "phase": "B_GUARD_AFTER",
+        "readOnly": false,
+        "holderPid": 283267,
+        "backendPid": 283370,
+        "observedAt": "2026-10-17T13:00:50.137069+00:00",
+        "databaseOid": 324139,
+        "holderGranted": true,
+        "physicalDatabase": "cloudtms_test_clone",
+        "statementStartedAt": "2026-10-17T13:00:50.136108+00:00",
+        "transactionStartedAt": "2026-10-17T13:00:49.869862+00:00"
+      }
+    ],
+    "sharedTurnCompletion": "SEE_ORIGINAL_SEND7_JOURNAL_NO_SYNTHETIC_CLOSE_PROOF",
+    "dispatchedMcpMustBeReconciledBeforeNextTrial": true,
+    "elapsedMilliseconds": 120069,
+    "completeMapsPersisted": false
+  },
+  "native": {
+    "accepted": true,
+    "rolledBack": true,
+    "database": "cloudtms_test_clone",
+    "statements": 34,
+    "connectedFresh": true,
+    "sealedReadStage": "PASS_ALL_EXACT_ASSERTIONS",
+    "guardClocks": 2
+  },
+  "nativeResultSha256": "cb396d294d1e6f89dc21cc5062af3eab51fd40e7ccc4a389c92c09a3008035cf",
+  "rootTransportFault": {
+    "code": "ERR_UNSUPPORTED_ESM_URL_SCHEME",
+    "cause": "Static ESM import D:/absolute/path treated D: as URL scheme; actual failing import replay reproduced after own close",
+    "readyToDispatchMilliseconds": 44852,
+    "afterElapsedMilliseconds": 18392,
+    "fix": "Root loader uses pathToFileURL dynamic import; actual old sealed packet equality replay PASS, zero native calls",
+    "originalLimitsUnchanged": true
+  },
+  "sharedTurn": {
+    "chat": "HealthRoster",
+    "task": "CONTACT_QT_POSITIVE_CONTACT_CONSTRUCTORS_V1",
+    "status": "RELEASED",
+    "takenAt": "2026-10-17T12:59:08.871Z",
+    "releasedAt": "2026-10-17T13:01:09.863Z",
+    "explicitUnlockConfirmed": true,
+    "connectionClosed": true,
+    "proved": false,
+    "key": [
+      20261013,
+      1
+    ],
+    "processExitCode": 1
+  },
+  "fullRestoration": "HOLD_NOT_COMPLETE",
+  "weakMapMinted": false,
+  "completeMapsPersisted": false,
+  "retryRequires": "Reviewed pretested root loader, fresh own turn and new input; no native or freshness cap increase",
+  "install2": "NOT_INSTALLED",
+  "finalPartBCritics": "NOT_RUN"
+}

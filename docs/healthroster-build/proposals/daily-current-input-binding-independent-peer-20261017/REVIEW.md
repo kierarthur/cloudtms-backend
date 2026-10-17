@@ -1,0 +1,21 @@
+# Independent Daily operator current-input binding peer
+
+**ACCEPT_BOUNDED_SOURCE_RECIPE** for Report `f739b6f603ae840abcf58c12b0abe5407f4d9ca5`, manifest `c86388fed8ae2ba525b2dfc800de3b37aed55baf42dcc053d8ed136e99c9b829`, selection `69ef0abcfbc5bf74cb23a27111f22276e585df67c37ecb15130cd43dc99e2e63`. No actionable scoped source defect found. Reviewed as GPT-6.1 Sol / xhigh.
+
+All 46 frozen source files and 21 complete captured parents were compared with their real saved/index/HEAD/historical images. The four runtime source hunks restore the complete original batch helper. All six generated runtime images have whole raw inverses: operator helper/manifest, coordinator pins/manifest and continuation pins/manifest. All original audit/mapping data remains immutable; every other current input retains its old guard. The registry exception is the exact 69dde full image with nine approved appended Health chains and a whole raw removal inverse retaining all 1650 prior chains/editor/top-level metadata. The release exception removes only the one approved verifier in each existing list. The final-definer exception reverses only the exact reviewed 8 MiB buffer line. Both root review receipts and approved/original blobs stay commit/length/SHA bound; saved, index, current HEAD and historical equality remain required. No arbitrary hash, generic current baseline or ancestry-only admission is introduced.
+
+The original unamended committed verifier and 23 tests pass in Money. The complete offline operator preflight reaches all checks against real public root/Git data under explicitly proposed Report images; the complete original holder→coordinator→continuation source chain passes only with the full six-image cascade. It retains index/history/end-HEAD refusals. The offline file-type, parent-realpath and ignored-path predicates are three synthetic checks; no private target is opened, read, statted, resolved, hashed or copied, and no Git command receives its pathname. The initial seal and finite harness-isolation forward remain preserved. These results are not actual runtime admission.
+
+Eight independent controlled cases execute the exact materializer `actual()` helper with public byte frames and refuse dirty saved/index/HEAD/historical data, wrong expected hash, moved end-HEAD, failed ancestry and a non-commit argument. Two additional complete offline preflight cases refuse corrupted approved release and final-definer historical blobs. No actual materializer was invoked. These tests add no runtime framework or bypass.
+
+The six-image order is coherent: mount operator2 and commit real K1, generate coordinator2 from those exact committed images and commit real K2, then generate continuation2 from exact K1/K2 and commit real K3. The materializer requires the frozen proposal and current destinations/preceding mounts to equal complete saved/index/current/historical images; future hashes alone do not satisfy it. Coordinator149 and continuation14 unrelated pin rows remain unchanged. Holder receives zero changes: its seven external rows and separate original batching helper, owner/unlock/close, P1 worker control, protected release guard and caps stay exact. Original worker/network/one-shot/unknown-outcome/journal/native-30s and 120/60/180-second behavior is unchanged.
+
+Root must use the real mounted/committed chain and run actual complete operator, coordinator and continuation source checks before a turn. Any fresh-auth successor must compose from final K3 rather than older R8 preimages. No future auth receipt/path, commit, current actor result or native readiness is supplied by this verdict. Original HOLDs remain unchanged.
+
+Non-writing replay, before unrelated source changes invalidate these current public parents:
+
+```powershell
+node docs/healthroster-build/proposals/daily-current-input-binding-independent-peer-20261017/replay.mjs --committed
+```
+
+Add `--full` to repeat the 23 original safe offline tests; their actual first independent execution is retained in `ORIGINAL_REPLAY.json`. No root/Report/Office writes, private-state access, native/browser/API/IPC/lock calls, actual materializer/operator/sourcePreflight entry, Banking semantic body review or deployment occurred. Only this peer packet was authored in Money; unrelated drafts were preserved.

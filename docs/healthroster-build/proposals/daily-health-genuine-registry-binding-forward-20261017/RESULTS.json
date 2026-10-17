@@ -1,0 +1,30 @@
+{
+  "version": "DAILY_GENUINE_EXACT_CURRENT_INPUT_SOURCE_RESULTS_V1",
+  "nodeTests": 23,
+  "sourceHunks": 4,
+  "retainedOriginalChains": 1650,
+  "exactNewChains": 9,
+  "originalMetadataWholeInverses": 3,
+  "fullPreflight": {
+    "status": "OFFLINE_PUBLIC_POSTIMAGE_PREFLIGHT_ONLY",
+    "rootCommit": "c1fa25175de807c912a8ad56fdbd9e51ba478bed",
+    "publicReads": 170,
+    "gitCalls": 19,
+    "syntheticPrivatePathMetadataChecks": 3,
+    "privateContentReads": 0,
+    "liveAdmission": false
+  },
+  "fullSourceChain": {
+    "status": "OFFLINE_COMPLETE_SOURCE_CHAIN_POSTIMAGES_ONLY",
+    "rootCommit": "c1fa25175de807c912a8ad56fdbd9e51ba478bed",
+    "publicReads": 259,
+    "gitCalls": 11,
+    "syntheticPrivatePathMetadataChecks": 0,
+    "privateContentReads": 0,
+    "liveAdmission": false
+  },
+  "originalAuditAndMappingCaptures": "UNCHANGED",
+  "privateStateTargetAccess": "NONE",
+  "actualAuthBrowserNativeOperator": "NOT_RUN",
+  "offlineBoundaryHardening": "Fixed check-ignore is synthetic; every other private read/lstat/realpath refused; runtime images unchanged."
+}

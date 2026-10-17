@@ -1,0 +1,25 @@
+{
+  "file": "tests/healthroster-prebody-dynamic-review.test.mjs",
+  "beforeSha256": "9c23e63cfe88e14028b5c896190ae152c35c83d087beb4e8fa150069c26eb95d",
+  "afterSha256": "ed535e1abf076b6eef1e1151173e6bb1f1c42250f6967d9931371f76dc865ec0",
+  "hunks": [
+    {
+      "before": "from'../scripts/",
+      "after": "from'file:///D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/scripts/",
+      "occurrences": 5
+    },
+    {
+      "before": "const installedRoot=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..'),fixture=fs.mkdtempSync(path.join(os.tmpdir(),'hr-f23-prebody-installed-'));",
+      "after": "const caller=fs.realpathSync.native(process.cwd()).replaceAll('\\\\','/');assert(/^D:\\/Development\\/GitHub\\/\\.codex-worktrees\\/healthroster-[a-z0-9-]+$/.test(caller));const taskTmp=path.join(caller,'.codex-tmp');fs.mkdirSync(taskTmp,{recursive:true});const installedRoot='D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026',fixture=fs.mkdtempSync(path.join(taskTmp,'hr-f23-prebody-installed-'));"
+    },
+    {
+      "before": "fs.realpathSync(os.tmpdir())",
+      "after": "fs.realpathSync(taskTmp)"
+    },
+    {
+      "before": "new URL('../scripts/bpay-next-source-gates.mjs',import.meta.url)",
+      "after": "new URL('file:///D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/scripts/bpay-next-source-gates.mjs')"
+    }
+  ],
+  "onlyLocationsChanged": true
+}

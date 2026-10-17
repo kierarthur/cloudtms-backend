@@ -1,0 +1,142 @@
+TAP version 13
+# Subtest: all95 original dependencies reconstruct exact immutable historical hashes; earlier two forwards retained
+ok 1 - all95 original dependencies reconstruct exact immutable historical hashes; earlier two forwards retained
+  ---
+  duration_ms: 26.0187
+  type: 'test'
+  ...
+# Subtest: three full sources reverse exactly; historical bytes still admit unchanged and current sources are never mutated
+ok 2 - three full sources reverse exactly; historical bytes still admit unchanged and current sources are never mutated
+  ---
+  duration_ms: 2.8547
+  type: 'test'
+  ...
+# Subtest: all three reconstructions refuse extra drift/missing/broadened/repeated anchors and translate no foreign input/hash
+ok 3 - all three reconstructions refuse extra drift/missing/broadened/repeated anchors and translate no foreign input/hash
+  ---
+  duration_ms: 1.9795
+  type: 'test'
+  ...
+# Subtest: actual Same dependency block reconstructs current prebody then its original prior; no raw or normalized hash waiver
+ok 4 - actual Same dependency block reconstructs current prebody then its original prior; no raw or normalized hash waiver
+  ---
+  duration_ms: 10.7569
+  type: 'test'
+  ...
+# Subtest: actual Source READ dependency block reconstructs exact raw Same parent including original CRLF
+ok 5 - actual Source READ dependency block reconstructs exact raw Same parent including original CRLF
+  ---
+  duration_ms: 6.3899
+  type: 'test'
+  ...
+# Subtest: all three complete build modules have literal whole raw inverses, while all classifier payloads remain original
+ok 6 - all three complete build modules have literal whole raw inverses, while all classifier payloads remain original
+  ---
+  duration_ms: 3.2253
+  type: 'test'
+  ...
+# Subtest: exact four actual parser diagnostics gain only their exact one-occurrence keys
+ok 7 - exact four actual parser diagnostics gain only their exact one-occurrence keys
+  ---
+  duration_ms: 285.761
+  type: 'test'
+  ...
+# Subtest: unknown or copied foreign paths receive no new key and retain baseline identity
+ok 8 - unknown or copied foreign paths receive no new key and retain baseline identity
+  ---
+  duration_ms: 11.8405
+  type: 'test'
+  ...
+# Subtest: all raw and actual audited mapped packets retain exact BEGIN/writer/prebody/body/writer/original ledger/COMMIT
+ok 9 - all raw and actual audited mapped packets retain exact BEGIN/writer/prebody/body/writer/original ledger/COMMIT
+  ---
+  duration_ms: 205.1734
+  type: 'test'
+  ...
+# Subtest: changed immutable source, caller-supplied identifier and new dynamic effect refuse
+ok 10 - changed immutable source, caller-supplied identifier and new dynamic effect refuse
+  ---
+  duration_ms: 172.2301
+  type: 'test'
+  ...
+# Subtest: edited selector predicates, replacement effects and extra executable points refuse
+ok 11 - edited selector predicates, replacement effects and extra executable points refuse
+  ---
+  duration_ms: 176.9672
+  type: 'test'
+  ...
+# Subtest: missing, duplicate, edited and foreign actual point diagnostics refuse
+ok 12 - missing, duplicate, edited and foreign actual point diagnostics refuse
+  ---
+  duration_ms: 258.0076
+  type: 'test'
+  ...
+# Subtest: edited, absent, duplicate and unclassified complete producers refuse
+ok 13 - edited, absent, duplicate and unclassified complete producers refuse
+  ---
+  duration_ms: 309.9159
+  type: 'test'
+  ...
+# Subtest: every complete compiler graph/source/evidence pin refuses drift and restores exactly
+ok 14 - every complete compiler graph/source/evidence pin refuses drift and restores exactly
+  ---
+  duration_ms: 2042.8657
+  type: 'test'
+  ...
+# Subtest: missing assertion program, constructor and historical capture refuse without body fallback
+ok 15 - missing assertion program, constructor and historical capture refuse without body fallback
+  ---
+  duration_ms: 54.5472
+  type: 'test'
+  ...
+# Subtest: LOCK mode, exact default-false selector, native pretty expression and names cannot broaden
+ok 16 - LOCK mode, exact default-false selector, native pretty expression and names cannot broaden
+  ---
+  duration_ms: 96.4047
+  type: 'test'
+  ...
+# Subtest: missing, edited, borrowed and postbody companion receipts refuse both actual packet paths
+ok 17 - missing, edited, borrowed and postbody companion receipts refuse both actual packet paths
+  ---
+  duration_ms: 312.7366
+  type: 'test'
+  ...
+# Subtest: changed body, closure, kind, path and alternate envelope refuse
+ok 18 - changed body, closure, kind, path and alternate envelope refuse
+  ---
+  duration_ms: 389.4104
+  type: 'test'
+  ...
+# Subtest: both companions cannot be borrowed into one unit or swapped across paths
+ok 19 - both companions cannot be borrowed into one unit or swapped across paths
+  ---
+  duration_ms: 77.8202
+  type: 'test'
+  ...
+# Subtest: sealed review cannot amend count, native status, exact program, body or key
+ok 20 - sealed review cannot amend count, native status, exact program, body or key
+  ---
+  duration_ms: 241.5912
+  type: 'test'
+  ...
+# Subtest: same process loses admission after a bound compiler or harness edit
+ok 21 - same process loses admission after a bound compiler or harness edit
+  ---
+  duration_ms: 129.1786
+  type: 'test'
+  ...
+# Subtest: historical native approvals remain false and source classification grants no native approval
+ok 22 - historical native approvals remain false and source classification grants no native approval
+  ---
+  duration_ms: 0.4686
+  type: 'test'
+  ...
+1..22
+# tests 22
+# suites 0
+# pass 22
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 5668.7418

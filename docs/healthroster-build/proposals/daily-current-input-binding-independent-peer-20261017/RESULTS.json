@@ -1,0 +1,76 @@
+{
+  "verdict": "ACCEPT_BOUNDED_SOURCE_RECIPE",
+  "sourceCommit": "f739b6f603ae840abcf58c12b0abe5407f4d9ca5",
+  "sourceManifestSha256": "c86388fed8ae2ba525b2dfc800de3b37aed55baf42dcc053d8ed136e99c9b829",
+  "sourceFiles": 46,
+  "completeParents": 21,
+  "sourceHunks": 4,
+  "wholeRawRuntimeInverses": 6,
+  "runtimeTargets": 6,
+  "holderTargets": 0,
+  "coordinatorRowsRetained": 149,
+  "continuationRowsRetained": 14,
+  "allOriginalAuditMappingRowsAndHolderBytesRetained": true,
+  "approvedChanges": [
+    "EXACT_NINE_HEALTH_REGISTRY_CHAINS_69dde",
+    "EXACT_TWO_VERIFIER_ENTRIES_69dde",
+    "EXACT_ONE_LINE_GIT_BUFFER_51177"
+  ],
+  "savedIndexHeadHistoricalGatesAndRealCommitCascadeRequired": true,
+  "originalIndependentReplay": {
+    "sourceCommit": "f739b6f603ae840abcf58c12b0abe5407f4d9ca5",
+    "sourceManifestSha256": "c86388fed8ae2ba525b2dfc800de3b37aed55baf42dcc053d8ed136e99c9b829",
+    "caller": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-money-build-13102026",
+    "verifyCommittedExitCode": 0,
+    "verifyCommitted": {
+      "files": 46,
+      "parents": 21,
+      "wholeBatchSourceHunks": 4,
+      "runtimeTargets": 6,
+      "holderTargets": 0,
+      "committed": true,
+      "privateStateAccess": "NONE",
+      "native": "NOT_RUN"
+    },
+    "originalTestToolSession": 15098,
+    "originalTestExitCode": 0,
+    "originalTests": 23,
+    "originalPass": 23,
+    "originalFail": 0,
+    "originalDurationMilliseconds": 16064.9291,
+    "actualOperatorOrSourcePreflightInvoked": false,
+    "offlineFullPreflightPrivatePredicates": "THREE_SYNTHETIC_ONLY",
+    "actualPrivatePathMetadataAccess": "NONE",
+    "native": "NOT_RUN"
+  },
+  "additional": {
+    "controlledExactMaterializerHelper": {
+      "operations": 9,
+      "sourceReads": 2,
+      "realGit": false,
+      "liveAdmission": false
+    },
+    "controlledRefusals": [
+      "saved",
+      "index",
+      "HEAD",
+      "historical",
+      "expectedHash",
+      "endHEAD",
+      "ancestry",
+      "nonCommit"
+    ],
+    "actualPublicHistoricalPreflightRefusals": [
+      "release",
+      "buffer"
+    ],
+    "actualMaterializerInvoked": false,
+    "privateStateAccess": "NONE",
+    "native": "NOT_RUN"
+  },
+  "findings": [],
+  "actualMaterializerOrOperatorAdmission": "NOT_RUN",
+  "privateStateAccess": "NONE",
+  "native": "NOT_RUN",
+  "performance": "NOT_MEASURED"
+}

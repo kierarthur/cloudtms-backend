@@ -1,0 +1,49 @@
+{
+  "version": "ROOT_CONTACT_NATIVE_INPUT_LOADER_INDEPENDENT_PEER_V1",
+  "requiredModel": "gpt-6.1-sol/xhigh",
+  "sourceSha256": "aff52a45b71300e32871e0081a91e59ba07e857ce83c33664ee7978d9ea98101",
+  "verdict": "ACCEPT_BOUNDED_CORRECTED_LOADER_SOURCE",
+  "files": [
+    {
+      "file": "BOUND_FORWARD.json",
+      "bytes": 546,
+      "sha256": "77506b256357653f66eb7b10598ae4a2b6f69024186de4408876a1bb5eed4c41"
+    },
+    {
+      "file": "LOADER_SOURCE.mjs.txt",
+      "bytes": 1580,
+      "sha256": "aff52a45b71300e32871e0081a91e59ba07e857ce83c33664ee7978d9ea98101"
+    },
+    {
+      "file": "ORIGINAL_LOADER_SOURCE.mjs.txt",
+      "bytes": 1578,
+      "sha256": "2c599f28ee2a01bd7ee2ed7906157a1093310ef2f4025e4dc76a39888e225350"
+    },
+    {
+      "file": "ORIGINAL_REPLAY.mjs.txt",
+      "bytes": 4358,
+      "sha256": "841b1fde8346da2af025731d4ff96d4d059d9931197fc6384825ae935a9ac5f9"
+    },
+    {
+      "file": "ORIGINAL_RESULTS.json",
+      "bytes": 683,
+      "sha256": "fd75afd9c0feefbcbcccb3b359fdbb18a1573682280930d68823ebfc498d7a17"
+    },
+    {
+      "file": "RESULTS.json",
+      "bytes": 664,
+      "sha256": "4677d1b9dda301480e06591bd97d97f9e986db49ca0dbd89c0fa623321ee98c8"
+    },
+    {
+      "file": "REVIEW.md",
+      "bytes": 1928,
+      "sha256": "12c12b093a99f1d75adf48786223e383a2d1603e5573fc0b8229b66c2c770ef2"
+    },
+    {
+      "file": "replay.mjs",
+      "bytes": 4770,
+      "sha256": "c551422c61da7d8f720b8533b25917ad0dc4eccc34b27674a5012172589bf681"
+    }
+  ],
+  "native": "NOT_RUN"
+}

@@ -1,0 +1,56 @@
+{
+  "version": "PREBODY_HISTORICAL_DEPENDENCY_ROOT_REVIEW_V1",
+  "verdict": "ACCEPT_THREE_EXACT_BUILD_HELPER_FORWARDS",
+  "authorCommit": "1460ff69e0cd388748575f85072ac270e61d4221",
+  "peerCommit": "7462a71e6c1a40cc3e7f7e8e6064a8e18d59676d",
+  "sourceTargets": [
+    {
+      "target": "scripts/healthroster-prebody-dynamic-review.mjs",
+      "payload": "payload/scripts/healthroster-prebody-dynamic-review.mjs",
+      "parentSha256": "3504d0e858e1fdefe95edae2c86f14324944a96e1f27dc1a5caf097266898eef",
+      "sha256": "960ada704674f7993cb4bd558bce5bbce2b311a523d50ed6d34a4d8497faaacc"
+    },
+    {
+      "target": "scripts/healthroster-same-separate-type-review.mjs",
+      "payload": "payload/scripts/healthroster-same-separate-type-review.mjs",
+      "parentSha256": "897df1661b265921f960c107f5189470475866ad8311aec358b15f8841391259",
+      "sha256": "563fcc88819328fd9f18a31675b39814f80fb36a7ba6a5f96807c14a5ceef4b0"
+    },
+    {
+      "target": "scripts/healthroster-source-read-type-review.mjs",
+      "payload": "payload/scripts/healthroster-source-read-type-review.mjs",
+      "parentSha256": "03504c269e29432de19dc82a93c62b221489b42ac6e62c2c95f6e6bedd149d2f",
+      "sha256": "8571c834d9500af8943092d422a738f197c730a327fc0b41e0e79df86044cfc7"
+    }
+  ],
+  "wholeHelperRawInverses": 3,
+  "wholeHistoricalSourceReconstructions": 3,
+  "rootReplay": {
+    "authorCases": 22,
+    "dependencies": 95,
+    "compiledRawMappedPackets": 4,
+    "priorHazards": 99,
+    "independentAnchorRefusals": 14,
+    "foreignNoTranslations": 6,
+    "historicalIdempotence": 3
+  },
+  "originalClassificationsUnchanged": [
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/F23_PREBODY_DYNAMIC_REVIEW_20261016/CLASSIFICATION.json",
+      "sha256": "69d2b3aee092e78e36386642a8fbf65df406d5fc9f5d8e6a6d42bccf993895b0"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/CLASSIFICATION.json",
+      "sha256": "f338e3eaf7f3ce2ff027cd2728cc5f16f0724ea4ce7eeea139f5217ee949766d"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/source-current-read-peer-f23-20261017/CLASSIFICATION.json",
+      "sha256": "7aa875bf450b81be3d945182c67398c4134f3cb325ab88ff2aa089ac99f2a399"
+    }
+  ],
+  "contact63AndDailySelectedTargetIntersection": 0,
+  "fullJoinedGate": "NEXT_ACTUAL_ROOT_EXECUTION",
+  "native0400": "NOT_RUN",
+  "sourceGateWaivers": 0,
+  "sqlRuntimeChanges": 0
+}

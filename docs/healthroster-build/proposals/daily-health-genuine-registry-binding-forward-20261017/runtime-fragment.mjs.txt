@@ -1,0 +1,44 @@
+// One reviewed additive metadata successor; original immutable audit row/blob remains required.
+export const registrySuccessor=Object.freeze(/*EXACT_BINDING*/);
+export function assertRegistrySuccessor(row,original,current,approved,review,sha){
+ const b=registrySuccessor;
+ require(row.file===b.file&&row.bytes===b.original.bytes&&row.sha256===b.original.sha256
+  &&original.length===b.original.bytes&&sha(original)===b.original.sha256,'FIXTURE_ORIGINAL_REGISTRY_BINDING_REQUIRED');
+ require(current.length===b.approved.bytes&&sha(current)===b.approved.sha256&&current.equals(approved),'FIXTURE_EXACT_APPROVED_REGISTRY_REQUIRED');
+ require(review.length===b.review.bytes&&sha(review)===b.review.sha256,'FIXTURE_EXACT_REGISTRY_REVIEW_REQUIRED');
+ const old=JSON.parse(original),next=JSON.parse(current),r=JSON.parse(review);
+ require(old.chains.length===b.retainedChains&&next.chains.length===b.retainedChains+b.addedSignatures.length
+  &&JSON.stringify(next.chains.slice(b.retainedChains).map(v=>v.signature))===JSON.stringify(b.addedSignatures),'FIXTURE_EXACT_ADDITIVE_CHAINS_REQUIRED');
+ next.chains.splice(b.retainedChains);
+ // Match the genuine metadata writer's ASCII JSON escaping; compare the entire original raw image.
+ const restored=JSON.stringify(next,null,2).replace(/[^\x00-\x7e]/g,c=>String.fromCharCode(92)+'u'+c.charCodeAt(0).toString(16).padStart(4,'0'))+String.fromCharCode(10);
+ require(restored===original.toString('utf8'),'FIXTURE_ALL_ORIGINAL_REGISTRY_BYTES_REQUIRED');
+ require(r.verdict==='ACCEPT_THIRTEEN_EXACT_SOURCE_POSTIMAGES'&&r.preservation.registryChains===1650
+  &&r.rootReplays.wholeMetadataInverses===3&&r.rootReplays.registeredChains===1659
+  &&r.targets.some(v=>v.target===b.file&&v.bytes===b.approved.bytes&&v.sha256===b.approved.sha256),'FIXTURE_ORIGINAL_HELPER_REVIEW_REQUIRED');
+ return true;
+}
+export function assertReleaseSuccessor(row,original,current,approved,sha){
+ const b=registrySuccessor.release;
+ require(row.file===b.file&&row.bytes===b.original.bytes&&row.sha256===b.original.sha256
+  &&original.length===b.original.bytes&&sha(original)===b.original.sha256,'FIXTURE_ORIGINAL_RELEASE_BINDING_REQUIRED');
+ require(current.length===b.approved.bytes&&sha(current)===b.approved.sha256&&current.equals(approved),'FIXTURE_EXACT_APPROVED_RELEASE_REQUIRED');
+ const next=JSON.parse(current);
+ require(next.verificationFiles.length===183&&next.newVerificationFiles.length===184
+  &&next.verificationFiles.pop()===b.verifier&&next.newVerificationFiles.pop()===b.verifier,'FIXTURE_EXACT_TWO_VERIFIER_ADDITIONS_REQUIRED');
+ const restored=JSON.stringify(next,null,2).replace(/[^\x00-\x7e]/g,c=>String.fromCharCode(92)+'u'+c.charCodeAt(0).toString(16).padStart(4,'0'))+String.fromCharCode(10);
+ require(restored===original.toString('utf8'),'FIXTURE_ALL_ORIGINAL_RELEASE_BYTES_REQUIRED');return true;
+}
+export function assertBufferSourceSuccessor(row,original,current,approved,review,sha){
+ const b=registrySuccessor.sourceBuffer;
+ require(row.file===b.file&&row.bytes===b.original.bytes&&row.sha256===b.original.sha256
+  &&original.length===b.original.bytes&&sha(original)===b.original.sha256,'FIXTURE_ORIGINAL_BUFFER_SOURCE_REQUIRED');
+ require(current.length===b.approved.bytes&&sha(current)===b.approved.sha256&&current.equals(approved),'FIXTURE_EXACT_APPROVED_BUFFER_SOURCE_REQUIRED');
+ require(review.length===b.review.bytes&&sha(review)===b.review.sha256,'FIXTURE_EXACT_BUFFER_REVIEW_REQUIRED');
+ const text=current.toString('utf8'),r=JSON.parse(review);
+ require(text.split(b.afterLine).length===2&&text.replace(b.afterLine,b.beforeLine)===original.toString('utf8'),'FIXTURE_WHOLE_ORIGINAL_BUFFER_SOURCE_REQUIRED');
+ require(r.verdict==='ACCEPT_ONE_LINE_COMPLETE_PATH_BUFFER_FORWARD'&&r.beforeSha256===b.original.sha256
+  &&r.afterSha256===b.approved.sha256&&r.newOutputCapBytes===8388608
+  &&r.allOriginalPathInputsBaseAncestryAssertionsPreserved===true
+  &&r.libSourceGatesRegistrySqlNativeCapsPermissionsUnchanged===true,'FIXTURE_ORIGINAL_BUFFER_REVIEW_REQUIRED');return true;
+}

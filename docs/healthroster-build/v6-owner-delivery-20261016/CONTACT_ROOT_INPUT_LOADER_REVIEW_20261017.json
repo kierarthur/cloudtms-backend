@@ -1,0 +1,31 @@
+{
+  "version": "CONTACT_ROOT_NATIVE_INPUT_LOADER_REVIEW_V1",
+  "verdict": "ACCEPT_TESTED_ROOT_TRANSPORT_CORRECTION",
+  "file": "docs/healthroster-build/proposals/root-contact-native-input-loader-20261017.mjs",
+  "sha256": "aff52a45b71300e32871e0081a91e59ba07e857ce83c33664ee7978d9ea98101",
+  "peer": {
+    "folder": "root-contact-native-input-loader-peer-20261017",
+    "commit": "02ef7062d84cd5aaae97fcee65b472c11d492c86",
+    "count": 9,
+    "manifestSha256": "c4927abe083d9f565cad945b0616949b6753fe7d2b174b1717b49b0d1bdff46e"
+  },
+  "fixesApplied": 2,
+  "fixesRejected": 0,
+  "fixes": [
+    "Windows ESM pathToFileURL dynamic import",
+    "LF included in98304totalstdoutbound"
+  ],
+  "actualOldPacketReplay": {
+    "status": "RAW_PACKET_EQUAL",
+    "packetBytesIncludingLf": 24717,
+    "nativeCalls": 0
+  },
+  "dispatchedR3": {
+    "status": "READ_STAGE_PASS_FRESH_ROLLBACK_PASS",
+    "actualRecord": "docs/healthroster-build/v6-owner-delivery-20261016/CONTACT_CONSTRUCTORS_BACKGROUND_CSE_R3_ACTUAL_20261017.json",
+    "sharedTurnExplicitlyReleased": true,
+    "fullRestoration": "HOLD"
+  },
+  "nativeSqlControlsBudgetsScopeWeakMapUnchanged": true,
+  "next": "One fresh bounded constructor trial using corrected pretested loader and immediate same-exec dispatch; no replay of old input"
+}

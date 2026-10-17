@@ -1,0 +1,18 @@
+{
+  "version": "BANK_NAMED_RECORDS_READONLY_CHECK_V1",
+  "worktree": "D:/Development/GitHub/.codex-worktrees/bpay-next-build-backend-20261009",
+  "observedLocalHead": "77675af8eb9543d1b4cee15ac025d00c999682c1",
+  "freshPublishedBranch": "40193adc09e55c804b44b76f322b0e08e9533e74",
+  "testInstallRecordSha256": "d7eed66e7a0dde18defa4628fbbbb3137e50017742195b387ab1a817f17cc1ca",
+  "namedCardStatus": {
+    "F17": "OPEN_BASELINE_NOT_INSTALLED",
+    "CM02": "AMENDMENT_OPEN",
+    "CM16": "AMENDMENT_OPEN",
+    "CM17": "AMENDMENT_OPEN",
+    "HR06": "CONSUMER_OPEN",
+    "HR11": "SOURCE_BUILT_REVIEWED_AMENDMENT_OPEN_NOT_INSTALLED",
+    "DY02": "BASELINE_COMPLETE_NOT_INSTALLED"
+  },
+  "scope": "Only named install/checklist records and Git identities; no semantic Banking body reviewed, no message or implementation",
+  "healthWorkContinues": true
+}
