@@ -1,0 +1,111 @@
+{
+  "version": "CONTACT_APPROVED_GIT_WRAPPER_BINDING_FORWARD_V1",
+  "requiredModel": "gpt-6.1-sol/xhigh",
+  "physicalParent": "51177b9abcdc9f089e680c9e7e9ef5285f09ff57",
+  "bgCompositionCommit": "fe2366f44c1514f9074e4c1413b7043330a3f4d7",
+  "targets": 3,
+  "files": [
+    {
+      "file": "FULL_PARENT_FORWARD.json",
+      "bytes": 189787,
+      "sha256": "cd03e56e5efac4e34e66ce7c1b3e128601255a903a9f7a4d0355392505e12596"
+    },
+    {
+      "file": "PAYLOAD_SELECTION.json",
+      "bytes": 1639,
+      "sha256": "205765db733d819c1f01803ff4b6a4e1eeb80e98026b6b664f669c6042845627"
+    },
+    {
+      "file": "README.md",
+      "bytes": 3848,
+      "sha256": "69b3e21e27a62bc67ed5273a161c6f0d7c4d1143b9f8b06669a5dcf2223d98b9"
+    },
+    {
+      "file": "RESULTS.json",
+      "bytes": 916,
+      "sha256": "1e66bde5936c479ebaeacc03ae63bf96ed8e6814f58965eaf5efc0af8ad86895"
+    },
+    {
+      "file": "TEST_RESULTS.tap",
+      "bytes": 4047,
+      "sha256": "e7b581cf0c84444acdf57f330ed5dc0dde8088b10a729b7317fecd78326635cf"
+    },
+    {
+      "file": "candidate/docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/MANIFEST.json",
+      "bytes": 8530,
+      "sha256": "0d55920b597bf8873e8f03dad06841f0bad381bc2ebf76889bd9a744e779e2e8"
+    },
+    {
+      "file": "candidate/docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/SOURCE_PINS.json",
+      "bytes": 27619,
+      "sha256": "3a2afc97ba4d43ce4212d103c9723122b22ae6cd1e7b27c43989558d066c3751"
+    },
+    {
+      "file": "candidate/docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/source.mjs",
+      "bytes": 14702,
+      "sha256": "24449c3b195c6b552547536c0ce93c3ce88e3059b105724d014d33d2a0468313"
+    },
+    {
+      "file": "composed/docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/MANIFEST.json",
+      "bytes": 8529,
+      "sha256": "21759ca4fa8276d5f89f3a0898f419dafae77f2644aba63b383b09317eb55ec7"
+    },
+    {
+      "file": "guard-fragment.txt",
+      "bytes": 3971,
+      "sha256": "030f760e1d68356ebc5206caa7e44a0d8735cd99e609a903b8b68b50812765af"
+    },
+    {
+      "file": "guard.test.mjs",
+      "bytes": 7410,
+      "sha256": "a45629008adf43285bf0806bceb684aab2f4103ea7c6b18aa9cac79b2a696b6b"
+    },
+    {
+      "file": "historical/42802228977b941325f0feb44c11918b0f42190f/scripts/bpay-next-final-definers.mjs",
+      "bytes": 13611,
+      "sha256": "51ab7fd6d5c582ee7f4cab612502c4fc7ac11088cb1a996dd2cf1e6561468d09"
+    },
+    {
+      "file": "historical/51177b9abcdc9f089e680c9e7e9ef5285f09ff57/docs/healthroster-build/proposals/shared-final-definer-git-buffer-forward-20261017/FULL_PARENT_FORWARD.json",
+      "bytes": 759,
+      "sha256": "48aa1a207637aa27846ea22a146fa57991af585a821bad3e754c89d6da847fcb"
+    },
+    {
+      "file": "historical/51177b9abcdc9f089e680c9e7e9ef5285f09ff57/docs/healthroster-build/v6-owner-delivery-20261016/SHARED_FINAL_DEFINER_GIT_BUFFER_ROOT_REVIEW_20261017.json",
+      "bytes": 1356,
+      "sha256": "fc7a0a9492fd101f894520b0f97c91a59fc2b3ce1bbe05a7cfc1d4843761ea40"
+    },
+    {
+      "file": "historical/51177b9abcdc9f089e680c9e7e9ef5285f09ff57/scripts/bpay-next-final-definers.mjs",
+      "bytes": 13639,
+      "sha256": "b6a8143f2bae077a4b72857419b4f8fab9f7652181f6ad3bf1fdcfbd4b77bafa"
+    },
+    {
+      "file": "physical/docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/MANIFEST.json",
+      "bytes": 8529,
+      "sha256": "e119fb9b36b191ecd61edb65567c78cf0ac9511b4e8f04ed604c7adee9ccb403"
+    },
+    {
+      "file": "physical/docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/SOURCE_PINS.json",
+      "bytes": 26765,
+      "sha256": "89cbf1f3cb60100388431e966d1d31ceb02a513ab08e165c2d37cc4167249ace"
+    },
+    {
+      "file": "physical/docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/source.mjs",
+      "bytes": 9879,
+      "sha256": "33bfe952c5d8c32eafbbd75709587e5da573cfac735ddc3b467644c52d8d4056"
+    },
+    {
+      "file": "prepare.mjs",
+      "bytes": 7217,
+      "sha256": "a1d4ccd48962d4fa9022f7736f4cebed59ac2d0e7dc5981dc7451be92cdfa3f3"
+    },
+    {
+      "file": "verify.mjs",
+      "bytes": 5621,
+      "sha256": "5831bc3a2b839b3c44280e605191c7382cf80b57e0cd9f615b62eeb3874ff0bf"
+    }
+  ],
+  "actualAdmission": "NOT_RUN",
+  "native": "NOT_RUN"
+}

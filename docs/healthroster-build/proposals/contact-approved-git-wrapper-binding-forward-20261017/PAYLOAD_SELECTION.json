@@ -1,0 +1,34 @@
+{
+  "physicalParent": "51177b9abcdc9f089e680c9e7e9ef5285f09ff57",
+  "bgCompositionCommit": "fe2366f44c1514f9074e4c1413b7043330a3f4d7",
+  "mountOrder": [
+    "EXACT_FROZEN_BG5",
+    "EXACT_BRIDGE3",
+    "COMMIT_THEN_ACTUAL_ADMISSION"
+  ],
+  "files": [
+    {
+      "target": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/SOURCE_PINS.json",
+      "payload": "candidate/docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/SOURCE_PINS.json",
+      "parentSha256": "89cbf1f3cb60100388431e966d1d31ceb02a513ab08e165c2d37cc4167249ace",
+      "sha256": "3a2afc97ba4d43ce4212d103c9723122b22ae6cd1e7b27c43989558d066c3751",
+      "bytes": 27619
+    },
+    {
+      "target": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/source.mjs",
+      "payload": "candidate/docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/source.mjs",
+      "parentSha256": "33bfe952c5d8c32eafbbd75709587e5da573cfac735ddc3b467644c52d8d4056",
+      "sha256": "24449c3b195c6b552547536c0ce93c3ce88e3059b105724d014d33d2a0468313",
+      "bytes": 14702
+    },
+    {
+      "target": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/MANIFEST.json",
+      "payload": "candidate/docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/MANIFEST.json",
+      "parentSha256": "21759ca4fa8276d5f89f3a0898f419dafae77f2644aba63b383b09317eb55ec7",
+      "sha256": "0d55920b597bf8873e8f03dad06841f0bad381bc2ebf76889bd9a744e779e2e8",
+      "bytes": 8530
+    }
+  ],
+  "actualAdmission": "NOT_RUN",
+  "native": "NOT_RUN"
+}
