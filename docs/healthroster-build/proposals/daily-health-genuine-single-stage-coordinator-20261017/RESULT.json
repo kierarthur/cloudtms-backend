@@ -1,0 +1,16 @@
+{
+  "version": "DAILY_GENUINE_ONE_SELECTED_STAGE_SOURCE_FREEZE_V1",
+  "tests": 39,
+  "passed": 39,
+  "fullParentDerivations": 5,
+  "completeCurrentCoordinatorParents": 16,
+  "frozenR8RecipeDependencies": 3,
+  "runtimePhaseOwner": "ORIGINAL_RUNSTAGED_P1_UNCHANGED",
+  "bindingAtSourceFreeze": "NOT_PROVIDED",
+  "actualS0PrefixAtSourceFreeze": "NOT_PROVIDED",
+  "futureMetadataTargets": 2,
+  "sourceFreezeBeforeAuth": true,
+  "nativeApiBrowserIpc": "NOT_RUN",
+  "privateStateBindingJournalAccess": "NONE",
+  "automaticRetryOrNextStage": false
+}
