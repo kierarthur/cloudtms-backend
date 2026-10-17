@@ -1,0 +1,71 @@
+{
+  "version": "DAILY_GENUINE_S0_R4_ACTUAL_HOLD_V1",
+  "executionSource": "c4b06fc45e25ce5d7949ab0658079cdf794fbcce",
+  "operatorSource": "4d5873f820b764681d5fc36ec689cde6e5882ee8",
+  "ownedDirectory": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/.codex-tmp/daily-genuine-stages-20261017-19e9cbc3e098ecf3a4887386b51f2d16",
+  "phases": [
+    {
+      "file": "CLOSED_bind_S0_6ba7421ef4ffc354.json",
+      "closedResult": {
+        "status": "PASS",
+        "code": "FIXTURE_BINDING_PREPARED",
+        "phase": "bind",
+        "stage": "S0",
+        "browserClosed": true
+      },
+      "modifiedAt": "2026-10-17T11:37:14.339Z"
+    },
+    {
+      "file": "CLOSED_entry_S0_4b4bf8c11b7be8b0.json",
+      "closedResult": {
+        "status": "PASS",
+        "code": "FIXTURE_COMMIT_EXACT_SETUP_ENTRY_NEXT",
+        "phase": "entry",
+        "stage": "S0",
+        "browserClosed": true
+      },
+      "modifiedAt": "2026-10-17T11:37:43.195Z"
+    },
+    {
+      "file": "CLOSED_submit_S0_4c53af46609415d2.json",
+      "closedResult": {
+        "status": "HOLD",
+        "code": "FIXTURE_FRESH_NATIVE_CLOCK_REQUIRED",
+        "phase": "submit",
+        "stage": "S0",
+        "browserClosed": true
+      },
+      "modifiedAt": "2026-10-17T11:38:05.879Z"
+    }
+  ],
+  "nativeCalls": 1,
+  "nativeBefore": {
+    "accepted": true,
+    "rolledBack": true,
+    "connectedFresh": true,
+    "mainObservedAt": "2026-10-17T11:37:21.989674+00:00",
+    "freshObservedAt": "2026-10-17T11:37:25.713402+00:00",
+    "activeAdmin": true,
+    "allElevenReservedScopesVacant": true
+  },
+  "beforeQualificationCommit": "ccdf098eb7720f282ee1309ad95dc42a26927652",
+  "exactSetupAppendCommit": "34a305fcf9a31f02f660f8e6187edf5344fc63c9",
+  "failure": "FIXTURE_FRESH_NATIVE_CLOCK_REQUIRED at submit; original main native clock exceeded30 seconds during actual source/evidence/setup handshakes. No freshness extension or invented clock.",
+  "attemptCreated": false,
+  "responseCreated": false,
+  "afterNative": "NOT_RUN",
+  "businessFixturesCreated": false,
+  "qualifiedPrefix": "NOT_CREATED",
+  "sharedTurn": {
+    "takenAt": "2026-10-17T11:36:58.812Z",
+    "releasedAt": "2026-10-17T11:38:07.600Z",
+    "explicitUnlockConfirmed": true,
+    "connectionClosed": true,
+    "proved": false,
+    "processExitCode": 1
+  },
+  "privateBindingOrStateContentsReadHashedCopied": false,
+  "next": "Measure exact phase/source and root handshakes; preserve30s freshness/all source/commit/ownership caps. No blind replay.",
+  "install2": "NOT_INSTALLED",
+  "finalPartBCritics": "NOT_RUN"
+}

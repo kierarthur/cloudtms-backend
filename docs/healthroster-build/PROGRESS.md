@@ -1289,3 +1289,10 @@ SEND_7 turn: {"chat":"HealthRoster","task":"DAILY_GENUINE_S0_STAGED_ONLY","statu
 
 
 17 October R7 source recipe2ac2 and independent peere146 accepted before fresh auth: root27 tests/432 actual predicate combinations and complete source inverses PASS;53 source/peer files saved/index/HEAD/historical exact. Eight safe admission codes preserve original success/network/worker ABI; actual public R7 receipt and real sequential4+2+2 mounts remain required. No state contents inspected, no A/DB connection open, no actual R7 or nativeS0 claimed. Existing HOLDs preserved; snapshot same-RR source continues separately. Install2 NOT_INSTALLED/finalcritics NOT_RUN.
+
+SEND_7 turn: {"chat":"HealthRoster","task":"DAILY_GENUINE_S0_STAGED_ONLY","status":"TAKEN","takenAt":"2026-10-17T11:36:58.812Z","key":[20261013,1]}
+
+SEND_7 turn: {"chat":"HealthRoster","task":"DAILY_GENUINE_S0_STAGED_ONLY","status":"RELEASED","takenAt":"2026-10-17T11:36:58.812Z","releasedAt":"2026-10-17T11:38:07.600Z","explicitUnlockConfirmed":true,"connectionClosed":true,"proved":false,"key":[20261013,1]}
+
+
+17 October R7 actualauth passes outsideA, private state retained unread; exact reviewed4+2+2 source mounts57beec/9d8027/4d5873 pushed/admitted. S0R4 genuinebind+nativeBEFORE accepted/rolledBack/fresh/currentAdmin/all11scopesvacant; actualbefore/effectccdf and exactsetupappend34a305 pushed. SubmitHOLD FIXTURE_FRESH_NATIVE_CLOCK_REQUIRED after source/commit handshakes; noATTEMPT/response/businessfixture/after/qualification. OwnA explicitunlock/close11:38:07.600Z/provedfalse/exit1. Measuring source/phase latency while keeping30s freshness/caps; no blind unchanged retry or ownerquestion. Originalnativeproof/HOLD preserved. ContactsameRRsource207093/independent2291 accepted pending rootreplay/mount/trial. Install2 NOT_INSTALLED/finalcritics NOT_RUN.
