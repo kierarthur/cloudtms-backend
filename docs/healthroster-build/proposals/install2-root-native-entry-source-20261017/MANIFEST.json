@@ -1,0 +1,240 @@
+{
+  "version": "INSTALL2_ADDITIVE_ROOT_NATIVE_ENTRY_SOURCE_V1",
+  "files": [
+    {
+      "file": "build.py",
+      "bytes": 17229,
+      "sha256": "1d27f1428d754231f76b6b5c599c059bbabd1388e0041a11fc17f09c80f68432"
+    },
+    {
+      "file": "CONFIG_REQUIREMENTS.json",
+      "bytes": 1513,
+      "sha256": "f68790f336d88841f8e51237fc82e20017847cb3b74443c856df2a541d99433f"
+    },
+    {
+      "file": "coordinator.test.source.mjs",
+      "bytes": 7642,
+      "sha256": "dfcf797c9b1c972b98e0a7edcb47b6876926dac212615de06f056e7883703d6e"
+    },
+    {
+      "file": "FULL_PARENT_FORWARD.json",
+      "bytes": 67749,
+      "sha256": "a7c54addaa9b036a1af3b6ab3c0c8606fc48f30b2a0c55feff0a46a95150a2a5"
+    },
+    {
+      "file": "grammar.py",
+      "bytes": 1890,
+      "sha256": "fae7bd90718ee65470a7fca9e56e81b12811e3e36b12dd12499ad37b71532848"
+    },
+    {
+      "file": "parents/.github/workflows/database-release.yml",
+      "bytes": 13642,
+      "sha256": "33b01ad1c92058225d256292c92ab1d0da14ec2b6f4faf3363590f35d636d85c"
+    },
+    {
+      "file": "parents/AGENTS.md",
+      "bytes": 57328,
+      "sha256": "ae1357fb0372932d1ae05cc15c7b02662c71d5e96f00cecb185fccc3f2be29e9"
+    },
+    {
+      "file": "parents/docs/AUTOMATIC_TEST_DEPLOYMENT.md",
+      "bytes": 9201,
+      "sha256": "9bcad58f6c0c1d7b015bcdc881770a45d16ad2ff6f69628d4ef3cc9c59f118fe"
+    },
+    {
+      "file": "parents/docs/DATABASE_RELEASE_BIBLE.md",
+      "bytes": 18267,
+      "sha256": "968ab48d5b88181e6eb12f067309dd41162d3a2d816b47fb076e2bb4b87a7f5b"
+    },
+    {
+      "file": "parents/docs/healthroster-build/install1-rehearsal/VERIFIER_SAFETY_REVIEW.json",
+      "bytes": 4659467,
+      "sha256": "5a5f4d0fe89c9b4ac9007af2e916174e1d96d786e3103cceaf08c00497bd1c50"
+    },
+    {
+      "file": "parents/docs/healthroster-build/rehearsals/13102026/prepare_full_upgrade_rehearsal.mjs",
+      "bytes": 7159,
+      "sha256": "fe9675a02ed5dec59c201edee756b90a090e23561fb8c1fd137b7e1ba3736fae"
+    },
+    {
+      "file": "parents/docs/healthroster-build/rehearsals/13102026/run_full_upgrade_rehearsal.mjs",
+      "bytes": 22537,
+      "sha256": "471fb4f6df983ff592e2ce3e19618c8051cd46607821fdb80b7a7eb8b1c4c76a"
+    },
+    {
+      "file": "parents/docs/healthroster-build/TEST_INSTALL_PLAN.md",
+      "bytes": 64734,
+      "sha256": "d16b91ada8e2bccf6cdc911132076961f4985a1ed098fc483af2b89e44490c79"
+    },
+    {
+      "file": "parents/scripts/automatic-test-release-policy.mjs",
+      "bytes": 4880,
+      "sha256": "bbb756eece39a47eabc647a6b210a8c3389d66c88f884bf57be29e7367c062b8"
+    },
+    {
+      "file": "parents/scripts/cloudtms-db-release-lib.mjs",
+      "bytes": 32174,
+      "sha256": "22b3a5cd4ab5ca93f59f891c03187a6f5214e6f4bb99381e203700c52b413bbf"
+    },
+    {
+      "file": "parents/scripts/cloudtms-managed-release-sql.mjs",
+      "bytes": 7853,
+      "sha256": "ff391fccf7f690d4d476e935870d740667e4dfd92b972bfd5d7d80b1b3bb912b"
+    },
+    {
+      "file": "parents/scripts/healthroster-f5-post-verified-gate.mjs",
+      "bytes": 8425,
+      "sha256": "dfd1454e057c27e6693a012aef107382f9bc0479322fd0e3ae09b35bb19e99a3"
+    },
+    {
+      "file": "parents/scripts/healthroster-f5-prepublication.mjs",
+      "bytes": 5695,
+      "sha256": "be4bfe3145cf1e873f566f537262ee3f9601e053ad7d070f447c0dce81bf6526"
+    },
+    {
+      "file": "parents/scripts/healthroster-install1-archive-preflight.mjs",
+      "bytes": 7615,
+      "sha256": "5abc319f4ad2eb255f0117ebd43d211630cd7c4abf074a8fdf7c57d6ad95c55b"
+    },
+    {
+      "file": "parents/scripts/healthroster-install1-full-rehearsal.mjs",
+      "bytes": 48330,
+      "sha256": "31acd390acf2ef6dbbd062fbb157feea66f9b5d328440414e67b2bfd4a3f78ab"
+    },
+    {
+      "file": "parents/scripts/healthroster-install1-native-coordinator.mjs",
+      "bytes": 21149,
+      "sha256": "ac028aa921040ca98b82eeec8f03e9cb06b4d2e23aa345a6295c3cdb5df8a63c"
+    },
+    {
+      "file": "parents/scripts/healthroster-install1-verifier-census.mjs",
+      "bytes": 11479,
+      "sha256": "742635a7ed15dfb190d77dda9063fd49315ec3390f573982bc461bfd8f1e862c"
+    },
+    {
+      "file": "parents/scripts/healthroster-install2-installed-source.mjs",
+      "bytes": 4883,
+      "sha256": "e4bd2904103c01446bc65e8c7590a86b20964a7ed4e3ecce2fe0970d6c98ecdc"
+    },
+    {
+      "file": "parents/scripts/healthroster-install2-native-gate.mjs",
+      "bytes": 7883,
+      "sha256": "ec3c2eca5b648fdf2996dbeb3c116e39ef37fdc54d1e896cfb4489682cbad9be"
+    },
+    {
+      "file": "parents/scripts/healthroster-install2-source-relationship.mjs",
+      "bytes": 5063,
+      "sha256": "00b393c823d7390f1b5a35ffe078b6ccc0b330fd7a4b55ea39ad1090ff336466"
+    },
+    {
+      "file": "parents/scripts/healthroster-live-test-restoration.mjs",
+      "bytes": 15050,
+      "sha256": "a91c1bf04f868ff372b20fb6beca239a7807fe9cc92c0c2682afffcd79554adc"
+    },
+    {
+      "file": "parents/scripts/healthroster-receipt-journal.mjs",
+      "bytes": 1124,
+      "sha256": "644035d62b09e97e5c8a219e93be4728a394b8a4d287d32a2f7c3c37a5edeb29"
+    },
+    {
+      "file": "parents/scripts/healthroster-rehearsal-resource-guard.mjs",
+      "bytes": 7246,
+      "sha256": "55160d28cd55fd5e710f5dc4d48d0d43769af9986d16a2c7c29dbc134e3e5433"
+    },
+    {
+      "file": "parents/scripts/healthroster-rehearsal-stream-observer.mjs",
+      "bytes": 3269,
+      "sha256": "d78c4742e831dbe38870a2df202ab54808028ec4fa7f399288c511cb3e494fa6"
+    },
+    {
+      "file": "parents/scripts/healthroster-rehearsal-turn.mjs",
+      "bytes": 12827,
+      "sha256": "2a4078b744545a4b4c15a9842947e222ffae75dcadf9b087f49b3c8a30cd36aa"
+    },
+    {
+      "file": "parents/scripts/healthroster-source-check-environment.mjs",
+      "bytes": 960,
+      "sha256": "d99153efa35d00c4b85943982785024bcd4dbec97d982e5bda7dc12f676d7a9f"
+    },
+    {
+      "file": "parents/scripts/healthroster-turn-control.mjs",
+      "bytes": 9580,
+      "sha256": "ae6aa38307faf3fdc7a1c1a0fe20ff6aab3589c420c5bfd5642566e3a0c23ad8"
+    },
+    {
+      "file": "parents/scripts/request-test-release.mjs",
+      "bytes": 12121,
+      "sha256": "0758ef6a10a34b1b9884ffb05c4d4c8fcb564f9718154b75c710cbd61fc51693"
+    },
+    {
+      "file": "parents/supabase/release/current-contract.json",
+      "bytes": 7865503,
+      "sha256": "da0e0870442c151534c04d108757a0d76a812879aafae71f01486c7077ce674a"
+    },
+    {
+      "file": "parents/supabase/release/current-release.json",
+      "bytes": 36808,
+      "sha256": "b9b045c6038c46238a8a47945bb201e336ffb8dc0afdee86f9524ece9d29cbe2"
+    },
+    {
+      "file": "parents/supabase/release/export_contract.sql",
+      "bytes": 14978,
+      "sha256": "05a904bd4f7739409b28e0459b9f68d7c54a5e51796aefbe2829b370ce1dfe43"
+    },
+    {
+      "file": "PARENTS.json",
+      "bytes": 12783,
+      "sha256": "88fc89643020892fb035fab84b2542470cd95acacd56b3d31de5f5163f287e7f"
+    },
+    {
+      "file": "payload/scripts/healthroster-install2-archive-preflight.mjs",
+      "bytes": 8427,
+      "sha256": "867224c19cea5ed12ad9a402a88aefa9c9df674cd6eb6c9cbae149a807e4168e"
+    },
+    {
+      "file": "payload/scripts/healthroster-install2-native-coordinator.mjs",
+      "bytes": 28669,
+      "sha256": "daf357f994e2afe782f7ee8e663e2027d0dfe02765dce0839a2f8a0c8e0172d3"
+    },
+    {
+      "file": "payload/tests/healthroster-install2-native-coordinator.test.mjs",
+      "bytes": 7642,
+      "sha256": "dfcf797c9b1c972b98e0a7edcb47b6876926dac212615de06f056e7883703d6e"
+    },
+    {
+      "file": "README.md",
+      "bytes": 10110,
+      "sha256": "4c6c4b93c878a97aec904df1a3ab4cd68d6f6636490d83640e3949e8a829118d"
+    },
+    {
+      "file": "render-predecessor.mjs",
+      "bytes": 1148,
+      "sha256": "993984497c1e816afe1ebd264aa42f405a5d6ef3e47cddac6701776023da9ff5"
+    },
+    {
+      "file": "REPLAY_OUTPUTS.json",
+      "bytes": 5760,
+      "sha256": "03f5bf9bbbcefe7889f4667138e3a1b33b6d48502113ed13ab40e69dd52f7a9d"
+    },
+    {
+      "file": "RESULTS.json",
+      "bytes": 965,
+      "sha256": "126d9cf7b64ece6a1c39d82158293d459b3e5703bb5d8637fddf8a89189a7052"
+    },
+    {
+      "file": "SELECTION.json",
+      "bytes": 806,
+      "sha256": "1e1e76510f830e5417817e2ca5865b0767c2f5cfc39731e9b58db365b4d9122d"
+    },
+    {
+      "file": "test.mjs",
+      "bytes": 1784,
+      "sha256": "284517fd6fe7d713bfad7147f715676ce14108d35a414baaad5004937cdce995"
+    },
+    {
+      "file": "verify.py",
+      "bytes": 2958,
+      "sha256": "64186e62ba792ac12486b8a2fc00c7fb842baba26d01819f3ffa884a35f93d30"
+    }
+  ]
+}

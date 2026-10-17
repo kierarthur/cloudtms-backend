@@ -1,0 +1,22 @@
+{
+  "version": "QT_R7_C_READER_SOURCE_COST_REVIEW_V1",
+  "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+  "parentCommit": "5cf0a18f161327d9513c6b107761aa437997c10b",
+  "observedHead": "fcbe8efd3550c8f5fbbb953dea8f0f93886c06b0",
+  "savedIndexHeadHistorical": true,
+  "rows": [
+    {"file":"scripts/healthroster-install1-full-rehearsal.mjs","bytes":48330,"sha256":"31acd390acf2ef6dbbd062fbb157feea66f9b5d328440414e67b2bfd4a3f78ab"},
+    {"file":"scripts/healthroster-live-test-restoration.mjs","bytes":15050,"sha256":"a91c1bf04f868ff372b20fb6beca239a7807fe9cc92c0c2682afffcd79554adc"},
+    {"file":"docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/batch-source.mjs","bytes":9947,"sha256":"d8ae4bd26c310f610a1549edbe4baf00dd9b0bcb0fb63fdb6db5f907e80bee4d"},
+    {"file":"docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/component-source.mjs","bytes":4277,"sha256":"fca06c65bf1040d3e583078cedc0ab534e8081d51be93db6ce6ea85f8b8c4872"},
+    {"file":"docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/fixed-metadata-reader.mjs","bytes":20596,"sha256":"7c2810461e8b3b671b7ac2e5e553487258a3cc36e3c196ff8dccdde79da5335b"},
+    {"file":"docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/hold-case.mjs","bytes":8180,"sha256":"01522035ba4a2fc3bc505ddd6a58c9418ce684ab296b0ff6eeab780af2c37501"},
+    {"file":"docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/source.mjs","bytes":14702,"sha256":"24449c3b195c6b552547536c0ce93c3ce88e3059b105724d014d33d2a0468313"},
+    {"file":"docs/healthroster-build/v6-owner-delivery-20261016/QT_R7_ACTUAL_NATIVE_AND_DEADLINE_HOLD_20261017/HOLD.json","bytes":2344,"sha256":"f2b1ced78cb037c57dabf0758b15bc1ba3744af5643adfd46377ce014c502feb"}
+  ],
+  "runtimeDelta": 0,
+  "nativeCalls": 0,
+  "provenNewRedundancies": 0,
+  "newPerformanceCandidate": "NOT_JUSTIFIED",
+  "costAttribution": "INSUFFICIENT_PER_COMPONENT_MEASUREMENT"
+}

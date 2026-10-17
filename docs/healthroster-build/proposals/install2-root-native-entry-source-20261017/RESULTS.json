@@ -1,0 +1,21 @@
+{
+  "status": "ADDITIVE_INSTALL2_ROOT_ENTRY_SOURCE_READY_FOR_PEER",
+  "completeParents": 31,
+  "wholeOriginalEntryInverses": 2,
+  "additiveTargets": 3,
+  "sourceOnlyTests": 39,
+  "syntaxTargets": 3,
+  "PG17WholeCanonicalExporterASTEqual": true,
+  "originalSixteenExclusionsUnchanged": true,
+  "F5": "REQUIRED_POST_VERIFIED_NOT_PREINSTALL",
+  "newTargetAbsenceObserved": true,
+  "protectedSharedOwnersChanged": 0,
+  "concurrentHeadRefusal": "Observed one genuine HEAD-movement refusal; unchanged guard retained and a fresh complete same-head replay passed.",
+  "sourcePreflight": "NOT_RUN",
+  "generatedContract": "NOT_GENERATED",
+  "currentVerifierCensusReview": "REQUIRED_NOT_CREATED",
+  "native": "NOT_RUN",
+  "auth": "NOT_RUN",
+  "publication": "NOT_RUN",
+  "notes": "The existing current full API/gates are reused; neither old13Oct launcher nor Install1 entry was executed. Root QT R7 overallHOLD is not qualified by this source packet."
+}

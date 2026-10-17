@@ -1,0 +1,118 @@
+{
+  "private.bpay_next_source_decision_native_status_v1": [
+    {
+      "signature": "private.weekly_source_pay_decision_native_normal_gate_v1(uuid,uuid,uuid,text)",
+      "root": "supabase/repeatable/17102026_0722_weekly_source_current_read_health_v1.sql",
+      "statementSha256": "c9a5ddba3972f3eccb6900cbb07582d50d0640f3afa05932ed942c333490b058",
+      "edge": "DIRECT_SYNTAX"
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_read_access_v1(uuid,uuid,uuid)",
+      "root": "supabase/repeatable/17102026_0722_weekly_source_current_read_health_v1.sql",
+      "statementSha256": "c47a73e2f9c06175593d486d07e7e01b5986cf41c11238d9587ff23f484b5dfd",
+      "edge": "DIRECT_SYNTAX"
+    }
+  ],
+  "private.bpay_next_source_nhsp_magnitude_v1": [
+    {
+      "signature": "private.weekly_source_nhsp_negative_population_v1(uuid,uuid,uuid,uuid)",
+      "root": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health_v1.sql",
+      "statementSha256": "16a22d913e7dbea98a068e5ac9b7dbcccf4d07aa7eafc3b8ca89d920edf28d2a",
+      "edge": "DIRECT_SYNTAX"
+    },
+    {
+      "signature": "private.weekly_source_nhsp_selected_pay_origin_v1(uuid,uuid,uuid)",
+      "root": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health_v1.sql",
+      "statementSha256": "ac364fafd968b493dece36e743a77d11bf3c14f5cf2038fe30b4b6cafbb57554",
+      "edge": "DIRECT_SYNTAX"
+    }
+  ],
+  "private.bpay_next_source_pay_decision_acceptance_begin_v1": [
+    {
+      "signature": "public.weekly_source_pay_decision_accept_v1(jsonb)",
+      "root": "supabase/repeatable/17102026_0722_weekly_source_current_read_health_v1.sql",
+      "statementSha256": "cbd316fbbf1dd62c70214586dddced6eb0e9aeb483a384a64754114f1590da38",
+      "edge": "DIRECT_SYNTAX"
+    }
+  ],
+  "private.bpay_next_source_pay_decision_cut_v1": [
+    {
+      "signature": "private.weekly_source_pay_decision_assembly_assert_v1(uuid,uuid)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "statementSha256": "a768a4f91b1fca2617baf60f69324b97d1efe406cf478f57ebecb4daf69e92ec",
+      "edge": "DIRECT_SYNTAX"
+    },
+    {
+      "signature": "private.weekly_source_pay_decision_confirmation_context_v1(jsonb,text)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "statementSha256": "47bd00318d7855aeb49bc83cf4bfe0b2b4dc67371287196def6243c7ddb24827",
+      "edge": "DIRECT_SYNTAX"
+    },
+    {
+      "signature": "public.weekly_source_pay_decision_accept_v1(jsonb)",
+      "root": "supabase/repeatable/17102026_0722_weekly_source_current_read_health_v1.sql",
+      "statementSha256": "cbd316fbbf1dd62c70214586dddced6eb0e9aeb483a384a64754114f1590da38",
+      "edge": "DIRECT_SYNTAX"
+    },
+    {
+      "signature": "public.weekly_source_pay_decision_preview_begin_v1(jsonb)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "statementSha256": "bd58756cf2b99f8d292f203817a01c1982e390fe0d5b1ffe5e72c8dbd34060b1",
+      "edge": "DIRECT_SYNTAX"
+    },
+    {
+      "signature": "public.weekly_source_pay_decision_unprotect_prepare_v1(jsonb)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "statementSha256": "c76bdb4048b1f748d90ef64df6749b7a01de2e4ab9acabd95f677d2c37c6d262",
+      "edge": "DIRECT_SYNTAX"
+    },
+    {
+      "signature": "public.weekly_source_pay_decision_unprotect_quote_context_v1(jsonb)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "statementSha256": "075dcced41d315978ed0dc671254176be35e41bda86ec90a18efaa8e1a416a64",
+      "edge": "DIRECT_SYNTAX"
+    },
+    {
+      "signature": "public.weekly_source_pay_decision_unprotect_review_context_v1(jsonb)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "statementSha256": "4d0f407fb2cafdc6bb738b62885f25fc0ac624dc290fc252931750a4c7fe065f",
+      "edge": "DIRECT_SYNTAX"
+    },
+    {
+      "signature": "public.weekly_source_pay_decision_unprotect_run_prepare_v1(jsonb)",
+      "root": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority_v1.sql",
+      "statementSha256": "146d2f84fd7337da4be3c608203b5d4f5e82685616709c172fb08108ec7353c2",
+      "edge": "DIRECT_SYNTAX"
+    }
+  ],
+  "private.bpay_next_source_pay_decision_publish_v1": [
+    {
+      "signature": "public.weekly_source_pay_decision_accept_v1(jsonb)",
+      "root": "supabase/repeatable/17102026_0722_weekly_source_current_read_health_v1.sql",
+      "statementSha256": "cbd316fbbf1dd62c70214586dddced6eb0e9aeb483a384a64754114f1590da38",
+      "edge": "DIRECT_SYNTAX"
+    }
+  ],
+  "private.bpay_next_source_pay_decision_stage_v1": [
+    {
+      "signature": "public.weekly_source_pay_decision_accept_v1(jsonb)",
+      "root": "supabase/repeatable/17102026_0722_weekly_source_current_read_health_v1.sql",
+      "statementSha256": "cbd316fbbf1dd62c70214586dddced6eb0e9aeb483a384a64754114f1590da38",
+      "edge": "DIRECT_SYNTAX"
+    }
+  ],
+  "private.weekly_source_check_only_query_groups_v1": [
+    {
+      "signature": "public.weekly_source_workspace_scopes_v1(jsonb)",
+      "root": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health_v1.sql",
+      "statementSha256": "ef29865225c8a487e4ae5e082fa6ce7afcc12d11e823c88da58a83b5e29a5fac",
+      "edge": "DIRECT_SYNTAX"
+    },
+    {
+      "signature": "public.weekly_source_office_workspace_v1(jsonb)",
+      "root": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health_v1.sql",
+      "statementSha256": "2390327e99324e44c0de664a7431a806a2318ef75438889b593e3d71a96d1688",
+      "edge": "DIRECT_SYNTAX"
+    }
+  ]
+}

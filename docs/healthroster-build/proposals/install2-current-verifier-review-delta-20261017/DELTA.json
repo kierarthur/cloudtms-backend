@@ -1,0 +1,4574 @@
+{
+  "summary": {
+    "version": "INSTALL2_CURRENT_REVIEW_DELTA_SOURCE_ONLY_V1",
+    "sourceCounts": {
+      "migrations": 427,
+      "repeatables": 1098,
+      "verifiers": 183
+    },
+    "baselineCounts": {
+      "migrations": 389,
+      "repeatables": 1019,
+      "verifiers": 158
+    },
+    "added": 25,
+    "removed": [],
+    "unchanged": 53,
+    "changed": 105,
+    "changeKinds": {
+      "effectGraphHash": 102,
+      "sourceSqlHash,closureHash,effectGraphHash": 3
+    },
+    "originalExcluded": [
+      "tests/29082026_0117_candidate_daily_projection_expired_lease_recovery_runtime_verification.sql",
+      "tests/31082026_1437_banking_pay_candidate_group_pagination_runtime_verification.sql",
+      "tests/31082026_1907_banking_pay_candidate_group_display_only_selection_tuple_runtime_verification.sql",
+      "tests/01092026_1511_banking_pay_signed_recovery_draft_runtime_verification.sql",
+      "tests/02092026_2392_banking_pay_workbench_settled_certificate_v8_runtime_verification.sql",
+      "supabase/verification/06092026_2358_candidate_advanced_expense_policy_verification.sql",
+      "supabase/verification/15092026_1534_weekly_source_query_delivery_v1.sql",
+      "supabase/verification/15092026_1534_weekly_source_ordinary_pay_projection_v1.sql",
+      "supabase/verification/15092026_1534_weekly_source_correct_final_source_v1.sql",
+      "supabase/verification/15092026_1534_weekly_source_invoice_admission_v1.sql",
+      "supabase/verification/15092026_1534_weekly_source_read_projections_v1.sql",
+      "supabase/verification/02092026_1833_weekly_source_invoice_issue_validator_v1.sql",
+      "supabase/verification/17092026_0700_weekly_source_pending_entitlement_release_v1.sql",
+      "supabase/verification/17092026_1100_weekly_source_candidate_view_producer_v1.sql",
+      "supabase/verification/17092026_1200_weekly_source_audit_and_export_v1.sql",
+      "supabase/verification/19092026_1645_weekly_source_completed_pack_copy_v1.sql"
+    ]
+  },
+  "added": [
+    {
+      "index": 158,
+      "file": "supabase/verification/13102026_1206_weekly_source_rule_sets_verification.sql",
+      "sourceSqlHash": "d7affa8fd21d5c24c3efe4b302a3caea7d847743fb7c6d1a277837e0ed358b9c",
+      "closureHash": "3a4e3679010022ca2d1537f8136abedddc3d6139dd520310d48fb3567be856fd",
+      "bytes": 32400,
+      "statements": 19,
+      "envelopes": [
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "calls": [
+        "pg_temp.f1_assert",
+        "pg_temp.f1_refuses",
+        "private._weekly_source_effective_policy_v1",
+        "private._weekly_source_settings_client_shape_v1",
+        "private.weekly_source_agency_invoice_check_only_v1",
+        "private.weekly_source_effective_rule_set_v1",
+        "private.weekly_source_has_self_bill_rules_v1",
+        "private.weekly_source_is_import_authoritative_v1",
+        "private.weekly_source_signed_check_only_v1",
+        "public.weekly_source_group_rule_assign_atomic_v1",
+        "public.weekly_source_group_rule_feature_set_atomic_v1",
+        "public.weekly_source_rule_set_version_save_atomic_v1",
+        "public.weekly_source_rule_sets_get_v1"
+      ],
+      "writes": [
+        "public.candidates",
+        "public.client_settings",
+        "public.clients",
+        "public.contracts",
+        "public.timesheets",
+        "public.timesheets_financials",
+        "public.tms_users",
+        "public.weekly_source_client_policies",
+        "public.weekly_source_cycles",
+        "public.weekly_source_final_revisions",
+        "public.weekly_source_group_clients",
+        "public.weekly_source_groups",
+        "public.weekly_source_uploads"
+      ],
+      "dynamicExecute": true,
+      "networkCalls": [],
+      "sequenceCalls": false,
+      "unknownCalls": [
+        "extensions.digest",
+        "private.bpay_next_source_decision_native_status_v1",
+        "private.bpay_next_source_nhsp_magnitude_v1"
+      ],
+      "effectGraphHash": "537d43dbd040f743ba875b3184bd4dc3449e697be66110f85925bf19ed8f46c2",
+      "applyingReferences": false,
+      "prohibitedCandidates": []
+    },
+    {
+      "index": 159,
+      "file": "supabase/verification/13102026_1217_healthroster_issued_signed_query_v1.sql",
+      "sourceSqlHash": "54c23241ecb76bb4d6e7635b1ba4a14eab388557bed450ae561042273737a173",
+      "closureHash": "fa7c0227825a0b01bfd13d58b2ce70807a44f0c7e7b64c96772293c540c529a1",
+      "bytes": 1508,
+      "statements": 3,
+      "envelopes": [
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "calls": [
+        "private.weekly_source_issued_signed_query_evidence_v1",
+        "public._import_review_query_evidence_core_v1"
+      ],
+      "writes": [],
+      "dynamicExecute": false,
+      "networkCalls": [],
+      "sequenceCalls": false,
+      "unknownCalls": [
+        "extensions.digest"
+      ],
+      "effectGraphHash": "af8786798a7fb2b9e8bb79ab0e1b44e3d76c9c0aef772249a0ce7828a91ea1d3",
+      "applyingReferences": false,
+      "prohibitedCandidates": []
+    },
+    {
+      "index": 160,
+      "file": "supabase/verification/13102026_1224_healthroster_configured_upload_profile_v1.sql",
+      "sourceSqlHash": "c71b4bf1ef670c45ca5d7d15dcb3576725d2e5a57889dfedc1d9ec7f17a1a86f",
+      "closureHash": "74324d82fddbe031d5263f76c9a03f03dbaea701804dd31395cd1d3931d9a051",
+      "bytes": 1637,
+      "statements": 3,
+      "envelopes": [
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "calls": [
+        "private.weekly_source_configured_upload_profile_v1"
+      ],
+      "writes": [],
+      "dynamicExecute": false,
+      "networkCalls": [],
+      "sequenceCalls": false,
+      "unknownCalls": [
+        "extensions.digest"
+      ],
+      "effectGraphHash": "9cb35aaade382d93f47ced11fe5108ed4fb990452f5e251cd84606b927f06142",
+      "applyingReferences": false,
+      "prohibitedCandidates": []
+    },
+    {
+      "index": 161,
+      "file": "supabase/verification/13102026_1228_weekly_source_final_value_fingerprint_vectors.sql",
+      "sourceSqlHash": "3677aec9cf1c9ed279788361de8c8b1ab517ff9390295799747c5f5a8fe53325",
+      "closureHash": "0f2ed4c112058c6eaf0df85c6e2ec6454d4cf1604867318c7be2059ba9aca991",
+      "bytes": 5393,
+      "statements": 3,
+      "envelopes": [
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "calls": [
+        "private.weekly_source_authority_subset_v1",
+        "private.weekly_source_final_state_fingerprint_v1",
+        "private.weekly_source_invoice_economics_fingerprint_v1"
+      ],
+      "writes": [],
+      "dynamicExecute": false,
+      "networkCalls": [],
+      "sequenceCalls": false,
+      "unknownCalls": [
+        "extensions.digest"
+      ],
+      "effectGraphHash": "23472306cd3f1fb62a3a6b5ea790188666c55d08a14dd7c5f73c69c8a6a52eb3",
+      "applyingReferences": false,
+      "prohibitedCandidates": []
+    },
+    {
+      "index": 162,
+      "file": "supabase/verification/13102026_1412_weekly_source_timing_coverage_group_guards_verification.sql",
+      "sourceSqlHash": "39004cd2046ac92cf3eeb8cdcfbba3f6c0ffc5b1dd21dfe54f8f3c078a390324",
+      "closureHash": "c5ec5ff5802bb10512041b8690ba59c3ee826916963d404f869cdc92b73f08e7",
+      "bytes": 7249,
+      "statements": 2,
+      "envelopes": [],
+      "calls": [
+        "private.weekly_source_final_upload_facts_v1"
+      ],
+      "writes": [],
+      "dynamicExecute": false,
+      "networkCalls": [],
+      "sequenceCalls": false,
+      "unknownCalls": [],
+      "effectGraphHash": "5bbd6ddc714384b5df130b51e0009a67bc49fbbf0c759d9d80f555d22eb4dede",
+      "applyingReferences": false,
+      "prohibitedCandidates": []
+    },
+    {
+      "index": 163,
+      "file": "supabase/verification/13102026_1438_weekly_source_protection_queries_v1.sql",
+      "sourceSqlHash": "0c5d54641108c02201e0206a8aec89cdc74b020ca4eb507e3c713a1b26b9f904",
+      "closureHash": "7e0767ec809ea012731d6ce4249e3485ac4097050f59498136460d2819216f6f",
+      "bytes": 7509,
+      "statements": 1,
+      "envelopes": [],
+      "calls": [
+        "private.weekly_source_protected_wait_witness_v1",
+        "public.weekly_source_automatic_reconcile_atomic_v1",
+        "public.weekly_source_protect_all_signed_atomic_v1"
+      ],
+      "writes": [],
+      "dynamicExecute": false,
+      "networkCalls": [],
+      "sequenceCalls": false,
+      "unknownCalls": [
+        "extensions.digest",
+        "private.bpay_next_source_decision_native_status_v1",
+        "private.bpay_next_source_nhsp_magnitude_v1"
+      ],
+      "effectGraphHash": "f4917478c69d0c824b9dcae1111ae9e9d32d70b570396825d697ca3846933d6f",
+      "applyingReferences": false,
+      "prohibitedCandidates": []
+    },
+    {
+      "index": 164,
+      "file": "supabase/verification/13102026_1440_weekly_source_invoice_money_staging_hold_verification.sql",
+      "sourceSqlHash": "f59d1d21587dfa604d95a97b2bb2f2d7af2642feb55c267686ab1bb9b948c3b1",
+      "closureHash": "cf1fa952ecc810432266114091e4b8e4dbc1b392b905fe94fc9b389c7d91b428",
+      "bytes": 21540,
+      "statements": 24,
+      "envelopes": [
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "calls": [
+        "pg_temp.f5_assert",
+        "pg_temp.f5_economics",
+        "pg_temp.f5_native",
+        "pg_temp.f5_native_request",
+        "pg_temp.f5_refuses",
+        "private.weekly_source_effective_rule_set_v1",
+        "private.weekly_source_rule_qualification_authorization_v1",
+        "private.weekly_source_rule_qualification_scope_assert_v1",
+        "public.weekly_source_group_rule_assign_atomic_v1",
+        "public.weekly_source_group_rule_feature_set_atomic_v1",
+        "public.weekly_source_rule_set_version_save_atomic_v1"
+      ],
+      "writes": [
+        "public.client_settings",
+        "public.clients",
+        "public.tms_users",
+        "public.weekly_source_client_policies",
+        "public.weekly_source_cycles",
+        "public.weekly_source_group_clients",
+        "public.weekly_source_groups"
+      ],
+      "dynamicExecute": true,
+      "networkCalls": [],
+      "sequenceCalls": false,
+      "unknownCalls": [
+        "extensions.digest",
+        "private.bpay_next_source_decision_native_status_v1",
+        "private.bpay_next_source_nhsp_magnitude_v1"
+      ],
+      "effectGraphHash": "66d7fcd03ededfa16ec9a2809efc8270ebc91b7603b56895fa5c48cf8934bd6e",
+      "applyingReferences": false,
+      "prohibitedCandidates": []
+    },
+    {
+      "index": 165,
+      "file": "supabase/verification/13102026_1441_weekly_source_invoice_money_owner_acl_verification.sql",
+      "sourceSqlHash": "30be4ad2865364704f972ce3442062ba257440ae7cbe6eeae72f1884390aa21a",
+      "closureHash": "9dbe78ee801cee5c21993cdfaf80c3083882effb6b80186a086ac9ac03954ca2",
+      "bytes": 7619,
+      "statements": 4,
+      "envelopes": [
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "calls": [
+        "pg_temp.f5_owner_assert",
+        "private._weekly_source_acl_table_contract_v1",
+        "private.weekly_source_billing_movement_hash_v1",
+        "private.weekly_source_frozen_rule_values_v1",
+        "private.weekly_source_invoice_only_vector_v1",
+        "private.weekly_source_sha256_jsonb_v1",
+        "private.weekly_source_shift_on_self_bill_v1"
+      ],
+      "writes": [],
+      "dynamicExecute": false,
+      "networkCalls": [],
+      "sequenceCalls": false,
+      "unknownCalls": [
+        "extensions.digest"
+      ],
+      "effectGraphHash": "ea8f28b68650c4e396740eed81587c0fa8361fe5b2b71d938c53d00ba2111645",
+      "applyingReferences": false,
+      "prohibitedCandidates": []
+    },
+    {
+      "index": 166,
+      "file": "supabase/verification/13102026_1544_weekly_source_self_bill_report_verification.sql",
+      "sourceSqlHash": "988b0488a96639080167cdebc8f9a33551066fcc36b222e656c1cb724d28ceca",
+      "closureHash": "970a8aa0e5004b1ff10e0823e7bb12974a6826d4e3e6475f768a65cb87c9db70",
+      "bytes": 6864,
+      "statements": 4,
+      "envelopes": [
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "calls": [
+        "extensions.digest",
+        "private.weekly_source_self_bill_report_manifest_v1",
+        "private.weekly_source_self_bill_report_row_dto_v1",
+        "private.weekly_source_self_bill_report_row_hash_v1"
+      ],
+      "writes": [],
+      "dynamicExecute": false,
+      "networkCalls": [],
+      "sequenceCalls": false,
+      "unknownCalls": [
+        "extensions.digest"
+      ],
+      "effectGraphHash": "74262a9e0aa1e3c347c22e4b275cde28d8305f27742c5602298a4e13dc421c07",
+      "applyingReferences": false,
+      "prohibitedCandidates": []
+    },
+    {
+      "index": 167,
+      "file": "supabase/verification/13102026_1562_weekly_source_magnit_contract_price_verification.sql",
+      "sourceSqlHash": "9831b5fb431e8f7078d2b7aad3d898fc68b7b51b3fdac40449299e7aa9e2112b",
+      "closureHash": "8d1f9312849de4a5c79c17bf165ec1cb41d4a0064839bb033cdb51e9a26ac5a8",
+      "bytes": 3601,
+      "statements": 3,
+      "envelopes": [
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "calls": [
+        "private.weekly_source_magnit_bucket_assert_v1",
+        "private.weekly_source_magnit_contract_price_assert_v1"
+      ],
+      "writes": [],
+      "dynamicExecute": false,
+      "networkCalls": [],
+      "sequenceCalls": false,
+      "unknownCalls": [],
+      "effectGraphHash": "d0beefdb345f7c2a6241097a7b092ede43c1fbc4f75d5e7ffdf24585f58d6888",
+      "applyingReferences": false,
+      "prohibitedCandidates": []
+    },
+    {
+      "index": 168,
+      "file": "supabase/verification/13102026_1651_healthroster_correction_request_read_authority_verification.sql",
+      "sourceSqlHash": "becbe5bd4d8c8e182a6ee40939fc0cb4210e1e875904e4cc7e8e4176c9717bc4",
+      "closureHash": "393270229cdbb875ba778ed1837b4a6a385bdc17d9eb2e8f633db5b80625ad4d",
+      "bytes": 4443,
+      "statements": 4,
+      "envelopes": [
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "calls": [
+        "private.timesheet_correction_native_original_reversal_v1",
+        "private.timesheet_correction_reversal_assert_v1",
+        "public.timesheet_correction_request_authority_v1"
+      ],
+      "writes": [],
+      "dynamicExecute": false,
+      "networkCalls": [],
+      "sequenceCalls": false,
+      "unknownCalls": [],
+      "effectGraphHash": "8ed292f0a20f16131ef2930ea9c51d1a69e4b7629be5f511152406f7958e13f1",
+      "applyingReferences": false,
+      "prohibitedCandidates": []
+    },
+    {
+      "index": 169,
+      "file": "supabase/verification/13102026_1701_weekly_source_invoice_window_receipt_v1.sql",
+      "sourceSqlHash": "b0fb823e090fe21fcc62e5eee58e1da11b119cfb309ab5b6066d7c55c6ab3ef4",
+      "closureHash": "b696d3f3a68d72c3bed30e99509b7ac5b0e31c433919603324a7f1914b16fa35",
+      "bytes": 4388,
+      "statements": 1,
+      "envelopes": [],
+      "calls": [
+        "private.weekly_source_invoice_only_vector_v1",
+        "private.weekly_source_invoice_vat_target_pence_v1"
+      ],
+      "writes": [],
+      "dynamicExecute": false,
+      "networkCalls": [],
+      "sequenceCalls": false,
+      "unknownCalls": [],
+      "effectGraphHash": "182e5992e47f7b7d4392c16c4b50b1a0fd65bd977ecf1400f29036abf9237b2e",
+      "applyingReferences": false,
+      "prohibitedCandidates": []
+    },
+    {
+      "index": 170,
+      "file": "supabase/verification/13102026_2111_healthroster_report_native_fin_worker_v1.sql",
+      "sourceSqlHash": "7094abe1f42502222c77870d8fc955c483cc6c474aa780ea7829e395cb20815d",
+      "closureHash": "f8ccea0d7ce172e8af1280d578eb6bc4699c53e9db921b67e5885aeffc8a077d",
+      "bytes": 2308,
+      "statements": 3,
+      "envelopes": [
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "calls": [
+        "private.weekly_source_self_bill_report_pay_authority_v1",
+        "private.weekly_source_self_bill_report_pay_witness_v1"
+      ],
+      "writes": [],
+      "dynamicExecute": false,
+      "networkCalls": [],
+      "sequenceCalls": false,
+      "unknownCalls": [
+        "extensions.digest"
+      ],
+      "effectGraphHash": "d28ef503e50684f5eadad65a392cffc7c5c95e2f914b35bd3371e423b595015c",
+      "applyingReferences": false,
+      "prohibitedCandidates": []
+    },
+    {
+      "index": 171,
+      "file": "supabase/verification/13102026_2206_weekly_source_automatic_native_delta_v1.sql",
+      "sourceSqlHash": "7a04174cd9d456ddc5161e8fd024f4ede7e8755a5b142e0ac49ca4c4b5ad14bb",
+      "closureHash": "68420cadb5827e134af3a6e98fd0cfd86890f69e17d7f781ed90e6be93f1a3fe",
+      "bytes": 7115,
+      "statements": 4,
+      "envelopes": [
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "calls": [
+        "private.weekly_source_automatic_reconcile_capability_assert_v1",
+        "private.weekly_source_automatic_reconcile_delta_assert_v1",
+        "private.weekly_source_bulk_source_cas_assert_v1",
+        "private.weekly_source_staged_publication_context_v1"
+      ],
+      "writes": [],
+      "dynamicExecute": false,
+      "networkCalls": [],
+      "sequenceCalls": false,
+      "unknownCalls": [
+        "extensions.digest"
+      ],
+      "effectGraphHash": "6109c78a4e3a6de68631027e65c1cabad6a34dd8f2bce562c533b8da5c57960c",
+      "applyingReferences": false,
+      "prohibitedCandidates": []
+    },
+    {
+      "index": 172,
+      "file": "supabase/verification/14102026_0541_healthroster_report_current_native_composition_declarations.sql",
+      "sourceSqlHash": "cc066e8e33862c7bd2693792d829fc61c4f6093c21cf048d72908734de4dc54a",
+      "closureHash": "887fac337f3a68e8de190a83757f5aea6e7f2954a03d9c388a304e7dd03844ea",
+      "bytes": 3280,
+      "statements": 4,
+      "envelopes": [
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "calls": [
+        "private._weekly_source_acl_private_helper_contract_v1",
+        "private.weekly_source_report_fin_certificate_assert_v1",
+        "private.weekly_source_report_fin_strategy_v1"
+      ],
+      "writes": [],
+      "dynamicExecute": false,
+      "networkCalls": [],
+      "sequenceCalls": false,
+      "unknownCalls": [
+        "extensions.digest"
+      ],
+      "effectGraphHash": "1da1f049e34f09e3d9bd7cf6d7149c01f1a6b10e1fe2801b2b5f2f460435b066",
+      "applyingReferences": false,
+      "prohibitedCandidates": []
+    },
+    {
+      "index": 173,
+      "file": "supabase/verification/15102026_0205_healthroster_source_arbiter_kernel_verification.sql",
+      "sourceSqlHash": "cfe19a172aa36e51d7e9f60413ddd959895fc33ca26b4cc51a7943e7177e3da3",
+      "closureHash": "945bab82b16a50e23cb91ec797a4a2343d06c9d5a223dc30512d7779cd5aca5e",
+      "bytes": 3867,
+      "statements": 3,
+      "envelopes": [
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "calls": [],
+      "writes": [],
+      "dynamicExecute": false,
+      "networkCalls": [],
+      "sequenceCalls": false,
+      "unknownCalls": [],
+      "effectGraphHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "applyingReferences": false,
+      "prohibitedCandidates": []
+    },
+    {
+      "index": 174,
+      "file": "supabase/verification/15102026_0216_healthroster_a0_physical_source_union_verification.sql",
+      "sourceSqlHash": "9cc884fec3ea8b14197d7af8b2007f1ca91bc7978b0f2ccecffa6dbe20bb5b4c",
+      "closureHash": "edb8f9d9d3e7fce5021972c837a1b56aa5ac242162e61b88c5d824c6df63c500",
+      "bytes": 32255,
+      "statements": 4,
+      "envelopes": [
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "calls": [
+        "extensions.digest"
+      ],
+      "writes": [],
+      "dynamicExecute": false,
+      "networkCalls": [],
+      "sequenceCalls": false,
+      "unknownCalls": [
+        "extensions.digest"
+      ],
+      "effectGraphHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "applyingReferences": false,
+      "prohibitedCandidates": []
+    },
+    {
+      "index": 175,
+      "file": "supabase/verification/15102026_0344_healthroster_source_selectors_verification.sql",
+      "sourceSqlHash": "88cd76940fd2f351f3675d969d7c4f4d85e0b1ca1a3ff41ee5f9376b22dec1c1",
+      "closureHash": "a07c9973613d8e838bb6e310a56f15b9ec7a8e33ecb04814f2b7d3e7dacb185e",
+      "bytes": 2126,
+      "statements": 3,
+      "envelopes": [
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "calls": [],
+      "writes": [],
+      "dynamicExecute": false,
+      "networkCalls": [],
+      "sequenceCalls": false,
+      "unknownCalls": [],
+      "effectGraphHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "applyingReferences": false,
+      "prohibitedCandidates": []
+    },
+    {
+      "index": 176,
+      "file": "supabase/verification/17102026_0144_kept_pay_and_correction_entry_security.sql",
+      "sourceSqlHash": "b6c2d32681a497c6694df4a02a4c2c8e4bf45d3d35ce5de073ac4e4e3355cf1b",
+      "closureHash": "9d8e481440bc5d8780493175dcbd5fb1d4a7a18117a62216c6a6adc62faf43eb",
+      "bytes": 5642,
+      "statements": 3,
+      "envelopes": [
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "calls": [],
+      "writes": [],
+      "dynamicExecute": false,
+      "networkCalls": [],
+      "sequenceCalls": false,
+      "unknownCalls": [],
+      "effectGraphHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "applyingReferences": false,
+      "prohibitedCandidates": []
+    },
+    {
+      "index": 177,
+      "file": "supabase/verification/17102026_0217_missing_later_keep_security.sql",
+      "sourceSqlHash": "463804097a92b9c42f5ad6e711fb460479e0f02205418cbc83312403ad403d56",
+      "closureHash": "3e71a466aaa0a4c3a4b10856416684690d152ac34eecb02aaaef04d74af07e65",
+      "bytes": 6672,
+      "statements": 3,
+      "envelopes": [
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "calls": [],
+      "writes": [],
+      "dynamicExecute": false,
+      "networkCalls": [],
+      "sequenceCalls": false,
+      "unknownCalls": [],
+      "effectGraphHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "applyingReferences": false,
+      "prohibitedCandidates": []
+    },
+    {
+      "index": 178,
+      "file": "supabase/verification/17102026_0248_daily_health_support_security.sql",
+      "sourceSqlHash": "d2a1bc26c9c5b5650f78235e46e505037e4e59fbd74f095859fd3fc62817a847",
+      "closureHash": "8a2400232b9949344d23f6f6cca0a11a0f913ddb55c052a6f2d985e529e1afe1",
+      "bytes": 2400,
+      "statements": 3,
+      "envelopes": [
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "calls": [],
+      "writes": [],
+      "dynamicExecute": false,
+      "networkCalls": [],
+      "sequenceCalls": false,
+      "unknownCalls": [],
+      "effectGraphHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "applyingReferences": false,
+      "prohibitedCandidates": []
+    },
+    {
+      "index": 179,
+      "file": "supabase/verification/17102026_0722_source_current_read_security.sql",
+      "sourceSqlHash": "4ac7a58b9010712ecb942da0ce278d7e9676e3a9563b148fd43e2ae02ab8e0c4",
+      "closureHash": "715a7dcd58b43e8d00110944d24325e4aa00bbd33556fc7f2764f5398abc5c63",
+      "bytes": 2232,
+      "statements": 3,
+      "envelopes": [
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "calls": [],
+      "writes": [],
+      "dynamicExecute": false,
+      "networkCalls": [],
+      "sequenceCalls": false,
+      "unknownCalls": [],
+      "effectGraphHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "applyingReferences": false,
+      "prohibitedCandidates": []
+    },
+    {
+      "index": 180,
+      "file": "supabase/verification/17102026_0741_source_complete_security.sql",
+      "sourceSqlHash": "07c1240b1b3acbb7fd3f81f97b5904d4ce66443e84aaec0cfabfc8ed141461bf",
+      "closureHash": "e56be944b33af6387abeddbeb87c9f84845767eb2d3c8b686f0da5e82a54297e",
+      "bytes": 10668,
+      "statements": 3,
+      "envelopes": [
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "calls": [],
+      "writes": [],
+      "dynamicExecute": false,
+      "networkCalls": [],
+      "sequenceCalls": false,
+      "unknownCalls": [],
+      "effectGraphHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "applyingReferences": false,
+      "prohibitedCandidates": []
+    },
+    {
+      "index": 181,
+      "file": "supabase/verification/17102026_0910_daily_role_identity_security.sql",
+      "sourceSqlHash": "888fcbcb73c5222f3756e1428130a67fe7a06f56b544d3a17c92cc46795b9852",
+      "closureHash": "6924723065db1bfe4b6ee07602e9c9e9980b8c9c534059f1d562755010dd157a",
+      "bytes": 2886,
+      "statements": 3,
+      "envelopes": [
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "calls": [],
+      "writes": [],
+      "dynamicExecute": false,
+      "networkCalls": [],
+      "sequenceCalls": false,
+      "unknownCalls": [],
+      "effectGraphHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "applyingReferences": false,
+      "prohibitedCandidates": []
+    },
+    {
+      "index": 182,
+      "file": "supabase/verification/17102026_1251_health_closed_private_helpers_security.sql",
+      "sourceSqlHash": "a39701191faa2bfd78abe4332f43728db37ca9130591a5c8d7d701d25f9d9270",
+      "closureHash": "3ffbe099c2ecac0cb40ca5e61e463b6e9f7a441ef34e1c590f3dbbb46c0e6c96",
+      "bytes": 2809,
+      "statements": 3,
+      "envelopes": [
+        "BEGIN",
+        "ROLLBACK"
+      ],
+      "calls": [],
+      "writes": [],
+      "dynamicExecute": false,
+      "networkCalls": [],
+      "sequenceCalls": false,
+      "unknownCalls": [],
+      "effectGraphHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "applyingReferences": false,
+      "prohibitedCandidates": []
+    }
+  ],
+  "changed": [
+    {
+      "index": 0,
+      "file": "supabase/verification/13102026_0038_candidate_daily_missing_legacy_choice_runtime_verification.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest"
+      ],
+      "calls": 363,
+      "directWrites": [
+        "private.candidate_daily_authority_scopes",
+        "public.candidate_daily_availability_days",
+        "public.candidate_daily_command_receipts",
+        "public.candidate_daily_rota_days",
+        "public.candidates"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 1,
+      "file": "tests/12102026_2140_candidate_daily_legacy_two_way_runtime_verification.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest"
+      ],
+      "calls": 361,
+      "directWrites": [
+        "private.candidate_daily_authority_scopes",
+        "private.candidate_daily_batch_receipts",
+        "private.candidate_daily_source_links",
+        "public.candidate_daily_rota_days",
+        "public.candidate_daily_rota_generations",
+        "public.candidates"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 2,
+      "file": "supabase/verification/10102026_1700_candidate_notification_management_v1.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest"
+      ],
+      "calls": 400,
+      "directWrites": [
+        "public.candidate_app_accounts",
+        "public.candidate_app_sessions",
+        "public.candidate_expense_component_events",
+        "public.candidate_expense_components",
+        "public.candidate_expense_operations",
+        "public.candidate_notifications",
+        "public.candidate_submission_workflows",
+        "public.candidates",
+        "public.client_settings",
+        "public.clients",
+        "public.contract_weeks",
+        "public.contracts"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 3,
+      "file": "supabase/verification/10102026_1405_import_expense_qr_approval_v1.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest",
+        "private.bpay_next_source_nhsp_magnitude_v1"
+      ],
+      "calls": 556,
+      "directWrites": [
+        "public.candidate_app_accounts",
+        "public.candidate_app_sessions",
+        "public.candidate_submission_components",
+        "public.candidate_submission_workflows",
+        "public.candidates",
+        "public.client_settings",
+        "public.clients",
+        "public.contract_weeks",
+        "public.contracts",
+        "public.settings_defaults",
+        "public.timesheets",
+        "public.timesheets_financials"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 4,
+      "file": "supabase/verification/10102026_0810_weekly_source_contact_policy_v1.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest"
+      ],
+      "calls": 8,
+      "directWrites": [],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 5,
+      "file": "supabase/verification/09102026_1250_weekly_source_nhsp_client_setup_v1.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest"
+      ],
+      "calls": 374,
+      "directWrites": [
+        "pg_temp.ws_verify_keys",
+        "pg_temp.ws_verify_relations",
+        "public.client_settings",
+        "public.clients",
+        "public.contracts",
+        "public.tms_users",
+        "public.weekly_source_groups"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 6,
+      "file": "supabase/verification/09102026_1130_weekly_source_released_review_visibility_v1.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest",
+        "private.bpay_next_source_nhsp_magnitude_v1",
+        "private.weekly_source_check_only_query_groups_v1"
+      ],
+      "calls": 489,
+      "directWrites": [
+        "pg_temp.ws_verify_keys",
+        "pg_temp.ws_verify_relations",
+        "public.candidate_app_accounts",
+        "public.candidate_app_global_membership_links",
+        "public.candidates",
+        "public.client_settings",
+        "public.clients",
+        "public.contract_weeks",
+        "public.contracts",
+        "public.settings_defaults",
+        "public.timesheets",
+        "public.tms_users",
+        "public.weekly_source_charge_checks",
+        "public.weekly_source_client_policies",
+        "public.weekly_source_cycles",
+        "public.weekly_source_group_clients",
+        "public.weekly_source_groups",
+        "public.weekly_source_projection_publications",
+        "public.weekly_source_report_scopes",
+        "public.weekly_source_row_resolutions",
+        "public.weekly_source_upload_rows",
+        "public.weekly_source_uploads",
+        "public.weekly_work_events"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 7,
+      "file": "supabase/verification/07102026_1204_candidate_emergency_roster_snapshot_verification.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest"
+      ],
+      "calls": 370,
+      "directWrites": [
+        "private.candidate_daily_authority_scopes",
+        "private.candidate_daily_batch_receipts",
+        "private.candidate_daily_emergency_roster_snapshots",
+        "private.candidate_daily_entitlements",
+        "private.candidate_daily_source_links",
+        "public.candidate_daily_rota_days",
+        "public.candidate_daily_rota_generations",
+        "public.candidates",
+        "public.settings_defaults"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 8,
+      "file": "supabase/verification/04102026_2206_weekly_source_accepted_publication_evidence_v1.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest"
+      ],
+      "calls": 133,
+      "directWrites": [],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 9,
+      "file": "supabase/verification/04102026_1257_weekly_source_local_protected_decision_v1.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest",
+        "private.bpay_next_source_decision_native_status_v1",
+        "private.bpay_next_source_nhsp_magnitude_v1"
+      ],
+      "calls": 621,
+      "directWrites": [],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 10,
+      "file": "supabase/verification/30082026_0605_candidate_weekly_paper_target_prepare_verification.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest",
+        "private.bpay_next_source_nhsp_magnitude_v1"
+      ],
+      "calls": 561,
+      "directWrites": [
+        "public.candidate_app_accounts",
+        "public.candidate_app_sessions",
+        "public.candidate_submission_components",
+        "public.candidate_submission_workflows",
+        "public.candidates",
+        "public.client_settings",
+        "public.clients",
+        "public.contract_weeks",
+        "public.contracts",
+        "public.invoice_document_versions",
+        "public.invoice_operation_chunks",
+        "public.invoice_operations",
+        "public.settings_defaults",
+        "public.timesheets"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 11,
+      "file": "tests/13082026_1942_banking_pay_james_rate_authority_runtime_verification.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest"
+      ],
+      "calls": 358,
+      "directWrites": [
+        "private.banking_pay_workbench_economic_build_facts",
+        "private.banking_pay_workbench_economic_build_scope",
+        "private.banking_pay_workbench_economic_builds",
+        "public.banking_pay_snapshot_runs",
+        "public.banking_pay_workbench_sessions",
+        "public.candidates",
+        "public.tms_users"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 18,
+      "file": "supabase/verification/26082026_0044_candidate_manager_authoriser_policy_v2_verification.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest",
+        "extensions.gen_random_uuid"
+      ],
+      "calls": 365,
+      "directWrites": [
+        "public.client_settings",
+        "public.clients",
+        "public.contracts"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 19,
+      "file": "supabase/verification/26082026_1643_candidate_daily_membership_ready_activation_verification.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest"
+      ],
+      "calls": 368,
+      "directWrites": [
+        "private.candidate_daily_authority_scopes",
+        "private.candidate_daily_batch_receipts",
+        "private.candidate_daily_entitlements",
+        "private.candidate_daily_source_links",
+        "private.candidate_daily_sync_state",
+        "public.candidate_app_accounts",
+        "public.candidate_app_global_membership_links",
+        "public.candidate_daily_rota_days",
+        "public.candidate_daily_rota_generations",
+        "public.candidates",
+        "public.settings_defaults"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 21,
+      "file": "supabase/verification/27082026_1936_candidate_timesheet_summary_refresh_verification.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest"
+      ],
+      "calls": 21,
+      "directWrites": [],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 24,
+      "file": "supabase/verification/28082026_1236_candidate_daily_rota_clear_key_verification.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest"
+      ],
+      "calls": 363,
+      "directWrites": [
+        "public.candidates"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 25,
+      "file": "supabase/verification/28082026_1321_candidate_daily_calendar_freshness_verification.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest",
+        "private.bpay_next_source_nhsp_magnitude_v1"
+      ],
+      "calls": 457,
+      "directWrites": [
+        "private.candidate_daily_authority_scopes",
+        "private.candidate_daily_entitlements",
+        "private.candidate_daily_sync_state",
+        "public.candidate_daily_rota_days",
+        "public.candidate_daily_rota_generations",
+        "public.candidate_daily_sheet_projection_outbox",
+        "public.candidates",
+        "public.settings_defaults"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 26,
+      "file": "supabase/verification/31082026_1026_candidate_daily_active_window_projection_readiness_verification.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest"
+      ],
+      "calls": 360,
+      "directWrites": [
+        "private.candidate_daily_authority_scopes",
+        "public.candidate_daily_command_receipts",
+        "public.candidate_daily_sheet_projection_outbox",
+        "public.candidates"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 27,
+      "file": "supabase/verification/28082026_1657_candidate_google_rota_removal_verification.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest"
+      ],
+      "calls": 395,
+      "directWrites": [
+        "private.candidate_daily_authority_scopes",
+        "private.candidate_daily_entitlements",
+        "private.candidate_daily_external_effect_receipts",
+        "public.candidate_app_accounts",
+        "public.candidate_app_global_membership_links",
+        "public.candidate_daily_command_receipts",
+        "public.candidate_daily_rota_days",
+        "public.candidate_daily_sheet_projection_outbox",
+        "public.candidates",
+        "public.client_settings",
+        "public.clients",
+        "public.contracts",
+        "public.timesheet_evidence",
+        "public.timesheets",
+        "public.timesheets_financials",
+        "public.ts_financials_outbox"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 28,
+      "file": "supabase/verification/28082026_1858_candidate_daily_booked_source_verification.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest",
+        "private.bpay_next_source_nhsp_magnitude_v1"
+      ],
+      "calls": 648,
+      "directWrites": [
+        "private.candidate_daily_authority_scopes",
+        "private.candidate_daily_entitlements",
+        "private.candidate_daily_sync_state",
+        "public.candidate_app_accounts",
+        "public.candidate_app_sessions",
+        "public.candidate_daily_rota_days",
+        "public.candidates",
+        "public.client_hospitals",
+        "public.client_settings",
+        "public.clients",
+        "public.contract_weeks",
+        "public.contracts",
+        "public.settings_defaults",
+        "public.timesheets",
+        "public.tms_users"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 31,
+      "file": "tests/29082026_0117_candidate_daily_projection_expired_lease_recovery_runtime_verification.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "EXCLUDE",
+      "unknown": [
+        "extensions.digest"
+      ],
+      "calls": 361,
+      "directWrites": [
+        "private.candidate_daily_authority_scopes",
+        "private.candidate_daily_entitlements",
+        "private.candidate_daily_source_links",
+        "public.candidate_daily_command_receipts",
+        "public.candidate_daily_sheet_projection_outbox",
+        "public.candidates"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": [
+        "public.candidate_daily_projection_claim_v1"
+      ]
+    },
+    {
+      "index": 32,
+      "file": "supabase/verification/29082026_0246_banking_pay_modal_structure_v2_verification.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest"
+      ],
+      "calls": 209,
+      "directWrites": [
+        "public.tms_users"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 34,
+      "file": "supabase/verification/29082026_0518_banking_pay_replaced_queue_terminal_shape_verification.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest"
+      ],
+      "calls": 146,
+      "directWrites": [
+        "public.banking_pay_snapshot_runs",
+        "public.banking_pay_workbench_jobs",
+        "public.banking_pay_workbench_sessions"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 35,
+      "file": "supabase/verification/29082026_0614_banking_pay_replaced_candidate_owner_verification.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest"
+      ],
+      "calls": 378,
+      "directWrites": [
+        "public.app_change_counters",
+        "public.banking_pay_snapshot_runs",
+        "public.banking_pay_workbench_jobs",
+        "public.banking_pay_workbench_session_scope",
+        "public.banking_pay_workbench_sessions",
+        "public.candidates",
+        "public.tms_users"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 36,
+      "file": "supabase/verification/29082026_0720_banking_pay_discarded_session_blocker_verification.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest"
+      ],
+      "calls": 377,
+      "directWrites": [
+        "private.banking_pay_workbench_economic_builds",
+        "private.banking_pay_workbench_stage_attempts",
+        "public.app_change_counters",
+        "public.banking_pay_snapshot_runs",
+        "public.banking_pay_workbench_jobs",
+        "public.banking_pay_workbench_session_scope",
+        "public.banking_pay_workbench_sessions",
+        "public.candidates",
+        "public.tms_users"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 37,
+      "file": "supabase/verification/29082026_0804_banking_pay_version_one_refresh_verification.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest"
+      ],
+      "calls": 384,
+      "directWrites": [
+        "public.banking_pay_snapshot_runs",
+        "public.banking_pay_workbench_session_scope",
+        "public.banking_pay_workbench_sessions",
+        "public.candidates",
+        "public.tms_users"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 39,
+      "file": "tests/29082026_0924_candidate_daily_reconciliation_linked_window_runtime_verification.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest"
+      ],
+      "calls": 361,
+      "directWrites": [
+        "private.candidate_daily_authority_scopes",
+        "private.candidate_daily_source_links",
+        "public.candidates"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 41,
+      "file": "tests/29082026_1408_candidate_daily_reconciliation_identity_probe_runtime_verification.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest"
+      ],
+      "calls": 361,
+      "directWrites": [
+        "private.candidate_daily_authority_scopes",
+        "private.candidate_daily_source_links",
+        "public.candidates"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 43,
+      "file": "supabase/verification/30082026_1910_candidate_expense_carrier_anchor_route_verification.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest",
+        "private.bpay_next_source_nhsp_magnitude_v1"
+      ],
+      "calls": 545,
+      "directWrites": [
+        "public.candidate_app_accounts",
+        "public.candidate_app_sessions",
+        "public.candidate_submission_workflows",
+        "public.candidates",
+        "public.client_settings",
+        "public.clients",
+        "public.contract_weeks",
+        "public.contracts",
+        "public.settings_defaults",
+        "public.timesheets",
+        "public.timesheets_financials"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 44,
+      "file": "supabase/verification/29082026_1157_banking_pay_source_refresh_terminal_verification.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest",
+        "pg_temp.tmp_sync_sealed_finance_case_authority",
+        "pg_temp.tmp_sync_sealed_rate_projection",
+        "pg_temp.tmp_sync_sealed_reservation_items"
+      ],
+      "calls": 409,
+      "directWrites": [
+        "pg_temp._bpay_wb_sync_context_v1",
+        "private.banking_pay_workbench_candidate_scope_registry",
+        "private.banking_pay_workbench_economic_build_scope",
+        "private.banking_pay_workbench_economic_builds",
+        "private.banking_pay_workbench_stage_attempts",
+        "public.app_change_counters",
+        "public.banking_pay_snapshot_runs",
+        "public.banking_pay_workbench_jobs",
+        "public.banking_pay_workbench_session_scope",
+        "public.banking_pay_workbench_sessions",
+        "public.candidates",
+        "public.timesheets",
+        "public.tms_users"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 45,
+      "file": "supabase/verification/29082026_1313_banking_pay_invalid_source_authority_repair_verification.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest"
+      ],
+      "calls": 384,
+      "directWrites": [
+        "private.banking_pay_workbench_candidate_scope_registry",
+        "public.app_change_counters",
+        "public.banking_pay_snapshot_runs",
+        "public.banking_pay_workbench_jobs",
+        "public.banking_pay_workbench_session_candidate_state",
+        "public.banking_pay_workbench_session_scope",
+        "public.banking_pay_workbench_sessions",
+        "public.candidates",
+        "public.settings_defaults",
+        "public.tms_users"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 46,
+      "file": "supabase/verification/29082026_1857_banking_pay_action_list_presentation_verification.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest"
+      ],
+      "calls": 418,
+      "directWrites": [
+        "public.banking_pay_snapshot_runs",
+        "public.banking_pay_workbench_preview_rows",
+        "public.banking_pay_workbench_session_scope",
+        "public.banking_pay_workbench_sessions",
+        "public.candidates",
+        "public.timesheets",
+        "public.tms_users"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 47,
+      "file": "supabase/verification/31082026_2231_banking_pay_action_required_amount_presentation_verification.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest"
+      ],
+      "calls": 420,
+      "directWrites": [
+        "public.banking_pay_snapshot_runs",
+        "public.banking_pay_workbench_preview_rows",
+        "public.banking_pay_workbench_session_scope",
+        "public.banking_pay_workbench_sessions",
+        "public.candidates",
+        "public.pay_advances",
+        "public.timesheets",
+        "public.tms_users"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 49,
+      "file": "supabase/verification/30082026_0316_candidate_daily_information_directory_verification.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest",
+        "extensions.gen_random_bytes"
+      ],
+      "calls": 367,
+      "directWrites": [
+        "private.candidate_daily_authority_scopes",
+        "private.candidate_daily_entitlements",
+        "private.candidate_daily_source_links",
+        "public.candidates",
+        "public.settings_defaults"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 50,
+      "file": "supabase/verification/30082026_0455_candidate_daily_emergency_window_row_verification.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest"
+      ],
+      "calls": 368,
+      "directWrites": [
+        "private.candidate_daily_authority_scopes",
+        "private.candidate_daily_batch_receipts",
+        "private.candidate_daily_entitlements",
+        "private.candidate_daily_source_links",
+        "public.candidate_daily_rota_days",
+        "public.candidate_daily_rota_generations",
+        "public.candidates",
+        "public.settings_defaults"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 53,
+      "file": "tests/30082026_2207_candidate_paper_evidence_manifest_label_runtime_verification.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest",
+        "private.bpay_next_source_nhsp_magnitude_v1"
+      ],
+      "calls": 596,
+      "directWrites": [
+        "public.candidate_app_accounts",
+        "public.candidate_app_sessions",
+        "public.candidate_submission_components",
+        "public.candidates",
+        "public.client_settings",
+        "public.clients",
+        "public.contract_weeks",
+        "public.contracts",
+        "public.invoice_document_versions",
+        "public.invoice_operations",
+        "public.settings_defaults",
+        "public.timesheets",
+        "public.timesheets_financials",
+        "public.tms_users"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 54,
+      "file": "supabase/verification/31082026_0014_banking_pay_dirty_apply_family_authority_repair_verification.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest",
+        "private.bpay_next_source_nhsp_magnitude_v1"
+      ],
+      "calls": 641,
+      "directWrites": [
+        "public.app_change_counters",
+        "public.banking_pay_snapshot_runs",
+        "public.banking_pay_workbench_jobs",
+        "public.banking_pay_workbench_session_scope",
+        "public.banking_pay_workbench_sessions",
+        "public.candidates",
+        "public.timesheets",
+        "public.timesheets_financials",
+        "public.tms_users"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": [
+        "public.pay_workbench_dirty_apply_jobs_chunk"
+      ]
+    },
+    {
+      "index": 55,
+      "file": "supabase/verification/31082026_0322_timesheet_cross_record_overlap_guard_verification.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest"
+      ],
+      "calls": 386,
+      "directWrites": [
+        "public.candidate_app_accounts",
+        "public.candidate_submission_workflows",
+        "public.candidates",
+        "public.client_settings",
+        "public.clients",
+        "public.contract_weeks",
+        "public.contracts",
+        "public.timesheets",
+        "public.timesheets_financials"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 56,
+      "file": "supabase/verification/31082026_0605_candidate_empty_expense_carrier_action_verification.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest"
+      ],
+      "calls": 376,
+      "directWrites": [
+        "public.candidate_app_accounts",
+        "public.candidate_submission_components",
+        "public.candidate_submission_workflows",
+        "public.candidates",
+        "public.client_settings",
+        "public.clients",
+        "public.contract_weeks",
+        "public.contracts"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 57,
+      "file": "supabase/verification/24092026_2300_candidate_provisional_expense_carrier_verification.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest",
+        "private.bpay_next_source_nhsp_magnitude_v1"
+      ],
+      "calls": 600,
+      "directWrites": [
+        "public.candidate_app_accounts",
+        "public.candidate_app_sessions",
+        "public.candidate_approval_requests",
+        "public.candidate_submission_components",
+        "public.candidate_submission_workflows",
+        "public.candidates",
+        "public.client_settings",
+        "public.clients",
+        "public.contract_weeks",
+        "public.contracts",
+        "public.settings_defaults",
+        "public.timesheets",
+        "public.tms_users"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 58,
+      "file": "supabase/verification/31082026_0915_candidate_duplicate_expense_review_verification.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest",
+        "private.bpay_next_source_nhsp_magnitude_v1"
+      ],
+      "calls": 496,
+      "directWrites": [
+        "public.candidate_app_accounts",
+        "public.candidate_submission_components",
+        "public.candidate_submission_workflows",
+        "public.candidates",
+        "public.client_settings",
+        "public.clients",
+        "public.contract_weeks",
+        "public.contracts",
+        "public.timesheets",
+        "public.timesheets_financials",
+        "public.tms_users"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 61,
+      "file": "tests/31082026_1437_banking_pay_candidate_group_pagination_runtime_verification.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "EXCLUDE",
+      "unknown": [
+        "extensions.digest"
+      ],
+      "calls": 388,
+      "directWrites": [
+        "public.app_change_counters",
+        "public.banking_pay_snapshot_runs",
+        "public.banking_pay_workbench_preview_rows",
+        "public.banking_pay_workbench_session_scope",
+        "public.banking_pay_workbench_sessions",
+        "public.candidates",
+        "public.timesheets",
+        "public.tms_users"
+      ],
+      "network": [],
+      "applying": true,
+      "potentialProhibited": []
+    },
+    {
+      "index": 62,
+      "file": "supabase/verification/31082026_1738_candidate_federated_session_expiry_renewal_verification.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest"
+      ],
+      "calls": 358,
+      "directWrites": [
+        "public.candidates"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 63,
+      "file": "supabase/verification/01092026_1151_candidate_federated_session_monotonic_projection_verification.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest"
+      ],
+      "calls": 358,
+      "directWrites": [
+        "public.candidates"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 64,
+      "file": "supabase/verification/01092026_2032_candidate_federated_session_family_projection_verification.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest"
+      ],
+      "calls": 357,
+      "directWrites": [
+        "public.candidates"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 66,
+      "file": "tests/31082026_1907_banking_pay_candidate_group_display_only_selection_tuple_runtime_verification.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "EXCLUDE",
+      "unknown": [
+        "extensions.digest"
+      ],
+      "calls": 388,
+      "directWrites": [
+        "public.app_change_counters",
+        "public.banking_pay_snapshot_runs",
+        "public.banking_pay_workbench_preview_rows",
+        "public.banking_pay_workbench_session_scope",
+        "public.banking_pay_workbench_sessions",
+        "public.candidates",
+        "public.timesheets",
+        "public.tms_users"
+      ],
+      "network": [],
+      "applying": true,
+      "potentialProhibited": []
+    },
+    {
+      "index": 67,
+      "file": "tests/01092026_1400_candidate_legacy_paper_orphan_cancel_verification.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest",
+        "private.bpay_next_source_nhsp_magnitude_v1"
+      ],
+      "calls": 547,
+      "directWrites": [
+        "public.candidate_app_accounts",
+        "public.candidate_app_sessions",
+        "public.candidate_submission_workflows",
+        "public.candidates",
+        "public.client_settings",
+        "public.clients",
+        "public.contract_weeks",
+        "public.contracts",
+        "public.mail_outbox",
+        "public.settings_defaults",
+        "public.timesheets",
+        "public.timesheets_financials",
+        "public.tms_users"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 68,
+      "file": "supabase/verification/01092026_1500_candidate_no_work_factual_guard_verification.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest",
+        "private.bpay_next_source_nhsp_magnitude_v1"
+      ],
+      "calls": 505,
+      "directWrites": [
+        "public.candidate_app_accounts",
+        "public.candidate_app_sessions",
+        "public.candidates",
+        "public.client_settings",
+        "public.clients",
+        "public.contract_weeks",
+        "public.contracts",
+        "public.settings_defaults",
+        "public.timesheets",
+        "public.timesheets_financials",
+        "public.tms_users"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 70,
+      "file": "tests/01092026_1511_banking_pay_signed_recovery_draft_runtime_verification.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "EXCLUDE",
+      "unknown": [
+        "extensions.digest",
+        "pg_temp.tmp_pay_batch_finalize_economic_components",
+        "pg_temp.tmp_pay_batch_finalize_items"
+      ],
+      "calls": 372,
+      "directWrites": [
+        "public.app_change_counters",
+        "public.banking_pay_operation_candidate_allocation_rows",
+        "public.banking_pay_operation_candidate_scope",
+        "public.banking_pay_operations",
+        "public.banking_pay_snapshot_runs",
+        "public.banking_pay_workbench_preview_rows",
+        "public.banking_pay_workbench_session_scope",
+        "public.banking_pay_workbench_sessions",
+        "public.candidates",
+        "public.pay_batch_candidates",
+        "public.pay_batch_items",
+        "public.pay_batches",
+        "public.timesheets",
+        "public.tms_users"
+      ],
+      "network": [],
+      "applying": true,
+      "potentialProhibited": [
+        "public.pay_batch_finalize_reservations_and_markers"
+      ]
+    },
+    {
+      "index": 72,
+      "file": "supabase/verification/01092026_1927_banking_pay_workbench_causal_recovery_verification.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest"
+      ],
+      "calls": 378,
+      "directWrites": [
+        "private.banking_pay_workbench_candidate_scope_registry",
+        "private.banking_pay_workbench_economic_builds",
+        "private.banking_pay_workbench_stage_attempts",
+        "public.app_change_counters",
+        "public.banking_pay_snapshot_runs",
+        "public.banking_pay_workbench_jobs",
+        "public.banking_pay_workbench_preview_rows",
+        "public.banking_pay_workbench_session_candidate_state",
+        "public.banking_pay_workbench_session_scope",
+        "public.banking_pay_workbench_sessions",
+        "public.candidates",
+        "public.tms_users"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 77,
+      "file": "tests/02092026_2392_banking_pay_workbench_settled_certificate_v8_runtime_verification.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "EXCLUDE",
+      "unknown": [
+        "extensions.digest"
+      ],
+      "calls": 399,
+      "directWrites": [
+        "private.banking_pay_workbench_economic_build_facts",
+        "private.banking_pay_workbench_economic_builds",
+        "private.banking_pay_workbench_settled_certificates_v8",
+        "public.banking_pay_operations",
+        "public.banking_pay_snapshot_runs",
+        "public.banking_pay_workbench_candidate_source_lines",
+        "public.banking_pay_workbench_preview_rows",
+        "public.banking_pay_workbench_session_candidate_state",
+        "public.banking_pay_workbench_session_scope",
+        "public.banking_pay_workbench_sessions",
+        "public.candidates",
+        "public.timesheets",
+        "public.tms_users"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": [
+        "public.pay_workbench_settled_certificate_build_start_v8",
+        "public.pay_workbench_settled_certificate_due_claim_v8",
+        "public.pay_workbench_settled_certificate_seal_v8"
+      ]
+    },
+    {
+      "index": 79,
+      "file": "supabase/verification/02092026_0310_candidate_paper_break_entry_verification.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest"
+      ],
+      "calls": 367,
+      "directWrites": [
+        "public.candidates",
+        "public.client_settings",
+        "public.clients",
+        "public.contract_weeks",
+        "public.contracts"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 81,
+      "file": "tests/03092026_1000_banking_pay_workbench_targeted_zero_output_runtime_verification.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest"
+      ],
+      "calls": 372,
+      "directWrites": [
+        "private.banking_pay_workbench_candidate_scope_registry",
+        "private.banking_pay_workbench_economic_build_scope",
+        "private.banking_pay_workbench_economic_builds",
+        "public.app_change_counters",
+        "public.banking_pay_snapshot_runs",
+        "public.banking_pay_workbench_jobs",
+        "public.banking_pay_workbench_session_candidate_state",
+        "public.banking_pay_workbench_session_scope",
+        "public.banking_pay_workbench_sessions",
+        "public.candidates",
+        "public.timesheets",
+        "public.tms_users"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 82,
+      "file": "supabase/verification/03092026_1216_candidate_weekly_preroute_break_entry_verification.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest"
+      ],
+      "calls": 367,
+      "directWrites": [
+        "public.candidates",
+        "public.client_settings",
+        "public.clients",
+        "public.contract_weeks",
+        "public.contracts"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 83,
+      "file": "supabase/verification/28092026_1111_candidate_source_self_entry_break_context_verification.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest"
+      ],
+      "calls": 367,
+      "directWrites": [
+        "public.candidates",
+        "public.client_settings",
+        "public.clients",
+        "public.contract_weeks",
+        "public.contracts"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 85,
+      "file": "tests/04092026_1020_candidate_mileage_line_type_finalisation_verification.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest",
+        "private.bpay_next_source_nhsp_magnitude_v1"
+      ],
+      "calls": 499,
+      "directWrites": [
+        "public.candidate_app_accounts",
+        "public.candidate_approval_requests",
+        "public.candidate_submission_components",
+        "public.candidate_submission_workflows",
+        "public.candidates",
+        "public.client_settings",
+        "public.clients",
+        "public.contract_weeks",
+        "public.contracts",
+        "public.settings_defaults",
+        "public.timesheets",
+        "public.timesheets_financials"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 87,
+      "file": "supabase/verification/03092026_1642_contract_settings_effective_authority_verification.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest"
+      ],
+      "calls": 398,
+      "directWrites": [
+        "public.candidates",
+        "public.client_settings",
+        "public.clients",
+        "public.contract_weeks",
+        "public.contracts",
+        "public.settings_defaults",
+        "public.timesheets",
+        "public.timesheets_financials"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 88,
+      "file": "tests/04092026_1610_candidate_expense_email_admission_runtime_verification.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest"
+      ],
+      "calls": 404,
+      "directWrites": [
+        "public.candidate_app_accounts",
+        "public.candidate_submission_workflows",
+        "public.candidates",
+        "public.client_settings",
+        "public.clients",
+        "public.contract_weeks",
+        "public.contracts",
+        "public.settings_defaults",
+        "public.timesheets",
+        "public.timesheets_financials"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 89,
+      "file": "tests/04092026_2005_candidate_expense_history_anchor_runtime_verification.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest",
+        "private.bpay_next_source_nhsp_magnitude_v1"
+      ],
+      "calls": 545,
+      "directWrites": [
+        "public.candidate_app_accounts",
+        "public.candidate_app_sessions",
+        "public.candidate_submission_workflows",
+        "public.candidates",
+        "public.client_settings",
+        "public.clients",
+        "public.contract_weeks",
+        "public.contracts",
+        "public.settings_defaults",
+        "public.timesheets",
+        "public.timesheets_financials"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 93,
+      "file": "supabase/verification/06092026_0345_candidate_sequential_expense_manager_approval_gate_verification.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest",
+        "private.bpay_next_source_nhsp_magnitude_v1"
+      ],
+      "calls": 546,
+      "directWrites": [
+        "public.candidate_app_accounts",
+        "public.candidate_app_sessions",
+        "public.candidate_submission_workflows",
+        "public.candidates",
+        "public.client_settings",
+        "public.clients",
+        "public.contract_weeks",
+        "public.contracts",
+        "public.settings_defaults",
+        "public.timesheets",
+        "public.timesheets_financials"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 94,
+      "file": "supabase/verification/06092026_0600_candidate_targetless_expense_paper_after_approval_verification.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest",
+        "private.bpay_next_source_nhsp_magnitude_v1"
+      ],
+      "calls": 547,
+      "directWrites": [
+        "public.candidate_app_accounts",
+        "public.candidate_app_sessions",
+        "public.candidate_submission_components",
+        "public.candidate_submission_workflows",
+        "public.candidates",
+        "public.client_settings",
+        "public.clients",
+        "public.contract_weeks",
+        "public.contracts",
+        "public.settings_defaults",
+        "public.timesheets",
+        "public.timesheets_financials"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 97,
+      "file": "supabase/verification/05092026_2110_candidate_submission_delete_reject_guard_verification.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest",
+        "private.bpay_next_source_nhsp_magnitude_v1"
+      ],
+      "calls": 585,
+      "directWrites": [
+        "public.candidate_app_accounts",
+        "public.candidate_approval_requests",
+        "public.candidate_submission_components",
+        "public.candidate_submission_workflows",
+        "public.candidates",
+        "public.client_settings",
+        "public.clients",
+        "public.contract_weeks",
+        "public.contracts",
+        "public.settings_defaults",
+        "public.timesheets",
+        "public.timesheets_financials",
+        "public.tms_users"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 98,
+      "file": "supabase/verification/06092026_2358_candidate_advanced_expense_policy_verification.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "EXCLUDE",
+      "unknown": [
+        "extensions.digest",
+        "private.bpay_next_source_nhsp_magnitude_v1"
+      ],
+      "calls": 610,
+      "directWrites": [
+        "public.candidate_app_accounts",
+        "public.candidate_app_sessions",
+        "public.candidate_approval_requests",
+        "public.candidate_expense_components",
+        "public.candidate_expense_operations",
+        "public.candidate_expense_summary_refreshes",
+        "public.candidate_pending_expense_updates",
+        "public.candidate_submission_components",
+        "public.candidate_submission_workflows",
+        "public.candidates",
+        "public.client_settings",
+        "public.clients",
+        "public.contract_weeks",
+        "public.contracts",
+        "public.mail_outbox",
+        "public.settings_defaults",
+        "public.timesheet_evidence",
+        "public.timesheet_financial_retention",
+        "public.timesheet_pay_state",
+        "public.timesheet_summary_pay_state_cache",
+        "public.timesheets",
+        "public.timesheets_financials",
+        "public.tms_users"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": [
+        "public.candidate_expense_summary_claim_v1",
+        "public.email_outbox_claim_ready_batch"
+      ]
+    },
+    {
+      "index": 101,
+      "file": "supabase/verification/09092026_1400_candidate_receipt_reuse_behavior_verification.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest",
+        "private.bpay_next_source_nhsp_magnitude_v1"
+      ],
+      "calls": 543,
+      "directWrites": [
+        "public.audit_events",
+        "public.candidate_app_accounts",
+        "public.candidate_app_sessions",
+        "public.candidate_expense_components",
+        "public.candidate_submission_components",
+        "public.candidate_submission_workflows",
+        "public.candidates",
+        "public.client_settings",
+        "public.clients",
+        "public.contract_weeks",
+        "public.contracts",
+        "public.settings_defaults",
+        "public.timesheet_evidence",
+        "public.timesheets"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 105,
+      "file": "supabase/verification/07092026_2302_banking_pay_payment_cancellation_notice_verification.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest"
+      ],
+      "calls": 168,
+      "directWrites": [],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 113,
+      "file": "supabase/verification/10092026_0835_planned_week_candidate_submission_delete_guard_verification.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest"
+      ],
+      "calls": 400,
+      "directWrites": [
+        "public.candidate_app_accounts",
+        "public.candidate_submission_workflows",
+        "public.candidates",
+        "public.client_settings",
+        "public.clients",
+        "public.contract_weeks",
+        "public.contracts",
+        "public.settings_defaults",
+        "public.tms_users"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 115,
+      "file": "supabase/verification/15092026_1534_weekly_source_upload_publication_v1.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest",
+        "private.bpay_next_source_nhsp_magnitude_v1"
+      ],
+      "calls": 499,
+      "directWrites": [
+        "public.clients",
+        "public.tms_users",
+        "public.weekly_final_source_correction_sessions",
+        "public.weekly_source_cycles",
+        "public.weekly_source_final_revisions",
+        "public.weekly_source_group_clients",
+        "public.weekly_source_groups",
+        "public.weekly_source_physical_rows",
+        "public.weekly_source_report_scopes",
+        "public.weekly_source_upload_attempts"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 116,
+      "file": "supabase/verification/15092026_1534_weekly_source_upload_context_v1.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest",
+        "private.bpay_next_source_nhsp_magnitude_v1"
+      ],
+      "calls": 512,
+      "directWrites": [
+        "public.candidates",
+        "public.client_settings",
+        "public.clients",
+        "public.contracts",
+        "public.settings_defaults",
+        "public.tms_users",
+        "public.weekly_source_client_policies",
+        "public.weekly_source_cycles",
+        "public.weekly_source_group_clients",
+        "public.weekly_source_groups",
+        "public.weekly_source_report_scopes",
+        "public.weekly_source_upload_rows",
+        "public.weekly_source_uploads"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 117,
+      "file": "supabase/verification/15092026_1534_weekly_source_projection_build_v1.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest",
+        "private.bpay_next_source_nhsp_magnitude_v1"
+      ],
+      "calls": 429,
+      "directWrites": [
+        "pg_temp.ws_verify_keys",
+        "pg_temp.ws_verify_relations",
+        "public.candidates",
+        "public.client_settings",
+        "public.clients",
+        "public.contract_weeks",
+        "public.contracts",
+        "public.settings_defaults",
+        "public.timesheets",
+        "public.tms_users",
+        "public.weekly_source_client_policies",
+        "public.weekly_source_cycles",
+        "public.weekly_source_group_clients",
+        "public.weekly_source_groups",
+        "public.weekly_source_projection_publications",
+        "public.weekly_source_row_resolutions",
+        "public.weekly_source_upload_rows",
+        "public.weekly_source_uploads"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 118,
+      "file": "supabase/verification/15092026_1534_weekly_source_query_delivery_v1.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "EXCLUDE",
+      "unknown": [
+        "extensions.digest",
+        "private.bpay_next_source_nhsp_magnitude_v1",
+        "private.weekly_source_check_only_query_groups_v1"
+      ],
+      "calls": 627,
+      "directWrites": [
+        "public.audit_events",
+        "public.candidate_app_accounts",
+        "public.candidate_app_global_membership_links",
+        "public.candidate_notifications",
+        "public.candidates",
+        "public.client_settings",
+        "public.clients",
+        "public.contracts",
+        "public.settings_defaults",
+        "public.timesheets",
+        "public.tms_users",
+        "public.weekly_candidate_outreach_generations",
+        "public.weekly_message_dispatch_targets",
+        "public.weekly_source_client_policies",
+        "public.weekly_source_cycles",
+        "public.weekly_source_global_settings",
+        "public.weekly_source_group_clients",
+        "public.weekly_source_groups",
+        "public.weekly_source_projection_publications",
+        "public.weekly_source_report_scopes",
+        "public.weekly_source_row_resolutions",
+        "public.weekly_source_upload_rows",
+        "public.weekly_source_uploads",
+        "public.weekly_work_event_source_links",
+        "public.weekly_work_events"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": [
+        "public.weekly_source_message_dispatch_claim_v1",
+        "public.weekly_source_message_dispatch_target_claim_v1"
+      ]
+    },
+    {
+      "index": 119,
+      "file": "supabase/verification/15092026_1534_weekly_source_ordinary_pay_projection_v1.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "EXCLUDE",
+      "unknown": [
+        "extensions.digest",
+        "private.bpay_next_source_nhsp_magnitude_v1",
+        "private.weekly_source_check_only_query_groups_v1"
+      ],
+      "calls": 793,
+      "directWrites": [
+        "pg_temp.ws_verify_keys",
+        "pg_temp.ws_verify_relations",
+        "public.candidates",
+        "public.client_settings",
+        "public.clients",
+        "public.contracts",
+        "public.settings_defaults",
+        "public.timesheets_financials",
+        "public.tms_users",
+        "public.weekly_source_client_policies",
+        "public.weekly_source_contract_policies",
+        "public.weekly_source_cycles",
+        "public.weekly_source_entitlement_decision_bundles",
+        "public.weekly_source_entitlement_heads",
+        "public.weekly_source_group_clients",
+        "public.weekly_source_groups",
+        "public.weekly_source_projection_publications",
+        "public.weekly_source_report_scopes",
+        "public.weekly_source_row_economic_snapshots",
+        "public.weekly_source_row_expense_policy_snapshots",
+        "public.weekly_source_upload_rows",
+        "public.weekly_source_uploads"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": [
+        "public.pay_workbench_dirty_apply_jobs_chunk"
+      ]
+    },
+    {
+      "index": 120,
+      "file": "supabase/verification/15092026_1534_weekly_source_finalisation_v1.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest",
+        "private.bpay_next_source_nhsp_magnitude_v1",
+        "private.weekly_source_check_only_query_groups_v1"
+      ],
+      "calls": 566,
+      "directWrites": [
+        "public.candidates",
+        "public.client_settings",
+        "public.clients",
+        "public.contracts",
+        "public.settings_defaults",
+        "public.tms_users",
+        "public.weekly_source_client_policies",
+        "public.weekly_source_contract_policies",
+        "public.weekly_source_cycles",
+        "public.weekly_source_group_clients",
+        "public.weekly_source_groups",
+        "public.weekly_source_projection_publications",
+        "public.weekly_source_report_scopes",
+        "public.weekly_source_row_economic_snapshots",
+        "public.weekly_source_row_expense_policy_snapshots",
+        "public.weekly_source_upload_rows",
+        "public.weekly_source_uploads"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 121,
+      "file": "supabase/verification/15092026_1534_weekly_source_correct_final_source_v1.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "EXCLUDE",
+      "unknown": [
+        "extensions.digest",
+        "private.bpay_next_source_nhsp_magnitude_v1",
+        "private.weekly_source_check_only_query_groups_v1"
+      ],
+      "calls": 834,
+      "directWrites": [
+        "pg_temp.correct_final_nhsp_state",
+        "pg_temp.correct_final_state",
+        "pg_temp.correct_final_union_state",
+        "pg_temp.ws_verify_keys",
+        "pg_temp.ws_verify_relations",
+        "public.candidates",
+        "public.client_settings",
+        "public.clients",
+        "public.contracts",
+        "public.invoice_lines",
+        "public.invoice_operations",
+        "public.invoices",
+        "public.pay_batch_candidates",
+        "public.pay_batch_items",
+        "public.pay_batches",
+        "public.settings_defaults",
+        "public.timesheets",
+        "public.timesheets_financials",
+        "public.tms_users",
+        "public.weekly_final_source_correction_sessions",
+        "public.weekly_source_client_policies",
+        "public.weekly_source_contract_policies",
+        "public.weekly_source_cycles",
+        "public.weekly_source_entitlement_decision_bundles",
+        "public.weekly_source_entitlement_heads",
+        "public.weekly_source_final_revisions",
+        "public.weekly_source_group_clients",
+        "public.weekly_source_groups",
+        "public.weekly_source_projection_publications",
+        "public.weekly_source_report_scopes",
+        "public.weekly_source_row_economic_snapshots",
+        "public.weekly_source_row_expense_policy_snapshots",
+        "public.weekly_source_upload_rows",
+        "public.weekly_source_uploads"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": [
+        "public.pay_workbench_dirty_apply_jobs_chunk"
+      ]
+    },
+    {
+      "index": 122,
+      "file": "supabase/verification/15092026_1534_weekly_source_invoice_admission_v1.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "EXCLUDE",
+      "unknown": [
+        "extensions.digest",
+        "private.bpay_next_source_nhsp_magnitude_v1",
+        "private.weekly_source_check_only_query_groups_v1"
+      ],
+      "calls": 906,
+      "directWrites": [
+        "pg_temp.ws_verify_keys",
+        "pg_temp.ws_verify_relations",
+        "public.candidates",
+        "public.client_settings",
+        "public.clients",
+        "public.contracts",
+        "public.invoice_document_versions",
+        "public.invoice_lines",
+        "public.invoices",
+        "public.settings_defaults",
+        "public.timesheets",
+        "public.timesheets_financials",
+        "public.tms_users",
+        "public.weekly_source_client_policies",
+        "public.weekly_source_contract_policies",
+        "public.weekly_source_cycles",
+        "public.weekly_source_entitlement_decision_bundles",
+        "public.weekly_source_entitlement_heads",
+        "public.weekly_source_group_clients",
+        "public.weekly_source_groups",
+        "public.weekly_source_invoice_line_bindings",
+        "public.weekly_source_projection_publications",
+        "public.weekly_source_report_scopes",
+        "public.weekly_source_row_economic_snapshots",
+        "public.weekly_source_row_expense_policy_snapshots",
+        "public.weekly_source_upload_rows",
+        "public.weekly_source_uploads"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": [
+        "public.pay_workbench_dirty_apply_jobs_chunk"
+      ]
+    },
+    {
+      "index": 123,
+      "file": "supabase/verification/15092026_1534_weekly_source_invoice_batch_integration_v1.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest",
+        "private.bpay_next_source_nhsp_magnitude_v1"
+      ],
+      "calls": 716,
+      "directWrites": [
+        "pg_temp.ws_verify_keys",
+        "pg_temp.ws_verify_relations",
+        "public.candidates",
+        "public.client_settings",
+        "public.clients",
+        "public.contracts",
+        "public.invoice_lines",
+        "public.invoices",
+        "public.settings_defaults",
+        "public.timesheets",
+        "public.timesheets_financials",
+        "public.tms_users",
+        "public.weekly_exceptional_pay_target_families",
+        "public.weekly_source_client_policies",
+        "public.weekly_source_cycles",
+        "public.weekly_source_group_clients",
+        "public.weekly_source_groups",
+        "public.weekly_source_projection_publications",
+        "public.weekly_source_upload_rows",
+        "public.weekly_source_uploads"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 124,
+      "file": "supabase/verification/15092026_2336_weekly_source_finalisation_pay_orchestration_v1.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest",
+        "private.bpay_next_source_nhsp_magnitude_v1",
+        "private.weekly_source_check_only_query_groups_v1"
+      ],
+      "calls": 580,
+      "directWrites": [
+        "public.candidates",
+        "public.client_settings",
+        "public.clients",
+        "public.contracts",
+        "public.settings_defaults",
+        "public.tms_users",
+        "public.weekly_source_client_policies",
+        "public.weekly_source_contract_policies",
+        "public.weekly_source_cycles",
+        "public.weekly_source_group_clients",
+        "public.weekly_source_groups",
+        "public.weekly_source_projection_publications",
+        "public.weekly_source_report_scopes",
+        "public.weekly_source_row_economic_snapshots",
+        "public.weekly_source_row_expense_policy_snapshots",
+        "public.weekly_source_upload_rows",
+        "public.weekly_source_uploads"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 125,
+      "file": "supabase/verification/15092026_1534_weekly_source_read_projections_v1.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "EXCLUDE",
+      "unknown": [
+        "extensions.digest",
+        "private.bpay_next_source_nhsp_magnitude_v1",
+        "private.weekly_source_check_only_query_groups_v1"
+      ],
+      "calls": 959,
+      "directWrites": [
+        "pg_temp.bpspv_existing_jobs_after_ids",
+        "pg_temp.bpspv_existing_jobs_before",
+        "pg_temp.bpspv_existing_setup_state",
+        "pg_temp.g9_candidate_variant_restore",
+        "pg_temp.g9_certified_phase_coverage",
+        "pg_temp.ws_verify_keys",
+        "pg_temp.ws_verify_relations",
+        "public.candidate_app_accounts",
+        "public.candidate_app_global_membership_links",
+        "public.candidates",
+        "public.client_settings",
+        "public.clients",
+        "public.contract_weeks",
+        "public.contracts",
+        "public.invoice_lines",
+        "public.invoices",
+        "public.pay_batch_candidates",
+        "public.pay_batch_items",
+        "public.pay_batch_timesheet_snapshots",
+        "public.pay_batches",
+        "public.settings_defaults",
+        "public.settings_finance_windows",
+        "public.timesheet_pay_state_history",
+        "public.timesheets",
+        "public.tms_users",
+        "public.weekly_candidate_outreach_generations",
+        "public.weekly_discrepancy_incidents",
+        "public.weekly_exceptional_orchestration_runs",
+        "public.weekly_exceptional_pay_family_events",
+        "public.weekly_exceptional_pay_target_families",
+        "public.weekly_exceptional_payment_approvals",
+        "public.weekly_issue_comparison_revisions",
+        "public.weekly_source_billing_movements",
+        "public.weekly_source_charge_checks",
+        "public.weekly_source_client_manifests",
+        "public.weekly_source_client_policies",
+        "public.weekly_source_cycles",
+        "public.weekly_source_entitlement_decision_bundles",
+        "public.weekly_source_entitlement_head_components",
+        "public.weekly_source_entitlement_heads",
+        "public.weekly_source_final_revisions",
+        "public.weekly_source_group_clients",
+        "public.weekly_source_groups",
+        "public.weekly_source_invoice_line_bindings",
+        "public.weekly_source_invoice_presentation_lines",
+        "public.weekly_source_ordinary_pay_projection_receipts",
+        "public.weekly_source_pending_entitlement_bundles",
+        "public.weekly_source_projection_publications",
+        "public.weekly_source_report_scopes",
+        "public.weekly_source_root_authorisations",
+        "public.weekly_source_row_economic_snapshots",
+        "public.weekly_source_row_resolutions",
+        "public.weekly_source_row_timesheet_lineages",
+        "public.weekly_source_upload_rows",
+        "public.weekly_source_uploads",
+        "public.weekly_timesheet_source_comparisons",
+        "public.weekly_work_events"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": [
+        "public.pay_workbench_dirty_apply_jobs_chunk"
+      ]
+    },
+    {
+      "index": 126,
+      "file": "supabase/verification/15092026_1534_weekly_source_settings_expenses_rates_v1.sql",
+      "changed": [
+        "sourceSqlHash",
+        "closureHash",
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest"
+      ],
+      "calls": 360,
+      "directWrites": [
+        "public.clients",
+        "public.contracts",
+        "public.tms_users",
+        "public.weekly_source_client_policies",
+        "public.weekly_source_contract_policies",
+        "public.weekly_source_group_clients",
+        "public.weekly_source_groups"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 127,
+      "file": "supabase/verification/15092026_1534_weekly_source_settings_admin_v1.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest"
+      ],
+      "calls": 380,
+      "directWrites": [
+        "public.clients",
+        "public.contracts",
+        "public.tms_users",
+        "public.weekly_source_cycles"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 128,
+      "file": "supabase/verification/22092026_1226_client_initial_settings_baseline_v1.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest"
+      ],
+      "calls": 363,
+      "directWrites": [
+        "public.client_settings",
+        "public.tms_users"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 129,
+      "file": "supabase/verification/15092026_1534_weekly_source_protected_action_orchestration_v1.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest",
+        "private.bpay_next_source_nhsp_magnitude_v1"
+      ],
+      "calls": 562,
+      "directWrites": [
+        "public.candidates",
+        "public.client_settings",
+        "public.clients",
+        "public.contracts",
+        "public.settings_defaults",
+        "public.tms_users",
+        "public.weekly_exceptional_orchestration_runs",
+        "public.weekly_exceptional_pay_family_events",
+        "public.weekly_exceptional_pay_generations",
+        "public.weekly_exceptional_pay_target_events",
+        "public.weekly_exceptional_pay_target_families",
+        "public.weekly_exceptional_payment_approvals",
+        "public.weekly_source_client_policies",
+        "public.weekly_source_cycles",
+        "public.weekly_source_group_clients",
+        "public.weekly_source_groups",
+        "public.weekly_source_projection_publications",
+        "public.weekly_source_report_scopes",
+        "public.weekly_source_upload_rows",
+        "public.weekly_source_uploads"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 130,
+      "file": "supabase/verification/15092026_1534_weekly_source_protected_pay_publisher_v1.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest"
+      ],
+      "calls": 386,
+      "directWrites": [
+        "public.candidates",
+        "public.client_settings",
+        "public.clients",
+        "public.contracts",
+        "public.settings_defaults",
+        "public.tms_users",
+        "public.weekly_source_client_policies",
+        "public.weekly_source_cycles",
+        "public.weekly_source_group_clients",
+        "public.weekly_source_groups"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 131,
+      "file": "supabase/verification/15092026_2203_weekly_source_candidate_app_contract_v1.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest",
+        "private.bpay_next_source_nhsp_magnitude_v1"
+      ],
+      "calls": 631,
+      "directWrites": [
+        "public.audit_events",
+        "public.candidate_app_accounts",
+        "public.candidate_app_global_membership_links",
+        "public.candidate_app_sessions",
+        "public.candidate_submission_components",
+        "public.candidates",
+        "public.client_settings",
+        "public.clients",
+        "public.contract_weeks",
+        "public.contracts",
+        "public.settings_defaults",
+        "public.timesheets",
+        "public.tms_users",
+        "public.weekly_candidate_outreach_generations",
+        "public.weekly_source_client_policies",
+        "public.weekly_source_cycles",
+        "public.weekly_source_group_clients",
+        "public.weekly_source_groups",
+        "public.weekly_source_projection_publications",
+        "public.weekly_source_row_resolutions",
+        "public.weekly_source_upload_rows",
+        "public.weekly_source_uploads",
+        "public.weekly_timesheet_submission_request_memberships",
+        "public.weekly_work_event_source_links",
+        "public.weekly_work_events"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 133,
+      "file": "supabase/verification/19092026_0100_weekly_source_correction_cancel_v1.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest"
+      ],
+      "calls": 371,
+      "directWrites": [
+        "public.clients",
+        "public.tms_users",
+        "public.weekly_final_source_correction_sessions",
+        "public.weekly_source_client_manifests",
+        "public.weekly_source_cycles",
+        "public.weekly_source_final_revisions",
+        "public.weekly_source_format_profiles",
+        "public.weekly_source_group_clients",
+        "public.weekly_source_groups",
+        "public.weekly_source_projection_publications",
+        "public.weekly_source_report_scopes",
+        "public.weekly_source_uploads"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 134,
+      "file": "supabase/verification/15092026_1534_weekly_source_acl_contract_v1.sql",
+      "changed": [
+        "sourceSqlHash",
+        "closureHash",
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest",
+        "private.bpay_next_source_decision_native_status_v1",
+        "private.bpay_next_source_nhsp_magnitude_v1",
+        "private.bpay_next_source_pay_decision_acceptance_begin_v1",
+        "private.bpay_next_source_pay_decision_cut_v1",
+        "private.bpay_next_source_pay_decision_publish_v1",
+        "private.bpay_next_source_pay_decision_stage_v1",
+        "private.weekly_source_check_only_query_groups_v1"
+      ],
+      "calls": 1363,
+      "directWrites": [],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": [
+        "private.weekly_source_pending_entitlement_release_apply_v1",
+        "private.weekly_source_pending_entitlement_release_claim_page_v1",
+        "public.weekly_source_message_dispatch_claim_v1",
+        "public.weekly_source_message_dispatch_target_claim_v1",
+        "public.weekly_source_pending_entitlement_release_apply_v1",
+        "public.weekly_source_pending_entitlement_release_claim_page_v1"
+      ]
+    },
+    {
+      "index": 135,
+      "file": "supabase/verification/17092026_0100_weekly_source_entitlement_schema_v1.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest"
+      ],
+      "calls": 459,
+      "directWrites": [
+        "pg_temp.ws_verify_keys",
+        "pg_temp.ws_verify_relations",
+        "private.weekly_source_entitlement_publication_receipts",
+        "public.candidates",
+        "public.client_settings",
+        "public.clients",
+        "public.contract_weeks",
+        "public.contracts",
+        "public.settings_defaults",
+        "public.timesheets",
+        "public.tms_users",
+        "public.weekly_source_charge_checks",
+        "public.weekly_source_cycles",
+        "public.weekly_source_entitlement_decision_bundles",
+        "public.weekly_source_entitlement_head_components",
+        "public.weekly_source_entitlement_heads",
+        "public.weekly_source_format_profiles",
+        "public.weekly_source_groups",
+        "public.weekly_source_pending_entitlement_bundles",
+        "public.weekly_source_projection_publications",
+        "public.weekly_source_root_authorisations",
+        "public.weekly_source_row_resolutions",
+        "public.weekly_source_row_timesheet_lineages",
+        "public.weekly_source_upload_rows",
+        "public.weekly_source_uploads",
+        "public.weekly_timesheet_source_comparisons",
+        "public.weekly_work_events"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 136,
+      "file": "supabase/verification/17092026_0200_weekly_source_rotation_authority_v1.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest",
+        "private.bpay_next_source_nhsp_magnitude_v1"
+      ],
+      "calls": 516,
+      "directWrites": [
+        "pg_temp.ws_verify_keys",
+        "pg_temp.ws_verify_relations",
+        "public.banking_pay_workbench_jobs",
+        "public.candidates",
+        "public.client_settings",
+        "public.clients",
+        "public.contracts",
+        "public.settings_defaults",
+        "public.timesheets",
+        "public.tms_users",
+        "public.weekly_source_client_policies",
+        "public.weekly_source_cycles",
+        "public.weekly_source_group_clients",
+        "public.weekly_source_groups",
+        "public.weekly_source_projection_publications",
+        "public.weekly_source_root_authorisations",
+        "public.weekly_source_upload_rows",
+        "public.weekly_source_uploads"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 137,
+      "file": "supabase/verification/17092026_0300_weekly_source_entitlement_publication_v1.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest",
+        "private.bpay_next_source_nhsp_magnitude_v1"
+      ],
+      "calls": 610,
+      "directWrites": [
+        "pg_temp.ws_verify_keys",
+        "pg_temp.ws_verify_relations",
+        "private.bpay_next_source_chosen_detail",
+        "private.weekly_source_entitlement_publication_receipts",
+        "public.banking_pay_workbench_jobs",
+        "public.candidates",
+        "public.client_settings",
+        "public.clients",
+        "public.contract_weeks",
+        "public.contracts",
+        "public.pay_batch_candidates",
+        "public.pay_batch_items",
+        "public.pay_batches",
+        "public.settings_defaults",
+        "public.timesheets",
+        "public.timesheets_financials",
+        "public.tms_users",
+        "public.weekly_source_cycles",
+        "public.weekly_source_entitlement_decision_bundles",
+        "public.weekly_source_final_revisions",
+        "public.weekly_source_format_profiles",
+        "public.weekly_source_groups",
+        "public.weekly_source_pending_entitlement_bundles",
+        "public.weekly_source_root_authorisations",
+        "public.weekly_source_row_resolutions",
+        "public.weekly_source_row_timesheet_lineages",
+        "public.weekly_source_upload_rows",
+        "public.weekly_source_uploads",
+        "public.weekly_work_events"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 138,
+      "file": "supabase/verification/17092026_0400_weekly_source_freeze_census_v1.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest"
+      ],
+      "calls": 412,
+      "directWrites": [
+        "public.banking_pay_operations",
+        "public.candidates",
+        "public.client_settings",
+        "public.clients",
+        "public.contracts",
+        "public.pay_advance_reservations",
+        "public.pay_advances",
+        "public.pay_bank_transfers",
+        "public.pay_batch_candidates",
+        "public.pay_batch_items",
+        "public.pay_batch_timesheet_snapshots",
+        "public.pay_batches",
+        "public.pay_payment_correction_items",
+        "public.pay_payment_correction_request_candidates",
+        "public.pay_payment_correction_requests",
+        "public.pay_payment_correction_work_items",
+        "public.settings_defaults",
+        "public.timesheet_pay_state_history",
+        "public.timesheets",
+        "public.timesheets_financials",
+        "public.tms_users",
+        "public.umbrellas"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 139,
+      "file": "supabase/verification/17092026_0800_weekly_source_mode_a_dispatch_v1.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest",
+        "private.bpay_next_source_nhsp_magnitude_v1"
+      ],
+      "calls": 555,
+      "directWrites": [
+        "pg_temp.ws_verify_keys",
+        "pg_temp.ws_verify_relations",
+        "public.assignment_band_mappings",
+        "public.candidates",
+        "public.client_settings",
+        "public.clients",
+        "public.contract_weeks",
+        "public.contracts",
+        "public.settings_defaults",
+        "public.timesheets",
+        "public.tms_users",
+        "public.weekly_source_client_policies",
+        "public.weekly_source_cycles",
+        "public.weekly_source_group_clients",
+        "public.weekly_source_groups",
+        "public.weekly_source_projection_publications",
+        "public.weekly_source_upload_rows",
+        "public.weekly_source_uploads"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 140,
+      "file": "supabase/verification/02092026_1833_weekly_source_invoice_issue_validator_v1.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "EXCLUDE",
+      "unknown": [
+        "extensions.digest",
+        "private.bpay_next_source_nhsp_magnitude_v1",
+        "private.weekly_source_check_only_query_groups_v1"
+      ],
+      "calls": 892,
+      "directWrites": [
+        "pg_temp.iss_wp33_subjects",
+        "pg_temp.ws_verify_keys",
+        "pg_temp.ws_verify_relations",
+        "public.candidates",
+        "public.client_settings",
+        "public.clients",
+        "public.contracts",
+        "public.invoice_lines",
+        "public.invoices",
+        "public.settings_defaults",
+        "public.timesheets",
+        "public.timesheets_financials",
+        "public.tms_users",
+        "public.weekly_source_client_policies",
+        "public.weekly_source_contract_policies",
+        "public.weekly_source_cycles",
+        "public.weekly_source_entitlement_decision_bundles",
+        "public.weekly_source_entitlement_heads",
+        "public.weekly_source_final_revisions",
+        "public.weekly_source_format_profiles",
+        "public.weekly_source_group_clients",
+        "public.weekly_source_groups",
+        "public.weekly_source_invoice_line_bindings",
+        "public.weekly_source_projection_publications",
+        "public.weekly_source_report_scopes",
+        "public.weekly_source_root_authorisations",
+        "public.weekly_source_row_economic_snapshots",
+        "public.weekly_source_row_expense_policy_snapshots",
+        "public.weekly_source_upload_rows",
+        "public.weekly_source_uploads"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": [
+        "public.pay_workbench_dirty_apply_jobs_chunk"
+      ]
+    },
+    {
+      "index": 141,
+      "file": "supabase/verification/17092026_0600_weekly_source_first_authorisation_v1.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest",
+        "private.bpay_next_source_nhsp_magnitude_v1"
+      ],
+      "calls": 598,
+      "directWrites": [
+        "pg_temp.ws_verify_keys",
+        "pg_temp.ws_verify_relations",
+        "pg_temp.ws_verify_withdrawal_frame_probe",
+        "private.weekly_source_entitlement_publication_receipts",
+        "private.weekly_source_first_authorisation_withdrawal_receipts",
+        "public.audit_events",
+        "public.banking_pay_workbench_jobs",
+        "public.candidates",
+        "public.client_settings",
+        "public.clients",
+        "public.contract_weeks",
+        "public.contracts",
+        "public.invoice_lines",
+        "public.invoice_operations",
+        "public.invoices",
+        "public.pay_advance_reservations",
+        "public.pay_advances",
+        "public.pay_bank_transfers",
+        "public.pay_batch_candidates",
+        "public.pay_batch_items",
+        "public.pay_batch_timesheet_snapshots",
+        "public.pay_batches",
+        "public.settings_defaults",
+        "public.timesheet_pay_state_history",
+        "public.timesheets",
+        "public.timesheets_financials",
+        "public.tms_users",
+        "public.weekly_exceptional_orchestration_runs",
+        "public.weekly_exceptional_pay_target_families",
+        "public.weekly_exceptional_payment_approvals",
+        "public.weekly_source_cycles",
+        "public.weekly_source_entitlement_decision_bundles",
+        "public.weekly_source_entitlement_heads",
+        "public.weekly_source_groups",
+        "public.weekly_source_root_authorisations",
+        "public.weekly_work_events"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 142,
+      "file": "supabase/verification/17092026_0610_weekly_source_withdrawal_supersession_v1.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest",
+        "private.bpay_next_source_nhsp_magnitude_v1"
+      ],
+      "calls": 592,
+      "directWrites": [
+        "private.weekly_source_entitlement_publication_receipts",
+        "private.weekly_source_first_authorisation_withdrawal_receipts",
+        "public.banking_pay_operation_provider_attempts",
+        "public.banking_pay_operation_remittance_scope",
+        "public.banking_pay_operation_settlement_scope",
+        "public.banking_pay_operation_transfer_scope",
+        "public.banking_pay_operation_transfer_scope_items",
+        "public.banking_pay_operations",
+        "public.banking_pay_workbench_jobs",
+        "public.candidates",
+        "public.client_settings",
+        "public.clients",
+        "public.contract_weeks",
+        "public.contracts",
+        "public.invoice_lines",
+        "public.invoices",
+        "public.pay_advance_reservations",
+        "public.pay_advances",
+        "public.pay_bank_transfer_events",
+        "public.pay_bank_transfers",
+        "public.pay_batch_candidates",
+        "public.pay_batch_items",
+        "public.pay_batches",
+        "public.settings_defaults",
+        "public.timesheet_pay_state_history",
+        "public.timesheets",
+        "public.timesheets_financials",
+        "public.tms_users",
+        "public.ts_pay_adjustments",
+        "public.weekly_source_entitlement_decision_bundles",
+        "public.weekly_source_entitlement_head_components",
+        "public.weekly_source_entitlement_heads",
+        "public.weekly_source_root_authorisations"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 143,
+      "file": "supabase/verification/17092026_0110_weekly_source_banking_pay_absence_v1.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest",
+        "private.bpay_next_source_nhsp_magnitude_v1"
+      ],
+      "calls": 524,
+      "directWrites": [
+        "pg_temp.baseline",
+        "pg_temp.ws_verify_keys",
+        "pg_temp.ws_verify_relations",
+        "private.cloudtms_database_identity",
+        "private.weekly_source_banking_pay_absence",
+        "public.banking_pay_workbench_jobs",
+        "public.candidates",
+        "public.client_settings",
+        "public.clients",
+        "public.contract_weeks",
+        "public.contracts",
+        "public.settings_defaults",
+        "public.timesheets",
+        "public.timesheets_financials",
+        "public.tms_users"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 144,
+      "file": "supabase/verification/17092026_0700_weekly_source_pending_entitlement_release_v1.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "EXCLUDE",
+      "unknown": [
+        "extensions.digest",
+        "private.bpay_next_source_nhsp_magnitude_v1"
+      ],
+      "calls": 639,
+      "directWrites": [
+        "pg_temp.ws_pending_verifier_budget",
+        "pg_temp.ws_verify_keys",
+        "pg_temp.ws_verify_relations",
+        "private.weekly_source_pending_release_review_items",
+        "public.banking_pay_operations",
+        "public.banking_pay_workbench_jobs",
+        "public.candidates",
+        "public.client_settings",
+        "public.clients",
+        "public.contract_weeks",
+        "public.contracts",
+        "public.pay_batch_candidates",
+        "public.pay_batch_items",
+        "public.pay_batches",
+        "public.pay_payment_correction_requests",
+        "public.settings_defaults",
+        "public.timesheets",
+        "public.timesheets_financials",
+        "public.tms_users",
+        "public.weekly_source_cycles",
+        "public.weekly_source_entitlement_decision_bundles",
+        "public.weekly_source_final_revisions",
+        "public.weekly_source_format_profiles",
+        "public.weekly_source_groups",
+        "public.weekly_source_pending_entitlement_bundles",
+        "public.weekly_source_root_authorisations",
+        "public.weekly_source_row_resolutions",
+        "public.weekly_source_row_timesheet_lineages",
+        "public.weekly_source_upload_rows",
+        "public.weekly_source_uploads",
+        "public.weekly_work_events"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": [
+        "private.weekly_source_pending_entitlement_release_apply_v1",
+        "private.weekly_source_pending_entitlement_release_claim_page_v1",
+        "public.weekly_source_pending_entitlement_release_apply_v1",
+        "public.weekly_source_pending_entitlement_release_claim_page_v1"
+      ]
+    },
+    {
+      "index": 145,
+      "file": "supabase/verification/17092026_0800_weekly_source_workbench_seams_v1.sql",
+      "changed": [
+        "sourceSqlHash",
+        "closureHash",
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest"
+      ],
+      "calls": 446,
+      "directWrites": [
+        "pg_temp.baseline",
+        "pg_temp.head_ids",
+        "pg_temp.world",
+        "pg_temp.worldt",
+        "private.banking_pay_workbench_economic_build_facts",
+        "private.banking_pay_workbench_economic_build_scope",
+        "private.banking_pay_workbench_economic_builds",
+        "private.banking_pay_workbench_timesheet_scope_state",
+        "private.weekly_source_entitlement_publication_receipts",
+        "public.banking_pay_snapshot_runs",
+        "public.banking_pay_workbench_sessions",
+        "public.candidates",
+        "public.client_settings",
+        "public.clients",
+        "public.contracts",
+        "public.settings_finance_windows",
+        "public.timesheets",
+        "public.timesheets_financials",
+        "public.tms_users",
+        "public.ts_pay_adjustments",
+        "public.weekly_source_entitlement_decision_bundles",
+        "public.weekly_source_entitlement_head_components",
+        "public.weekly_source_entitlement_heads"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 146,
+      "file": "supabase/verification/17092026_1000_weekly_source_settlement_allocation_v1.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest"
+      ],
+      "calls": 377,
+      "directWrites": [
+        "public.candidates",
+        "public.client_settings",
+        "public.clients",
+        "public.contracts",
+        "public.pay_batch_candidates",
+        "public.pay_batch_items",
+        "public.pay_batch_timesheet_snapshots",
+        "public.pay_batches",
+        "public.timesheet_pay_state_history",
+        "public.timesheets",
+        "public.tms_users"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 147,
+      "file": "supabase/verification/17092026_1100_weekly_source_candidate_view_producer_v1.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "EXCLUDE",
+      "unknown": [
+        "extensions.digest",
+        "private.bpay_next_source_nhsp_magnitude_v1"
+      ],
+      "calls": 919,
+      "directWrites": [
+        "pg_temp.bpspv_existing_jobs_after_ids",
+        "pg_temp.bpspv_existing_jobs_before",
+        "pg_temp.bpspv_existing_setup_state",
+        "pg_temp.bpsx_observation",
+        "pg_temp.ws_verify_keys",
+        "pg_temp.ws_verify_relations",
+        "public.candidate_app_accounts",
+        "public.candidate_app_global_membership_links",
+        "public.candidate_app_sessions",
+        "public.candidates",
+        "public.client_settings",
+        "public.clients",
+        "public.contract_weeks",
+        "public.contracts",
+        "public.settings_defaults",
+        "public.settings_finance_windows",
+        "public.timesheets",
+        "public.tms_users",
+        "public.weekly_candidate_cohorts",
+        "public.weekly_candidate_outreach_generations",
+        "public.weekly_route_activations",
+        "public.weekly_source_client_policies",
+        "public.weekly_source_cycles",
+        "public.weekly_source_entitlement_decision_bundles",
+        "public.weekly_source_entitlement_head_components",
+        "public.weekly_source_entitlement_heads",
+        "public.weekly_source_group_clients",
+        "public.weekly_source_groups",
+        "public.weekly_source_projection_publications",
+        "public.weekly_source_report_scopes",
+        "public.weekly_source_row_resolutions",
+        "public.weekly_source_row_timesheet_lineages",
+        "public.weekly_source_upload_rows",
+        "public.weekly_source_uploads",
+        "public.weekly_timesheet_submission_request_memberships",
+        "public.weekly_timesheet_submission_requests",
+        "public.weekly_work_events"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": [
+        "public.pay_workbench_dirty_apply_jobs_chunk"
+      ]
+    },
+    {
+      "index": 148,
+      "file": "supabase/verification/17092026_1200_weekly_source_audit_and_export_v1.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "EXCLUDE",
+      "unknown": [
+        "extensions.digest",
+        "private.bpay_next_source_nhsp_magnitude_v1"
+      ],
+      "calls": 918,
+      "directWrites": [
+        "pg_temp.bpspv_existing_jobs_after_ids",
+        "pg_temp.bpspv_existing_jobs_before",
+        "pg_temp.bpspv_existing_setup_state",
+        "pg_temp.bpsx_observation",
+        "pg_temp.gate11_source_counter_baseline",
+        "pg_temp.ws_verify_drift_composite",
+        "pg_temp.ws_verify_drift_control",
+        "pg_temp.ws_verify_financial_drift_rows",
+        "pg_temp.ws_verify_keys",
+        "pg_temp.ws_verify_relations",
+        "public.banking_pay_workbench_jobs",
+        "public.candidate_app_accounts",
+        "public.candidate_app_global_membership_links",
+        "public.candidates",
+        "public.client_settings",
+        "public.clients",
+        "public.contract_weeks",
+        "public.contracts",
+        "public.pay_batch_candidates",
+        "public.pay_batch_items",
+        "public.pay_batch_timesheet_snapshots",
+        "public.pay_batches",
+        "public.settings_defaults",
+        "public.settings_finance_windows",
+        "public.timesheet_pay_state_history",
+        "public.timesheets",
+        "public.timesheets_financials",
+        "public.tms_users",
+        "public.weekly_source_client_policies",
+        "public.weekly_source_cycles",
+        "public.weekly_source_entitlement_decision_bundles",
+        "public.weekly_source_entitlement_head_components",
+        "public.weekly_source_entitlement_heads",
+        "public.weekly_source_group_clients",
+        "public.weekly_source_groups",
+        "public.weekly_source_pending_entitlement_bundles",
+        "public.weekly_source_projection_publications",
+        "public.weekly_source_report_scopes",
+        "public.weekly_source_row_resolutions",
+        "public.weekly_source_row_timesheet_lineages",
+        "public.weekly_source_upload_rows",
+        "public.weekly_source_uploads",
+        "public.weekly_work_events"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": [
+        "public.pay_workbench_dirty_apply_jobs_chunk"
+      ]
+    },
+    {
+      "index": 149,
+      "file": "supabase/verification/17092026_1400_weekly_source_ordinary_authorisation_guard_v1.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest",
+        "private.bpay_next_source_nhsp_magnitude_v1"
+      ],
+      "calls": 583,
+      "directWrites": [
+        "private.banking_pay_workbench_economic_build_facts",
+        "private.banking_pay_workbench_economic_build_scope",
+        "private.banking_pay_workbench_economic_builds",
+        "private.banking_pay_workbench_timesheet_scope_state",
+        "private.weekly_source_entitlement_publication_receipts",
+        "public.banking_pay_snapshot_runs",
+        "public.banking_pay_workbench_jobs",
+        "public.banking_pay_workbench_sessions",
+        "public.candidates",
+        "public.client_settings",
+        "public.clients",
+        "public.contract_weeks",
+        "public.contracts",
+        "public.settings_defaults",
+        "public.settings_finance_windows",
+        "public.timesheets",
+        "public.timesheets_financials",
+        "public.tms_users",
+        "public.weekly_source_entitlement_decision_bundles",
+        "public.weekly_source_entitlement_head_components",
+        "public.weekly_source_entitlement_heads",
+        "public.weekly_source_root_authorisations"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 150,
+      "file": "supabase/verification/17092026_1500_weekly_source_row_admission_guards_v1.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest"
+      ],
+      "calls": 379,
+      "directWrites": [
+        "pg_temp.ws_verify_keys",
+        "pg_temp.ws_verify_relations",
+        "public.clients",
+        "public.tms_users",
+        "public.weekly_source_cycles",
+        "public.weekly_source_group_clients",
+        "public.weekly_source_groups",
+        "public.weekly_source_report_scopes"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 152,
+      "file": "supabase/verification/19092026_1645_weekly_source_completed_pack_copy_v1.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "EXCLUDE",
+      "unknown": [
+        "extensions.digest"
+      ],
+      "calls": 389,
+      "directWrites": [
+        "public.candidate_app_accounts",
+        "public.candidate_approval_requests",
+        "public.candidate_submission_components",
+        "public.candidate_submission_workflows",
+        "public.candidates",
+        "public.client_settings",
+        "public.clients",
+        "public.contract_weeks",
+        "public.contracts",
+        "public.mail_outbox",
+        "public.timesheets",
+        "public.tms_users",
+        "public.weekly_source_client_policies",
+        "public.weekly_source_contract_policies",
+        "public.weekly_source_group_clients",
+        "public.weekly_source_groups"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": [
+        "public.email_outbox_claim_ready_batch"
+      ]
+    },
+    {
+      "index": 153,
+      "file": "supabase/verification/20092026_2300_weekly_source_ordinary_unauthorise_family_invoice_census_v1.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest",
+        "private.bpay_next_source_nhsp_magnitude_v1"
+      ],
+      "calls": 498,
+      "directWrites": [
+        "public.candidates",
+        "public.client_settings",
+        "public.clients",
+        "public.contract_weeks",
+        "public.contracts",
+        "public.invoice_lines",
+        "public.invoices",
+        "public.timesheets",
+        "public.timesheets_financials",
+        "public.tms_users"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 156,
+      "file": "supabase/verification/28092026_0100_banking_pay_stage2_orphan_item_reference_verification.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest"
+      ],
+      "calls": 372,
+      "directWrites": [
+        "public.candidates",
+        "public.client_settings",
+        "public.clients",
+        "public.contracts",
+        "public.pay_advances",
+        "public.pay_batch_candidates",
+        "public.pay_batch_items",
+        "public.pay_batches",
+        "public.pay_finance_case_components",
+        "public.timesheets",
+        "public.tms_users"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 157,
+      "file": "supabase/verification/13102026_1126_weekly_source_protected_pay_authority_verification.sql",
+      "changed": [
+        "effectGraphHash"
+      ],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest",
+        "private.bpay_next_source_nhsp_magnitude_v1",
+        "private.weekly_source_check_only_query_groups_v1"
+      ],
+      "calls": 462,
+      "directWrites": [
+        "public.clients",
+        "public.tms_users",
+        "public.weekly_source_cycles",
+        "public.weekly_source_group_clients",
+        "public.weekly_source_groups"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    }
+  ],
+  "unchanged": [
+    {
+      "index": 12,
+      "file": "supabase/verification/22082026_1302_general_browser_isolation_verification.sql",
+      "changed": [],
+      "oldDecision": "INCLUDE",
+      "unknown": [],
+      "calls": 0,
+      "directWrites": [],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 13,
+      "file": "supabase/verification/22082026_1712_daily_validation_compatibility_security_verification.sql",
+      "changed": [],
+      "oldDecision": "INCLUDE",
+      "unknown": [],
+      "calls": 0,
+      "directWrites": [],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 14,
+      "file": "supabase/verification/27082026_1947_candidate_named_security_verification_v3.sql",
+      "changed": [],
+      "oldDecision": "INCLUDE",
+      "unknown": [],
+      "calls": 0,
+      "directWrites": [],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 15,
+      "file": "supabase/verification/22082026_0952_candidate_mytms_browser_isolation_verification.sql",
+      "changed": [],
+      "oldDecision": "INCLUDE",
+      "unknown": [],
+      "calls": 0,
+      "directWrites": [],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 16,
+      "file": "supabase/verification/23082026_0250_candidate_manager_email_security_verification.sql",
+      "changed": [],
+      "oldDecision": "INCLUDE",
+      "unknown": [],
+      "calls": 1,
+      "directWrites": [],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 17,
+      "file": "supabase/verification/24082026_1721_miget_private_helper_service_acl_verification.sql",
+      "changed": [],
+      "oldDecision": "INCLUDE",
+      "unknown": [],
+      "calls": 0,
+      "directWrites": [],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 20,
+      "file": "supabase/verification/26082026_2058_candidate_system_actor_verification.sql",
+      "changed": [],
+      "oldDecision": "INCLUDE",
+      "unknown": [],
+      "calls": 0,
+      "directWrites": [],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 22,
+      "file": "supabase/verification/27082026_2351_candidate_timesheet_card_base_expense_fallback_verification.sql",
+      "changed": [],
+      "oldDecision": "INCLUDE",
+      "unknown": [],
+      "calls": 0,
+      "directWrites": [],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 23,
+      "file": "supabase/verification/28082026_0151_candidate_manager_refusal_resubmission_verification.sql",
+      "changed": [],
+      "oldDecision": "INCLUDE",
+      "unknown": [],
+      "calls": 0,
+      "directWrites": [],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 29,
+      "file": "supabase/verification/28082026_2203_candidate_daily_inapplicable_break_verification.sql",
+      "changed": [],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest"
+      ],
+      "calls": 11,
+      "directWrites": [],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 30,
+      "file": "supabase/verification/29082026_0116_candidate_daily_projection_expired_lease_recovery_verification.sql",
+      "changed": [],
+      "oldDecision": "INCLUDE",
+      "unknown": [],
+      "calls": 0,
+      "directWrites": [],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 33,
+      "file": "supabase/verification/29082026_0336_banking_pay_release_authority_repair_verification.sql",
+      "changed": [],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest"
+      ],
+      "calls": 0,
+      "directWrites": [],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 38,
+      "file": "supabase/verification/29082026_0923_candidate_daily_reconciliation_linked_window_verification.sql",
+      "changed": [],
+      "oldDecision": "INCLUDE",
+      "unknown": [],
+      "calls": 0,
+      "directWrites": [],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 40,
+      "file": "supabase/verification/29082026_1407_candidate_daily_reconciliation_identity_probe_verification.sql",
+      "changed": [],
+      "oldDecision": "INCLUDE",
+      "unknown": [],
+      "calls": 0,
+      "directWrites": [],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 42,
+      "file": "supabase/verification/29082026_0952_candidate_expense_resubmission_anchor_verification.sql",
+      "changed": [],
+      "oldDecision": "INCLUDE",
+      "unknown": [],
+      "calls": 0,
+      "directWrites": [],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 48,
+      "file": "supabase/verification/30082026_0134_candidate_submitted_weekly_card_linkage_verification.sql",
+      "changed": [],
+      "oldDecision": "INCLUDE",
+      "unknown": [],
+      "calls": 0,
+      "directWrites": [],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 51,
+      "file": "supabase/verification/30082026_1113_candidate_paper_return_proof_transaction_boundary_verification.sql",
+      "changed": [],
+      "oldDecision": "INCLUDE",
+      "unknown": [],
+      "calls": 0,
+      "directWrites": [],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 52,
+      "file": "supabase/verification/30082026_2157_candidate_paper_evidence_manifest_label_verification.sql",
+      "changed": [],
+      "oldDecision": "INCLUDE",
+      "unknown": [],
+      "calls": 0,
+      "directWrites": [],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 59,
+      "file": "supabase/verification/31082026_0925_candidate_workflow_mutation_receipt_lookup_verification.sql",
+      "changed": [],
+      "oldDecision": "INCLUDE",
+      "unknown": [],
+      "calls": 0,
+      "directWrites": [],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 60,
+      "file": "supabase/verification/31082026_1436_banking_pay_candidate_group_pagination_v2_verification.sql",
+      "changed": [],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest"
+      ],
+      "calls": 25,
+      "directWrites": [
+        "public.tms_users"
+      ],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 65,
+      "file": "supabase/verification/31082026_1906_banking_pay_candidate_group_display_only_selection_tuple_verification.sql",
+      "changed": [],
+      "oldDecision": "INCLUDE",
+      "unknown": [],
+      "calls": 0,
+      "directWrites": [],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 69,
+      "file": "supabase/verification/01092026_1510_banking_pay_signed_recovery_draft_verification.sql",
+      "changed": [],
+      "oldDecision": "INCLUDE",
+      "unknown": [],
+      "calls": 1,
+      "directWrites": [],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 71,
+      "file": "supabase/verification/01092026_1648_banking_pay_signed_recovery_classifier_verification.sql",
+      "changed": [],
+      "oldDecision": "INCLUDE",
+      "unknown": [],
+      "calls": 1,
+      "directWrites": [],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 73,
+      "file": "supabase/verification/02092026_2390_banking_pay_workbench_settled_certificate_v8_verification.sql",
+      "changed": [],
+      "oldDecision": "INCLUDE",
+      "unknown": [],
+      "calls": 0,
+      "directWrites": [],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 74,
+      "file": "supabase/verification/03092026_1944_banking_pay_draft_certified_v8_verification.sql",
+      "changed": [],
+      "oldDecision": "INCLUDE",
+      "unknown": [],
+      "calls": 0,
+      "directWrites": [],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 75,
+      "file": "supabase/verification/05092026_0311_banking_pay_draft_integrity_setwise_v8_verification.sql",
+      "changed": [],
+      "oldDecision": "INCLUDE",
+      "unknown": [],
+      "calls": 0,
+      "directWrites": [],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 76,
+      "file": "supabase/verification/05092026_0410_banking_pay_one_candidate_cancellation_scope_integrity_verification.sql",
+      "changed": [],
+      "oldDecision": "INCLUDE",
+      "unknown": [],
+      "calls": 0,
+      "directWrites": [],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 78,
+      "file": "supabase/verification/02092026_1041_banking_pay_draft_insert_items_finance_handoff_verification.sql",
+      "changed": [],
+      "oldDecision": "INCLUDE",
+      "unknown": [],
+      "calls": 0,
+      "directWrites": [],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 80,
+      "file": "supabase/verification/03092026_0016_candidate_paper_pack_email_authority_verification.sql",
+      "changed": [],
+      "oldDecision": "INCLUDE",
+      "unknown": [],
+      "calls": 0,
+      "directWrites": [],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 84,
+      "file": "tests/04092026_0130_candidate_finalisation_lock_budget_verification.sql",
+      "changed": [],
+      "oldDecision": "INCLUDE",
+      "unknown": [],
+      "calls": 0,
+      "directWrites": [],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 86,
+      "file": "supabase/verification/04092026_1421_candidate_finalisation_single_flight_verification.sql",
+      "changed": [],
+      "oldDecision": "INCLUDE",
+      "unknown": [],
+      "calls": 0,
+      "directWrites": [],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 90,
+      "file": "supabase/verification/05092026_1331_banking_pay_bank_event_movement_classification_verification.sql",
+      "changed": [],
+      "oldDecision": "INCLUDE",
+      "unknown": [],
+      "calls": 0,
+      "directWrites": [],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 91,
+      "file": "supabase/verification/05092026_1415_banking_pay_no_money_unwind_result_arity_verification.sql",
+      "changed": [],
+      "oldDecision": "INCLUDE",
+      "unknown": [],
+      "calls": 0,
+      "directWrites": [],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 92,
+      "file": "supabase/verification/05092026_0942_candidate_protected_additional_expense_action_verification.sql",
+      "changed": [],
+      "oldDecision": "INCLUDE",
+      "unknown": [],
+      "calls": 22,
+      "directWrites": [],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 95,
+      "file": "supabase/verification/05092026_1456_candidate_route_capability_fast_path_verification.sql",
+      "changed": [],
+      "oldDecision": "INCLUDE",
+      "unknown": [],
+      "calls": 16,
+      "directWrites": [],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 96,
+      "file": "supabase/verification/05092026_2109_unified_outbox_list_v2_verification.sql",
+      "changed": [],
+      "oldDecision": "INCLUDE",
+      "unknown": [],
+      "calls": 1,
+      "directWrites": [],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 99,
+      "file": "supabase/verification/08092026_1416_legacy_daily_settings_authority_backfill_verification.sql",
+      "changed": [],
+      "oldDecision": "INCLUDE",
+      "unknown": [],
+      "calls": 0,
+      "directWrites": [],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 100,
+      "file": "supabase/verification/09092026_1340_candidate_receipt_reuse_atomic_verification.sql",
+      "changed": [],
+      "oldDecision": "INCLUDE",
+      "unknown": [],
+      "calls": 0,
+      "directWrites": [],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 102,
+      "file": "supabase/verification/09092026_1420_candidate_receipt_fresh_reupload_verification.sql",
+      "changed": [],
+      "oldDecision": "INCLUDE",
+      "unknown": [],
+      "calls": 0,
+      "directWrites": [],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 103,
+      "file": "supabase/verification/07092026_2115_banking_pay_unpaid_cancellation_sourceless_verification.sql",
+      "changed": [],
+      "oldDecision": "INCLUDE",
+      "unknown": [],
+      "calls": 0,
+      "directWrites": [],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 104,
+      "file": "supabase/verification/07092026_2142_banking_pay_manual_carry_forward_economic_identity_verification.sql",
+      "changed": [],
+      "oldDecision": "INCLUDE",
+      "unknown": [],
+      "calls": 2,
+      "directWrites": [],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 106,
+      "file": "supabase/verification/08092026_0511_banking_pay_payment_correction_prepare_idempotency_verification.sql",
+      "changed": [],
+      "oldDecision": "INCLUDE",
+      "unknown": [],
+      "calls": 0,
+      "directWrites": [],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 107,
+      "file": "supabase/verification/08092026_0519_banking_pay_candidate_dirty_cohort_authority_verification.sql",
+      "changed": [],
+      "oldDecision": "INCLUDE",
+      "unknown": [],
+      "calls": 0,
+      "directWrites": [],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 108,
+      "file": "supabase/verification/08092026_0805_pay_workbench_scope_invalidate_pair_arrays_verification.sql",
+      "changed": [],
+      "oldDecision": "INCLUDE",
+      "unknown": [],
+      "calls": 0,
+      "directWrites": [],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 109,
+      "file": "supabase/verification/08092026_1203_banking_pay_cancel_return_selection_intent_verification.sql",
+      "changed": [],
+      "oldDecision": "INCLUDE",
+      "unknown": [],
+      "calls": 0,
+      "directWrites": [],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 110,
+      "file": "supabase/verification/09092026_0022_banking_pay_no_money_workbench_return_verification.sql",
+      "changed": [],
+      "oldDecision": "INCLUDE",
+      "unknown": [],
+      "calls": 0,
+      "directWrites": [],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 111,
+      "file": "supabase/verification/09092026_1501_candidate_duplicate_expense_anchor_final_authority_verification.sql",
+      "changed": [],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest"
+      ],
+      "calls": 0,
+      "directWrites": [],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 112,
+      "file": "supabase/verification/09092026_1901_candidate_expense_update_submit_final_authority_verification.sql",
+      "changed": [],
+      "oldDecision": "INCLUDE",
+      "unknown": [
+        "extensions.digest"
+      ],
+      "calls": 0,
+      "directWrites": [],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 114,
+      "file": "supabase/verification/15092026_1534_00_weekly_source_private_classifiers_v1.sql",
+      "changed": [],
+      "oldDecision": "INCLUDE",
+      "unknown": [],
+      "calls": 1,
+      "directWrites": [],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 132,
+      "file": "supabase/verification/15092026_2312_weekly_source_delivery_targets_v1.sql",
+      "changed": [],
+      "oldDecision": "INCLUDE",
+      "unknown": [],
+      "calls": 0,
+      "directWrites": [],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 151,
+      "file": "supabase/verification/17092026_0900_weekly_source_installed_writer_census_v1.sql",
+      "changed": [],
+      "oldDecision": "INCLUDE",
+      "unknown": [],
+      "calls": 0,
+      "directWrites": [],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 154,
+      "file": "supabase/verification/22092026_1052_weekly_source_operation_local_validation_v1.sql",
+      "changed": [],
+      "oldDecision": "INCLUDE",
+      "unknown": [],
+      "calls": 0,
+      "directWrites": [],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    },
+    {
+      "index": 155,
+      "file": "supabase/verification/22092026_1645_weekly_source_workbench_inventory_v1.sql",
+      "changed": [],
+      "oldDecision": "INCLUDE",
+      "unknown": [],
+      "calls": 0,
+      "directWrites": [],
+      "network": [],
+      "applying": false,
+      "potentialProhibited": []
+    }
+  ]
+}

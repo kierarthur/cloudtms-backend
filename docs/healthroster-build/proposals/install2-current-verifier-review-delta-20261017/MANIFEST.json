@@ -1,0 +1,40 @@
+{
+  "version": "INSTALL2_CURRENT_VERIFIER_DELTA_SOURCE_ONLY_V1",
+  "files": [
+    {
+      "file": "BASELINE_REVIEW.json",
+      "bytes": 4659467,
+      "sha256": "5a5f4d0fe89c9b4ac9007af2e916174e1d96d786e3103cceaf08c00497bd1c50"
+    },
+    {
+      "file": "CENSUS.json",
+      "bytes": 15169573,
+      "sha256": "a50e3940b2816eaa47069a6c4a79995fa81fbf411cec3cf6c6d6eb4942b8f958"
+    },
+    {
+      "file": "DELTA.json",
+      "bytes": 150102,
+      "sha256": "cb1eb65dc196cd09bc0f8c65caff4a46d1e73dd8492a6580fb4b920e1179b7d3"
+    },
+    {
+      "file": "RESULTS.json",
+      "bytes": 2468,
+      "sha256": "dbf8d78accbf7bc565464effee85982c65542e4e44104b8498831b283760841f"
+    },
+    {
+      "file": "REVIEW.md",
+      "bytes": 4379,
+      "sha256": "226ea207a72d20b4c8fe690728e0958b52327b0b7d5604fc01e4c5a356e556c3"
+    },
+    {
+      "file": "SOURCE_BINDING_NOT_READY.json",
+      "bytes": 275403,
+      "sha256": "53d9fcd365713e71ef168211cc6b9023139d6d878e33a845e44be80120fc2de5"
+    },
+    {
+      "file": "UNRESOLVED_NAMED_EDGES.json",
+      "bytes": 5819,
+      "sha256": "02af152c4610f129f8f4f247e6b42fa72328b4113a6aede2a8fa428e04e95fb5"
+    }
+  ]
+}

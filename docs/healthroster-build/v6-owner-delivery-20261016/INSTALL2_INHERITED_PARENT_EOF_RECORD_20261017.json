@@ -1,0 +1,10 @@
+{
+  "version": "INSTALL2_INHERITED_RAW_PARENT_EOF_V1",
+  "notices": [
+    "docs/healthroster-build/proposals/install2-root-native-entry-source-20261017/parents/docs/healthroster-build/rehearsals/13102026/prepare_full_upgrade_rehearsal.mjs:44: new blank line at EOF.",
+    "docs/healthroster-build/proposals/install2-root-native-entry-source-20261017/parents/docs/healthroster-build/rehearsals/13102026/run_full_upgrade_rehearsal.mjs:75: new blank line at EOF."
+  ],
+  "completeCapturedParentsEqualCurrentIndexHeadAndHistorical": true,
+  "disposition": "Preserve exact historical captured bytes; no selected new runtime/test source notice. No trimming of frozen evidence.",
+  "otherWhitespaceCheck": "PASS"
+}

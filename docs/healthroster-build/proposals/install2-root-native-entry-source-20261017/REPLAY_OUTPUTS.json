@@ -1,0 +1,40 @@
+[
+  {
+    "command": [
+      "node",
+      "--test",
+      "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\.codex-tmp\\install2-root-native-entry-source-20261017\\test.mjs"
+    ],
+    "exitCode": 0,
+    "output": "\u2714 closed second-install config distinguishes installed source, remote test and generated candidate contract (1.1977ms)\n\u2714 configuration refuses unsupported or malformed candidatePin:eeeeeeeeeeee (0.3995ms)\n\u2714 configuration refuses unsupported or malformed featureActivation:F17 (0.1222ms)\n\u2714 configuration refuses unsupported or malformed ownerReady:true (0.115ms)\n\u2714 configuration refuses unsupported or malformed expectedRemoteTestPin:912297ab (0.1078ms)\n\u2714 configuration refuses unsupported or malformed installedSourceCommit: (0.0934ms)\n\u2714 configuration refuses unsupported or malformed expectedContractHash:stale (0.0753ms)\n\u2714 configuration refuses unsupported or malformed officePath:C:/tmp/Offic (0.1058ms)\n\u2714 configuration refuses unsupported or malformed officePath:D:/Developme (0.0875ms)\n\u2714 receipt-only gap is exact, unique and cannot admit runtime or an invented generic docs disposition (0.439ms)\n\u2714 shared original review schema retains sixteen exclusions and mandatory post-VERIFIED F5 (0.6672ms)\n\u2714 review refuses stale inventory (0.1648ms)\n\u2714 review refuses pending included (0.1509ms)\n\u2714 review refuses pending excluded (0.829ms)\n\u2714 review refuses extra exclusion (0.3705ms)\n\u2714 review refuses removed exclusion (0.1294ms)\n\u2714 review refuses F5 preinstall (0.0952ms)\n\u2714 review refuses invented review schema (0.0894ms)\n\u2714 review refuses truncated census (0.0675ms)\n\u2714 fresh predecessor probe embeds complete unchanged exporter and both complete ledgers in one read-only child query (6.5765ms)\n\u2714 no arbitrary predecessor SQL, marker or extra argument accepted (1.6333ms)\n\u2714 single-result parsing refuses ambiguous or malformed envelopes without returning payload text (0.9119ms)\n\u2714 import and test runner cannot start Install2 native execution (0.4679ms)\n\u2714 coordinator uses unchanged Install2 gates/runner, full proof and same turn through Office publication (0.3693ms)\n\u2714 fresh archive retains full nine checks, exact registry base, current full tests and no native route (0.1037ms)\n\u2139 tests 25\n\u2139 suites 0\n\u2139 pass 25\n\u2139 fail 0\n\u2139 cancelled 0\n\u2139 skipped 0\n\u2139 todo 0\n\u2139 duration_ms 254.4713\n"
+  },
+  {
+    "command": [
+      "node",
+      "--test",
+      "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/tests/healthroster-install2-native-gate.test.mjs",
+      "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/tests/healthroster-install1-native-coordinator.test.mjs"
+    ],
+    "exitCode": 0,
+    "output": "\u2714 read-only probe accepts one JSON result alongside harmless psql control output (1.7359ms)\n\u2714 ambiguous or malformed probe results fail without returning database payloads (0.5357ms)\n\u2714 native coordinator cannot run from import or the test runner entry (0.4845ms)\n\u2714 second install distinguishes Banking, installed source, receipt-only test and candidate without relabelling the release (2.8028ms)\n\u2714 failed, applying, incomplete or unrelated installed releases cannot qualify the predecessor (0.736ms)\n\u2714 native catalogue must match its own installed Git contract and both recorded contract hashes (0.6123ms)\n\u2714 both entire ledgers reject missing, unknown, duplicate or changed entries while preserving uppercase SQL identity (9.2721ms)\n\u2714 target, fresh connection and identity refusals remain mandatory for native predecessor observations (0.4227ms)\n\u2714 receipt-gap dispositions must cover exactly the actual Git paths and raw before/after content hashes (1.1403ms)\n\u2714 retained drafts remain visible and prevent a clean release claim (0.1544ms)\n\u2714 source relationship cannot swap predecessor, target, bank pin or any actual ancestry edge (0.814ms)\n\u2714 the common safety gates still hold runtime/Office before any publication callback (1.2404ms)\n\u2714 the second marker can be probed truthfully and cannot be run through the first-install entry (0.9777ms)\n\u2714 second-install callback source flow preserves identity and gates across rollback and publication (1.1129ms)\n\u2139 tests 14\n\u2139 suites 0\n\u2139 pass 14\n\u2139 fail 0\n\u2139 cancelled 0\n\u2139 skipped 0\n\u2139 todo 0\n\u2139 duration_ms 286.9287\n"
+  },
+  {
+    "command": [
+      "C:\\Users\\KierArthur\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+      "-B",
+      "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\.codex-tmp\\install2-root-native-entry-source-20261017\\grammar.py"
+    ],
+    "exitCode": 0,
+    "output": "{\"status\": \"PG17_FIXED_METADATA_PREDECESSOR_AST_PASS\", \"parserVersion\": \"v7.20\", \"postgresGrammar\": [17, 7], \"statements\": 2, \"wholeCanonicalExporterASTEqual\": true, \"arbitrarySQLInput\": false, \"native\": \"NOT_RUN\"}\r\n"
+  },
+  {
+    "command": [
+      "C:\\Users\\KierArthur\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+      "-B",
+      "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\.codex-tmp\\install2-root-native-entry-source-20261017\\verify.py",
+      "--current"
+    ],
+    "exitCode": 0,
+    "output": "{\"status\": \"INSTALL2_ADDITIVE_SOURCE_PARENT_PROOF_PASS\", \"completeParents\": 31, \"wholeInverses\": 2, \"additiveTargets\": 3, \"unchangedSnapshotAndFreshQualifier\": true, \"actualCurrentGit\": true, \"native\": \"NOT_RUN\"}\r\n"
+  }
+]

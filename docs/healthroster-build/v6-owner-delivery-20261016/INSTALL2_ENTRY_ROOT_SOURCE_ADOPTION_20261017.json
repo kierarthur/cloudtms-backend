@@ -1,0 +1,42 @@
+{
+  "version": "INSTALL2_ENTRY_ROOT_SOURCE_ADOPTION_V1",
+  "parentCommit": "fab8c93b77c65692b7e88e65a6f97ca7c4da79ad",
+  "selectedTargets": [
+    {
+      "file": "scripts/healthroster-install2-native-coordinator.mjs",
+      "bytes": 28669,
+      "sha256": "daf357f994e2afe782f7ee8e663e2027d0dfe02765dce0839a2f8a0c8e0172d3",
+      "mode": "ADDITIVE_ONLY_PARENT_ENTRY_UNCHANGED"
+    },
+    {
+      "file": "scripts/healthroster-install2-archive-preflight.mjs",
+      "bytes": 8427,
+      "sha256": "867224c19cea5ed12ad9a402a88aefa9c9df674cd6eb6c9cbae149a807e4168e",
+      "mode": "ADDITIVE_ONLY_PARENT_ENTRY_UNCHANGED"
+    },
+    {
+      "file": "tests/healthroster-install2-native-coordinator.test.mjs",
+      "bytes": 7642,
+      "sha256": "dfcf797c9b1c972b98e0a7edcb47b6876926dac212615de06f056e7883703d6e",
+      "mode": "ADDITIVE_TEST_ONLY"
+    }
+  ],
+  "completeParents": 31,
+  "rootNodeTests": 25,
+  "peer": "ACCEPT_BOUNDED_ADDITIVE_ENTRY_SOURCE",
+  "newSharedRuntimeOrSqlChanges": 0,
+  "sourceCensus": {
+    "migrations": 427,
+    "repeatables": 1098,
+    "verifiers": 183,
+    "review": "STALE_REVIEW_NOT_READY",
+    "exclusions": 16
+  },
+  "native": "NOT_RUN",
+  "archivePreflight": "NOT_RUN",
+  "contractSeal": "NOT_RUN",
+  "install2": "NOT_INSTALLED",
+  "finalCritics": "NOT_RUN",
+  "QT_R7": "NATIVE69_SUCCESS_BUT_CANONICAL_AFTER_DEADLINE_HOLD",
+  "R11": "GENUINE_ME401_PRE_NATIVE_CLOSED"
+}

@@ -1,0 +1,18 @@
+{
+  "status": "SCHEMA_ONLY_NOT_A_POSITIVE_CONFIGURATION",
+  "file": "docs/healthroster-build/install2-rehearsal/NATIVE_COORDINATOR_CONFIG.json",
+  "exactFields": {
+    "version": "HEALTHROSTER_INSTALL2_NATIVE_COORDINATOR_CONFIG_V1",
+    "installedSourceCommit": "Actual latest VERIFIED native installed source, exact available 40hex Git commit; independently compared to its own full contract and both complete ledgers.",
+    "expectedRemoteTestPin": "Actual freshly observed full 40hex remote test ref; receipt-only gap reviewed separately; never assume the historical 912297ab value.",
+    "expectedContractHash": "canonicalContractHash of the actual reviewed newly generated clean PG17 current-contract.json in the final candidate.",
+    "reviewedInstalledToRemotePaths": "Exact complete path/beforeContentSha256 nullable/afterContentSha256/decision rows. Existing gate permits only INSTALL1_PUBLICATION_RECEIPT_ONLY for its closed actual publication receipt paths.",
+    "officePath": "Exact reviewed registered physical D:/Development/GitHub/.codex-worktrees/<name> source. Managed release captures and verifies canonical Office source/main before last publication."
+  },
+  "candidatePin": "Not a configuration field: actual clean feature HEAD must equal its freshly observed pushed feature ref.",
+  "generatedContract": "NOT_GENERATED_BY_THIS_PACKET",
+  "currentVerifierReview": "NOT_GENERATED_OR_APPROVED_BY_THIS_PACKET",
+  "native": "NOT_RUN",
+  "sourcePreflight": "NOT_RUN",
+  "publication": "NOT_RUN"
+}

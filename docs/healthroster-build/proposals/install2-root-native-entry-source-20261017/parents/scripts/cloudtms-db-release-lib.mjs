@@ -1,0 +1,739 @@
+import crypto from 'node:crypto';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { ManagedPsqlSession } from './cloudtms-managed-psql.mjs';
+
+export const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+
+let logicalOwnerSqlRoot;
+
+function omitAbsentMigetAuthenticatorFromRevokes(source) {
+  return String(source).replace(/^[ \t]*revoke\b[^;]*;/gim, statement =>
+    statement.replace(/,\s*authenticator(?=\s*[,;])/gi, '')
+  );
+}
+
+function mapLogicalPostgresAclGrantees(source) {
+  const rewriteStatement = statement => {
+    const withoutLeadingComments = statement.replace(
+      /^(?:\s+|--[^\r\n]*(?:\r?\n|$)|\/\*[\s\S]*?\*\/)*/,
+      '',
+    );
+    if (
+      !/^(?:grant|revoke)\b/i.test(withoutLeadingComments)
+      && !/^alter\s+default\s+privileges\b/i.test(withoutLeadingComments)
+    ) return statement;
+
+    const clauseMatches = [...statement.matchAll(/\b(?:to|from)\b/gi)];
+    if (clauseMatches.length === 0) return statement;
+    const clause = clauseMatches.at(-1);
+    const clauseEnd = clause.index + clause[0].length;
+    const granteeList = statement.slice(clauseEnd).replace(
+      /(^|,)([ \t\r\n]*)(?:"postgres"|postgres)(?=[ \t\r\n]*(?:,|;|\bwith\b))/gi,
+      '$1$2CURRENT_USER',
+    );
+    return statement.slice(0, clauseEnd) + granteeList;
+  };
+
+  let output = '';
+  let statementStart = 0;
+  let state = 'normal';
+  let dollarTag = '';
+  let blockCommentDepth = 0;
+  const text = String(source);
+
+  for (let index = 0; index < text.length; index += 1) {
+    const current = text[index];
+    const next = text[index + 1];
+
+    if (state === 'line-comment') {
+      if (current === '\n') state = 'normal';
+      continue;
+    }
+    if (state === 'block-comment') {
+      if (current === '/' && next === '*') {
+        blockCommentDepth += 1;
+        index += 1;
+      } else if (current === '*' && next === '/') {
+        blockCommentDepth -= 1;
+        index += 1;
+        if (blockCommentDepth === 0) state = 'normal';
+      }
+      continue;
+    }
+    if (state === 'single-quote') {
+      if (current === "'" && next === "'") index += 1;
+      else if (current === "'") state = 'normal';
+      continue;
+    }
+    if (state === 'double-quote') {
+      if (current === '"' && next === '"') index += 1;
+      else if (current === '"') state = 'normal';
+      continue;
+    }
+    if (state === 'dollar-quote') {
+      if (text.startsWith(dollarTag, index)) {
+        index += dollarTag.length - 1;
+        state = 'normal';
+      }
+      continue;
+    }
+
+    if (current === '-' && next === '-') {
+      state = 'line-comment';
+      index += 1;
+    } else if (current === '/' && next === '*') {
+      state = 'block-comment';
+      blockCommentDepth = 1;
+      index += 1;
+    } else if (current === "'") {
+      state = 'single-quote';
+    } else if (current === '"') {
+      state = 'double-quote';
+    } else if (current === '$') {
+      const match = text.slice(index).match(/^\$(?:[A-Za-z_][A-Za-z0-9_]*)?\$/);
+      if (match) {
+        dollarTag = match[0];
+        state = 'dollar-quote';
+        index += dollarTag.length - 1;
+      }
+    } else if (current === ';') {
+      output += rewriteStatement(text.slice(statementStart, index + 1));
+      statementStart = index + 1;
+    }
+  }
+
+  return output + text.slice(statementStart);
+}
+
+export function mapLogicalPostgresOwnerSql(source, options = {}) {
+  const mode = process.env.CLOUDTMS_LOGICAL_POSTGRES_OWNER || '';
+  if (!mode) return source;
+  if (mode !== 'CURRENT_USER') {
+    throw new Error('CLOUDTMS_LOGICAL_POSTGRES_OWNER must be CURRENT_USER when set');
+  }
+  const diagnosticParameter = String.raw`(?:"plpgsql_check\.(?:mode|profiler|tracer|constants_tracing|cursors_leaks|strict_cursors_leaks|fatal_errors)"|plpgsql_check\.(?:mode|profiler|tracer|constants_tracing|cursors_leaks|strict_cursors_leaks|fatal_errors))`;
+  const diagnosticValue = String.raw`(?:'disabled'|'off')`;
+  const mapped = (options.mapAclGrantees === false ? String(source) : mapLogicalPostgresAclGrantees(source))
+    .replace(/\bowner\s+to\s+(?:"postgres"|postgres)(?=\s*;)/gi, 'OWNER TO CURRENT_USER')
+    .replace(
+      /\balter\s+default\s+privileges\s+for\s+role\s+(?:"postgres"|postgres)/gi,
+      'ALTER DEFAULT PRIVILEGES FOR ROLE CURRENT_USER',
+    )
+    // Miget's generated database owner cannot set provider instrumentation
+    // parameters. Keep the repository's Supabase/plpgsql_check diagnostics in
+    // canonical source, but omit only the seven exact diagnostic function
+    // settings from the provider-mapped executable tree. Application
+    // search_path, timeout and every other function setting remain unchanged.
+    .replace(
+      new RegExp(`^[ \\t]*ALTER[ \\t]+FUNCTION\\b[^;]*?\\)[ \\t\\r\\n]+SET[ \\t]+${diagnosticParameter}[ \\t]+(?:TO|=)[ \\t]+${diagnosticValue}[ \\t]*;[ \\t]*(?:\\r?\\n|$)`, 'gim'),
+      '',
+    )
+    .replace(
+      new RegExp(`^[ \\t]*SET[ \\t]+${diagnosticParameter}[ \\t]+(?:TO|=)[ \\t]+${diagnosticValue}[ \\t]*;?[ \\t]*(?:\\r?\\n|$)`, 'gim'),
+      '',
+    );
+  // `authenticator` is a Supabase connection-pool role and is intentionally
+  // absent on Miget. Keep the canonical cross-provider ACL in Git, but omit
+  // only that missing grantee from REVOKE statements in Miget's executable
+  // owner-mapped tree. PUBLIC and every real browser/service role remain
+  // explicitly revoked exactly as authored.
+  return omitAbsentMigetAuthenticatorFromRevokes(mapped);
+}
+
+export function mapGeneratedAclBaselineSql(source) {
+  return mapLogicalPostgresOwnerSql(source)
+    .replace(/"postgres"/g, 'CURRENT_USER')
+    .replace(/^grant EXECUTE on function public\.cloudtms_data_api_mfa_gate\(\) to "authenticator";\r?\n/gm, '');
+}
+
+const DEADLOCK_RETRY_SAFE_FILES = new Map([
+  [
+    'supabase/migrations/24082026_0232_miget_provider_owner_defaults.sql',
+    'c323ff65c84dae66a5bd9a4b9da83fa48af0b5df91e2424f31d9bd95b5db7f1d',
+  ],
+]);
+
+const RELEASE_ROLLBACK_FIXTURE_SCOPES = new Map([
+  [
+    'tests/31082026_1437_banking_pay_candidate_group_pagination_runtime_verification.sql',
+    'BANKING_PAY_CANDIDATE_GROUP_PAGINATION_V2',
+  ],
+  [
+    'tests/31082026_1907_banking_pay_candidate_group_display_only_selection_tuple_runtime_verification.sql',
+    'BANKING_PAY_CANDIDATE_GROUP_DISPLAY_ONLY_SELECTION_TUPLE_V1',
+  ],
+  [
+    'tests/01092026_1511_banking_pay_signed_recovery_draft_runtime_verification.sql',
+    'BANKING_PAY_SIGNED_RECOVERY_DRAFT_V1',
+  ],
+]);
+
+export function releaseVerifierVariables(file, mode, context = {}) {
+  const normalFile = String(file || '').replaceAll('\\', '/');
+  const scope = RELEASE_ROLLBACK_FIXTURE_SCOPES.get(normalFile);
+  if (!scope || !['NEW', 'UPGRADE'].includes(mode)) return {};
+
+  const expectedDatabase = String(context.expectedDatabase || '');
+  const releaseId = String(context.releaseId || '');
+  const gitCommit = String(context.gitCommit || '');
+  const environment = String(context.environment || '');
+  const customerKey = String(context.customerKey || '');
+  if (!expectedDatabase || !releaseId || !/^[0-9a-f]{40}$/.test(gitCommit)
+      || !['TEST', 'LIVE'].includes(environment)) {
+    throw new Error(`Rollback fixture release context is incomplete for ${normalFile}`);
+  }
+
+  return {
+    cloudtms_release_fixture_context: JSON.stringify({
+      scope,
+      mode,
+      expected_database: expectedDatabase,
+      release_id: releaseId,
+      git_commit: gitCommit,
+      environment,
+      customer_key: customerKey,
+    }),
+  };
+}
+
+export function releaseAdmissionSql({ releaseId, gitCommit, expectedHash, mode }) {
+  const id = String(releaseId || '');
+  const commit = String(gitCommit || '');
+  const hash = String(expectedHash || '');
+  const installMode = String(mode || '');
+  if (!id || !/^[0-9a-f]{40}$/.test(commit) || !/^[0-9a-f]{64}$/.test(hash)
+      || !['NEW', 'UPGRADE', 'ADOPT'].includes(installMode)) {
+    throw new Error('Database release admission identity is incomplete or invalid');
+  }
+  const literal = value => `'${String(value).replaceAll("'", "''")}'`;
+  return `
+    begin;
+    set local lock_timeout='5s';
+    set local statement_timeout='15s';
+    select pg_catalog.pg_advisory_xact_lock(
+      pg_catalog.hashtextextended('cloudtms_database_release_admission_v1',0)
+    );
+    with superseded as (
+      select applying.release_id,
+        later.release_id as superseding_verified_release_id,
+        later.git_commit as superseding_verified_git_commit
+      from private.cloudtms_database_releases applying
+      cross join lateral (
+        select verified.release_id, verified.git_commit
+        from private.cloudtms_database_releases verified
+        where verified.status='VERIFIED'
+          and verified.completed_at_utc is not null
+          and verified.started_at_utc>applying.started_at_utc
+        order by verified.started_at_utc,verified.release_id
+        limit 1
+      ) later
+      where applying.status='APPLYING'
+        and applying.completed_at_utc is null
+    )
+    update private.cloudtms_database_releases applying
+    set status='FAILED',
+        completed_at_utc=pg_catalog.clock_timestamp(),
+        evidence_json=coalesce(applying.evidence_json,'{}'::jsonb)||pg_catalog.jsonb_build_object(
+          'failure','superseded_applying_release_reconciled',
+          'reconciliation_contract','CLOUDTMS_DATABASE_RELEASE_ADMISSION_V1',
+          'reconciled_by_release_id',${literal(id)},
+          'superseding_verified_release_id',superseded.superseding_verified_release_id,
+          'superseding_verified_git_commit',superseded.superseding_verified_git_commit
+        )
+    from superseded
+    where applying.release_id=superseded.release_id;
+    do $admission$
+    begin
+      if exists (
+        select 1
+        from private.cloudtms_database_releases
+        where status='APPLYING'
+          and completed_at_utc is null
+      ) then
+        raise exception 'CLOUDTMS_DATABASE_RELEASE_ALREADY_APPLYING';
+      end if;
+    end
+    $admission$;
+    do $identity$
+    begin
+      if exists (
+        select 1
+        from private.cloudtms_database_releases existing
+        where existing.release_id=${literal(id)}
+          and (
+            existing.git_commit<>${literal(commit)}
+            or existing.repository_contract_sha256<>${literal(hash)}
+            or existing.install_mode<>${literal(installMode)}
+          )
+      ) then
+        raise exception 'CLOUDTMS_DATABASE_RELEASE_IDENTITY_MISMATCH';
+      end if;
+    end
+    $identity$;
+    insert into private.cloudtms_database_releases(
+      release_id,git_commit,repository_contract_sha256,installed_contract_sha256,
+      install_mode,status,completed_at_utc,evidence_json
+    ) values (
+      ${literal(id)},${literal(commit)},${literal(hash)},${literal(hash)},
+      ${literal(installMode)},'APPLYING',null,'{}'::jsonb
+    ) on conflict(release_id) do update set
+      git_commit=excluded.git_commit,
+      repository_contract_sha256=excluded.repository_contract_sha256,
+      installed_contract_sha256=excluded.installed_contract_sha256,
+      install_mode=excluded.install_mode,
+      status=excluded.status,
+      started_at_utc=pg_catalog.clock_timestamp(),
+      completed_at_utc=null,
+      evidence_json=excluded.evidence_json;
+    commit;
+  `;
+}
+
+export function deadlockRetryCountForFile(file) {
+  const absolute = path.isAbsolute(file) ? file : path.join(repoRoot, file);
+  const relative = path.relative(repoRoot, absolute).replaceAll('\\', '/');
+  const expectedSha256 = DEADLOCK_RETRY_SAFE_FILES.get(relative);
+  if (!expectedSha256) return 0;
+  const actualSha256 = sha256(
+    Buffer.from(fs.readFileSync(absolute, 'utf8').replaceAll('\r\n', '\n'), 'utf8'),
+  );
+  if (actualSha256 !== expectedSha256) {
+    throw new Error(`Deadlock-retry-safe SQL changed: ${relative}`);
+  }
+  return 3;
+}
+
+function copyLogicalOwnerSqlTree(source, destination, canonical = false) {
+  fs.mkdirSync(destination, { recursive: true });
+  for (const entry of fs.readdirSync(source, { withFileTypes: true })) {
+    const sourcePath = path.join(source, entry.name);
+    const destinationPath = path.join(destination, entry.name);
+    if (entry.isDirectory()) copyLogicalOwnerSqlTree(sourcePath, destinationPath, canonical);
+    // Transaction-neutral support includes belong to the mapped executable
+    // tree, but must not become standalone migration/repeatable inventory.
+    else if (entry.isFile() && /\.(?:sql|inc|sqlinc)$/i.test(entry.name)) {
+      fs.writeFileSync(
+        destinationPath,
+        executableSqlSource(sourcePath, canonical),
+      );
+    }
+  }
+}
+
+export function executableSqlSource(file, canonical = false) {
+  const source = fs.readFileSync(file, 'utf8');
+  const text = canonical ? source.replaceAll('\r\n', '\n') : source;
+  return mapExecutableSqlSource(text,file);
+}
+
+// These immutable/current authority files use audited, fixed-object DO
+// loops for ownership. The general mapper deliberately leaves quoted SQL
+// opaque. Bind this exceptional executable-only rewrite to BOTH its exact
+// repository path and complete LF-canonical source bytes; never rewrite an
+// arbitrary function body or alter the canonical migration/closure locks.
+const DYNAMIC_LOGICAL_OWNER_SOURCES = new Map([
+  ['supabase/migrations/11102026_1624_banking_pay_next_pay_method_change_receipt.sql', {
+    sha256: 'd7d5203449912201df726bff02b81d00c219e75f9acc90104150cca32cc19bdb',
+    literal: "'alter table private.%I owner to postgres'",
+    replacement: "'alter table private.%I owner to CURRENT_USER'",
+    policyLiteral: "'create policy cloudtms_miget_service_owner_all on private.%I to postgres using(true) with check(true)'",
+    policyReplacement: "'create policy cloudtms_miget_service_owner_all on private.%I to CURRENT_USER using(true) with check(true)'",
+  }],
+  ['supabase/migrations/09102026_2153_banking_pay_next_accepted_input_v1.sql', {
+    sha256: '0289b53ad745d5ff5c3a3130ce596e0b5a155e3645a84f1c57b154f8774a5182',
+    literal: "'alter table private.%I owner to postgres'",
+    replacement: "'alter table private.%I owner to CURRENT_USER'",
+  }],
+  ['supabase/migrations/04102026_1827_banking_pay_next_candidate_destination_group.sql', {
+    sha256: 'af9849f6e83784b0064ee58179aabc740d396764c3639ef7132967f394c9512d',
+    literal: "'alter table private.%I owner to postgres'",
+    replacement: "'alter table private.%I owner to CURRENT_USER'",
+  }],
+  ['supabase/repeatable/04102026_1827_banking_pay_next_candidate_destination_group_v1.sql', {
+    sha256: '33891038c2865684c091f7bd3df4ce188bb42e026129163216e3bc341feb198c',
+    literal: "'alter function %s owner to postgres'",
+    replacement: "'alter function %s owner to CURRENT_USER'",
+  }],
+]);
+
+export function logicalPostgresExecutablePolicy() {
+  // Validate the same provider mode used by every executable mapping route.
+  mapLogicalPostgresOwnerSql('');
+  return {
+    version: 'CLOUDTMS_LOGICAL_POSTGRES_EXECUTABLE_POLICY_V1',
+    mode: process.env.CLOUDTMS_LOGICAL_POSTGRES_OWNER || 'ORIGINAL_OWNER',
+    dynamicSources: [...DYNAMIC_LOGICAL_OWNER_SOURCES].map(([file, authority]) => ({
+      path: file, canonicalSourceSha256: authority.sha256,
+      literal: authority.literal, replacement: authority.replacement,
+      ...(authority.policyLiteral ? {policyLiteral: authority.policyLiteral, policyReplacement: authority.policyReplacement} : {}),
+    })),
+  };
+}
+
+export function mapExecutableSqlSource(text,file) {
+  const mode = process.env.CLOUDTMS_LOGICAL_POSTGRES_OWNER || '';
+  let mapped = mode && path.basename(file) === '22082026_1505_cloudtms_test_acl_baseline.sql'
+    ? mapGeneratedAclBaselineSql(text) : mapLogicalPostgresOwnerSql(text);
+  if (!mode) return mapped;
+  const absolute = path.isAbsolute(file) ? file : path.resolve(repoRoot, file);
+  const relative = path.relative(repoRoot, absolute).replaceAll('\\', '/').toLowerCase();
+  const authority = DYNAMIC_LOGICAL_OWNER_SOURCES.get(relative);
+  if (!authority) return mapped;
+  const original = String(text);
+  if (sha256(original.replaceAll('\r\n', '\n')) !== authority.sha256) {
+    throw new Error(`DYNAMIC_LOGICAL_OWNER_SOURCE_HASH_MISMATCH: ${relative}`);
+  }
+  if (original.split(authority.literal).length !== 2 || mapped.split(authority.literal).length !== 2) {
+    throw new Error(`DYNAMIC_LOGICAL_OWNER_LITERAL_MISMATCH: ${relative}`);
+  }
+  mapped = mapped.replace(authority.literal, authority.replacement);
+  if (authority.policyLiteral) {
+    if (original.split(authority.policyLiteral).length !== 2 || mapped.split(authority.policyLiteral).length !== 2) {
+      throw new Error(`DYNAMIC_LOGICAL_OWNER_LITERAL_MISMATCH: ${relative}`);
+    }
+    mapped = mapped.replace(authority.policyLiteral, authority.policyReplacement);
+  }
+  return mapped;
+}
+
+const managedExecutableRoots = new Map();
+export function executableSqlFile(file, { canonical = false } = {}) {
+  const mode = process.env.CLOUDTMS_LOGICAL_POSTGRES_OWNER || '';
+  const absolute = path.isAbsolute(file) ? file : path.join(repoRoot, file);
+  if (!mode && !canonical) return absolute;
+  mapLogicalPostgresOwnerSql('');
+  const authorityRoot = path.join(repoRoot, 'supabase');
+  const relative = path.relative(authorityRoot, absolute);
+  if (relative.startsWith('..') || path.isAbsolute(relative)) {
+    const source = fs.readFileSync(absolute, 'utf8');
+    const mapped = mapLogicalPostgresOwnerSql(source, { mapAclGrantees: false });
+    if (mapped !== source) {
+      throw new Error('Logical owner mapping is limited to SQL authority under supabase/');
+    }
+    return absolute;
+  }
+  if (canonical) {
+    const key = mode || 'ORIGINAL_OWNER';
+    if (!managedExecutableRoots.has(key)) {
+      const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'cloudtms-managed-owner-'));
+      copyLogicalOwnerSqlTree(authorityRoot, path.join(directory, 'supabase'), true);
+      managedExecutableRoots.set(key, directory);
+      process.once('exit', () => { try { fs.rmSync(directory, { recursive: true, force: true }); } catch {} });
+    }
+    return path.join(managedExecutableRoots.get(key), 'supabase', relative);
+  }
+  if (!logicalOwnerSqlRoot) {
+    logicalOwnerSqlRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'cloudtms-logical-owner-'));
+    copyLogicalOwnerSqlTree(authorityRoot, path.join(logicalOwnerSqlRoot, 'supabase'));
+    process.once('exit', () => {
+      try { fs.rmSync(logicalOwnerSqlRoot, { recursive: true, force: true }); } catch {}
+    });
+  }
+  return path.join(logicalOwnerSqlRoot, 'supabase', relative);
+}
+
+export function sha256(value) {
+  return crypto.createHash('sha256').update(value).digest('hex');
+}
+
+export function sqlDateKey(filename) {
+  const base = path.basename(filename);
+  let m = base.match(/^(20\d{2})(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])(.*)$/);
+  if (m && validDate(+m[1], +m[2], +m[3])) return `${m[1]}${m[2]}${m[3]}${m[4]}`;
+  m = base.match(/^(0[1-9]|[12]\d|3[01])(0[1-9]|1[0-2])(20\d{2})(.*)$/);
+  if (m && validDate(+m[3], +m[2], +m[1])) return `${m[3]}${m[2]}${m[1]}${m[4]}`;
+  return `ZZZZZZZZ_${base}`;
+}
+
+function validDate(year, month, day) {
+  const d = new Date(Date.UTC(year, month - 1, day));
+  return d.getUTCFullYear() === year && d.getUTCMonth() === month - 1 && d.getUTCDate() === day;
+}
+
+export function sqlFiles(relativeDir) {
+  const absolute = path.join(repoRoot, relativeDir);
+  const diskFiles = fs.readdirSync(absolute, { withFileTypes: true })
+    .filter(entry => entry.isFile() && entry.name.toLowerCase().endsWith('.sql'))
+    .map(entry => path.posix.join(relativeDir.replaceAll('\\', '/'), entry.name));
+  const tracked = spawnSync('git', ['ls-files', '-z', '--', relativeDir], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+  });
+  if (tracked.status !== 0) throw new Error(`Cannot enumerate committed SQL paths under ${relativeDir}`);
+  const trackedFiles = tracked.stdout
+    .split('\0')
+    .filter(file => file && file.toLowerCase().endsWith('.sql'));
+  const trackedByCaseFoldedPath = new Map(trackedFiles.map(file => [file.toLowerCase(), file]));
+  const untrackedFiles = diskFiles.filter(file => !trackedByCaseFoldedPath.has(file.toLowerCase()));
+  return [...trackedFiles, ...untrackedFiles]
+    .sort((a, b) => sqlDateKey(a).localeCompare(sqlDateKey(b)) || a.localeCompare(b));
+}
+
+export function canonicalSqlBytes(relativeFile) {
+  const bytes = fs.readFileSync(path.join(repoRoot, relativeFile));
+  return Buffer.from(bytes.toString('utf8').replaceAll('\r\n', '\n'), 'utf8');
+}
+
+export function closureFor(relativeFile, allowedRoot = 'supabase/repeatable') {
+  const active = new Set();
+  const ordered = [];
+  const allowed = path.resolve(repoRoot, allowedRoot);
+  function visit(rel) {
+    const absolute = path.resolve(repoRoot, rel);
+    if (absolute !== allowed && !absolute.startsWith(`${allowed}${path.sep}`)) {
+      throw new Error(`SQL include escapes ${allowedRoot}: ${rel}`);
+    }
+    const normal = path.relative(repoRoot, absolute).replaceAll('\\', '/');
+    if (active.has(normal)) throw new Error(`Recursive SQL include cycle: ${normal}`);
+    if (!fs.existsSync(absolute)) throw new Error(`Missing SQL include: ${normal}`);
+    active.add(normal);
+    const bytes = canonicalSqlBytes(normal);
+    ordered.push({ path: normal, bytes });
+    const text = bytes.toString('utf8');
+    for (const line of text.split(/\r?\n/)) {
+      const match = line.match(/^\s*\\ir\s+(?:'([^']+)'|"([^"]+)"|([^\s;]+))\s*;?\s*$/);
+      if (!match) continue;
+      const include = match[1] ?? match[2] ?? match[3];
+      visit(path.relative(repoRoot, path.resolve(path.dirname(absolute), include)));
+    }
+    active.delete(normal);
+  }
+  visit(relativeFile);
+  const digestInput = Buffer.concat(ordered.flatMap(item => [Buffer.from(`${item.path}\0`), item.bytes, Buffer.from('\0')]));
+  return { paths: ordered.map(item => item.path), sha256: sha256(digestInput) };
+}
+
+export function inventory() {
+  const migrations = sqlFiles('supabase/migrations').map(p => ({ path: p, sha256: sha256(canonicalSqlBytes(p)) }));
+  const repeatables = sqlFiles('supabase/repeatable').map(p => ({ path: p, ...closureFor(p) }));
+  return { migrations, repeatables };
+}
+
+export function legacyUpgradeInventory(current, legacyFilenames) {
+  const repositoryByFilename = new Map();
+  for (const item of current.migrations) {
+    const filename = path.posix.basename(item.path);
+    if (repositoryByFilename.has(filename)) {
+      throw new Error(`Repository migration filename is ambiguous: ${filename}`);
+    }
+    repositoryByFilename.set(filename, item);
+  }
+  const installed = new Set();
+  let bootstrapMarkers = 0;
+  for (const rawFilename of legacyFilenames) {
+    const filename = String(rawFilename || '');
+    if (filename === '__BOOTSTRAPPED__') {
+      bootstrapMarkers += 1;
+      continue;
+    }
+    if (!repositoryByFilename.has(filename)) {
+      throw new Error(`Legacy installed migration is absent from repository: ${filename}`);
+    }
+    if (installed.has(filename)) {
+      throw new Error(`Legacy migration ledger contains a duplicate: ${filename}`);
+    }
+    installed.add(filename);
+  }
+  if (bootstrapMarkers !== 1) {
+    throw new Error('Legacy migration ledger must contain exactly one __BOOTSTRAPPED__ marker');
+  }
+  if (installed.size === 0) {
+    throw new Error('Legacy migration ledger contains no installed repository migrations');
+  }
+  return {
+    installedCount: installed.size,
+    pendingMigrations: current.migrations.filter(
+      item => !installed.has(path.posix.basename(item.path)),
+    ),
+    pendingRepeatables: current.repeatables,
+  };
+}
+
+export function formatPlanSection(title, items, hashLabel = 'sha256') {
+  if (items.length === 0) return `${title}: none`;
+  return [
+    `${title}:`,
+    ...items.map(item => `- ${item.path} ${hashLabel}=${item.sha256}`),
+  ].join('\n');
+}
+
+export function readJson(relativePath) {
+  return JSON.parse(fs.readFileSync(path.join(repoRoot, relativePath), 'utf8'));
+}
+
+export function writeJson(relativePath, value) {
+  const absolute = path.join(repoRoot, relativePath);
+  fs.mkdirSync(path.dirname(absolute), { recursive: true });
+  fs.writeFileSync(absolute, `${JSON.stringify(value, null, 2)}\n`);
+}
+
+export function verifyIntegrity() {
+  const actual = inventory();
+  const lock = readJson('supabase/release/migration-lock.json');
+  const protectedLock = readJson('supabase/release/protected-boundary-lock.json');
+  const release = readJson('supabase/release/current-release.json');
+  const baselineRepeatableLock = readJson(release.baselineRepeatableLock);
+  const failures = [];
+  const expectedMigrations = new Map(lock.migrations.map(x => [x.path, x.sha256]));
+  for (const item of actual.migrations) {
+    if (!expectedMigrations.has(item.path)) failures.push(`Unrecorded migration: ${item.path}`);
+    else if (expectedMigrations.get(item.path) !== item.sha256) failures.push(`Applied migration changed: ${item.path}`);
+    expectedMigrations.delete(item.path);
+  }
+  for (const missing of expectedMigrations.keys()) failures.push(`Locked migration missing: ${missing}`);
+  for (const item of protectedLock.files) {
+    const absolute = path.join(repoRoot, item.path);
+    if (!fs.existsSync(absolute)) failures.push(`Protected file missing: ${item.path}`);
+    else if (sha256(fs.readFileSync(absolute)) !== item.sha256) failures.push(`Protected boundary changed: ${item.path}`);
+  }
+  const currentRepeatablePaths = new Set(actual.repeatables.map(item => item.path));
+  const baselinePaths = new Set();
+  for (const item of baselineRepeatableLock.repeatables || []) {
+    if (baselinePaths.has(item.path)) failures.push(`Duplicate baseline repeatable: ${item.path}`);
+    baselinePaths.add(item.path);
+    if (!currentRepeatablePaths.has(item.path)) failures.push(`Baseline repeatable missing: ${item.path}`);
+    if (!/^[a-f0-9]{64}$/.test(String(item.sha256 || ''))) failures.push(`Baseline repeatable hash invalid: ${item.path}`);
+  }
+  if (failures.length) throw new Error(failures.join('\n'));
+  return actual;
+}
+
+export function databaseUrl() {
+  const value = process.env.CLOUDTMS_DATABASE_URL;
+  if (!value) throw new Error('CLOUDTMS_DATABASE_URL is required');
+  return value;
+}
+
+export function openManagedPsqlSession() {
+  const timeout = process.env.CLOUDTMS_RELEASE_COMMAND_TIMEOUT_MS;
+  if (timeout && !/^[0-9]+$/.test(timeout)) throw new Error('CLOUDTMS_RELEASE_COMMAND_TIMEOUT_MS is invalid');
+  return new ManagedPsqlSession({ bin: process.env.PSQL_BIN || 'psql',
+    args: [databaseUrl(), '-X', '-q', '-tA', '-v', 'ON_ERROR_STOP=1',
+      '-v', 'VERBOSITY=sqlstate', '-v', 'SHOW_CONTEXT=never', '-v', 'ECHO=none'],
+    cwd: repoRoot, timeoutMs: timeout ? Number(timeout) : 1_800_000,
+    env: { ...process.env, PGCONNECT_TIMEOUT: process.env.PGCONNECT_TIMEOUT || '15' } });
+}
+
+export function validateTarget(environment, expectedTarget) {
+  if (!['TEST', 'LIVE'].includes(environment)) throw new Error('Environment must be TEST or LIVE');
+  const url = new URL(databaseUrl());
+  const local = ['localhost', '127.0.0.1', '::1', 'host.docker.internal'].includes(url.hostname);
+  if (local) {
+    if (process.env.CLOUDTMS_ALLOW_LOCAL !== '1') throw new Error('Local database requires CLOUDTMS_ALLOW_LOCAL=1');
+    return;
+  }
+  if (!expectedTarget) throw new Error('CLOUDTMS_EXPECTED_TARGET is required for hosted targets');
+  const locator = `${url.hostname}|${decodeURIComponent(url.username)}|${decodeURIComponent(url.pathname)}`;
+  if (!locator.includes(expectedTarget)) throw new Error('Database URL does not match CLOUDTMS_EXPECTED_TARGET');
+}
+
+export function validateExpectedDatabase(expectedDatabase) {
+  if (!expectedDatabase) throw new Error('CLOUDTMS_EXPECTED_DATABASE is required for NEW and UPGRADE');
+  const url = new URL(databaseUrl());
+  const databasePath = decodeURIComponent(url.pathname.startsWith('/') ? url.pathname.slice(1) : url.pathname);
+  if (!databasePath || databasePath !== expectedDatabase) {
+    throw new Error('Database URL path does not match CLOUDTMS_EXPECTED_DATABASE');
+  }
+  return databasePath;
+}
+
+export function psql({ file, sql, variables = {}, quiet = true }) {
+  const bin = process.env.PSQL_BIN || 'psql';
+  const args = [databaseUrl(), '-X', '-v', 'ON_ERROR_STOP=1'];
+  if (quiet) args.push('-q');
+  for (const [key, value] of Object.entries(variables)) args.push('-v', `${key}=${value}`);
+  const absoluteFile = file ? (path.isAbsolute(file) ? file : path.join(repoRoot, file)) : null;
+  const deadlockRetries = absoluteFile ? deadlockRetryCountForFile(absoluteFile) : 0;
+  if (file) args.push('-f', executableSqlFile(file));
+  if (sql) args.push('-At');
+  for (let attempt = 0; ; attempt += 1) {
+    const result = spawnSync(bin, args, {
+      cwd: repoRoot,
+      encoding: 'utf8',
+      maxBuffer: 256 * 1024 * 1024,
+      input: sql ? mapLogicalPostgresOwnerSql(sql) : undefined,
+      env: { ...process.env, PGCONNECT_TIMEOUT: process.env.PGCONNECT_TIMEOUT || '15' },
+    });
+    if (result.status === 0) return result.stdout.trim();
+    const detail = result.stderr || result.stdout || result.error?.message || `exit ${result.status}`;
+    const canRetry = attempt < deadlockRetries && /deadlock detected/i.test(String(detail));
+    if (!canRetry) {
+      throw new Error(`Database command failed${file ? ` for ${file}` : ''}: ${String(detail).trim()}`);
+    }
+    const delayMs = [7_000, 19_000, 41_000][attempt];
+    console.warn(
+      `Retrying transaction-safe SQL file after PostgreSQL deadlock (${attempt + 1}/${deadlockRetries}): ${file}`,
+    );
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, delayMs);
+  }
+}
+
+export function exportContract() {
+  const output = psql({ file: 'supabase/release/export_contract.sql', quiet: false });
+  const start = output.indexOf('{');
+  if (start < 0) throw new Error('Contract exporter returned no JSON');
+  return JSON.parse(output.slice(start));
+}
+
+export function canonicalContractHash(contract) {
+  return sha256(JSON.stringify(contract));
+}
+
+export function contractDifference(expected, actual) {
+  const sections = ['extensions', 'schemas', 'enums', 'relations', 'routines', 'triggers', 'policies', 'default_acls'];
+  const changed = sections.filter(section => JSON.stringify(expected[section]) !== JSON.stringify(actual[section]));
+  return changed;
+}
+
+export function contractDifferenceDetails(expected, actual, changedSections = contractDifference(expected, actual)) {
+  const details = [];
+
+  const compareNamedEntries = ({ section, keyFor, label }) => {
+    if (!changedSections.includes(section)) return;
+    const expectedByKey = new Map((expected[section] ?? []).map(entry => [keyFor(entry), entry]));
+    const actualByKey = new Map((actual[section] ?? []).map(entry => [keyFor(entry), entry]));
+    const keys = [...new Set([...expectedByKey.keys(), ...actualByKey.keys()])].sort();
+
+    for (const key of keys) {
+      if (!actualByKey.has(key)) {
+        details.push(`missing installed ${label} ${key}`);
+        continue;
+      }
+      if (!expectedByKey.has(key)) {
+        details.push(`unexpected installed ${label} ${key}`);
+        continue;
+      }
+      if (JSON.stringify(expectedByKey.get(key)) === JSON.stringify(actualByKey.get(key))) continue;
+      const expectedEntry = expectedByKey.get(key);
+      const actualEntry = actualByKey.get(key);
+      const changedFields = [...new Set([
+        ...Object.keys(expectedEntry),
+        ...Object.keys(actualEntry),
+      ])].sort().filter(field => JSON.stringify(expectedEntry[field]) !== JSON.stringify(actualEntry[field]));
+      details.push(`changed installed ${label} ${key} fields=${changedFields.join(',')}`);
+    }
+  };
+
+  compareNamedEntries({
+    section: 'relations',
+    keyFor: relation => `${relation.schema}.${relation.name}:${relation.kind}`,
+    label: 'relation',
+  });
+  compareNamedEntries({
+    section: 'routines',
+    keyFor: routine => `${routine.schema}.${routine.identity}`,
+    label: 'routine',
+  });
+
+  return details;
+}
+
+export function shellGitHead() {
+  const result = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: repoRoot, encoding: 'utf8' });
+  if (result.status !== 0) throw new Error('Cannot determine Git commit');
+  return result.stdout.trim();
+}

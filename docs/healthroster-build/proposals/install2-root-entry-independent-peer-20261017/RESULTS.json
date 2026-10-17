@@ -1,0 +1,44 @@
+{
+  "verdict": "ACCEPT_BOUNDED_ADDITIVE_ENTRY_SOURCE",
+  "sourceOnly": true,
+  "all48AuthorFilesVerified": true,
+  "newTests": 25,
+  "unchangedExistingTests": 14,
+  "independentTests": 14,
+  "actualCurrentParents": 31,
+  "fullOriginalEntryInverses": 2,
+  "grammar": "PG17.7 whole canonical exporter AST preserved",
+  "runtimeNativeSourcePreflight": "NOT_RUN",
+  "runs": [
+    {
+      "name": "author25",
+      "exitCode": 0,
+      "outputSha256": "59f5b8826e99f3691c4dcad62939771f7b76bdbfbf486ae7197a97acc5ba791f",
+      "closedSummary": "ry (5.2706ms)\n\u2714 no arbitrary predecessor SQL, marker or extra argument accepted (1.3904ms)\n\u2714 single-result parsing refuses ambiguous or malformed envelopes without returning payload text (0.7714ms)\n\u2714 import and test runner cannot start Install2 native execution (0.3876ms)\n\u2714 coordinator uses unchanged Install2 gates/runner, full proof and same turn through Office publication (0.2435ms)\n\u2714 fresh archive retains full nine checks, exact registry base, current full tests and no native route (0.0816ms)\n\u2139 tests 25\n\u2139 suites 0\n\u2139 pass 25\n\u2139 fail 0\n\u2139 cancelled 0\n\u2139 skipped 0\n\u2139 todo 0\n\u2139 duration_ms 210.0555\n"
+    },
+    {
+      "name": "original14",
+      "exitCode": 0,
+      "outputSha256": "2517f992e703ddca9814406bba0761a552155d5214a499f5f40b52247d02812d",
+      "closedSummary": ".9391ms)\n\u2714 retained drafts remain visible and prevent a clean release claim (0.1178ms)\n\u2714 source relationship cannot swap predecessor, target, bank pin or any actual ancestry edge (0.6804ms)\n\u2714 the common safety gates still hold runtime/Office before any publication callback (0.7262ms)\n\u2714 the second marker can be probed truthfully and cannot be run through the first-install entry (0.6778ms)\n\u2714 second-install callback source flow preserves identity and gates across rollback and publication (0.9795ms)\n\u2139 tests 14\n\u2139 suites 0\n\u2139 pass 14\n\u2139 fail 0\n\u2139 cancelled 0\n\u2139 skipped 0\n\u2139 todo 0\n\u2139 duration_ms 206.9787\n"
+    },
+    {
+      "name": "independent14",
+      "exitCode": 0,
+      "outputSha256": "85ecd05143946ef68d616bfe195fa65a2664b0fa79b1ebc94e6e2dd4a4afc1a4",
+      "closedSummary": "hot and fresh WeakMap/fixture attribution owners are raw preserved (0.3072ms)\n\u2714 full same-session execution and resource/stream guards have only actual install2 application name (0.1088ms)\n\u2714 full managed callback retains original proof/push/managed receipt order plus actual Office path (0.1332ms)\n\u2714 all original nine archive check groups retained exactly with two additive source tests (0.1232ms)\n\u2714 all original receipt/key/identity guards remain, without new compile override or F17 gate (0.0993ms)\n\u2139 tests 14\n\u2139 suites 0\n\u2139 pass 14\n\u2139 fail 0\n\u2139 cancelled 0\n\u2139 skipped 0\n\u2139 todo 0\n\u2139 duration_ms 117.4897\n"
+    },
+    {
+      "name": "parent31",
+      "exitCode": 0,
+      "outputSha256": "00ae10327679f6a7a0a6d1c45b9b85530e2836787bbf2e0f6f3a43b22fe45103",
+      "closedSummary": "{\"status\": \"INSTALL2_ADDITIVE_SOURCE_PARENT_PROOF_PASS\", \"completeParents\": 31, \"wholeInverses\": 2, \"additiveTargets\": 3, \"unchangedSnapshotAndFreshQualifier\": true, \"actualCurrentGit\": true, \"native\": \"NOT_RUN\"}\r\n"
+    },
+    {
+      "name": "pg17",
+      "exitCode": 0,
+      "outputSha256": "38662bafaf610b54622faab5cd7141320bbbe4ac8eb879678c4f6f2132ae9682",
+      "closedSummary": "{\"status\": \"PG17_FIXED_METADATA_PREDECESSOR_AST_PASS\", \"parserVersion\": \"v7.20\", \"postgresGrammar\": [17, 7], \"statements\": 2, \"wholeCanonicalExporterASTEqual\": true, \"arbitrarySQLInput\": false, \"native\": \"NOT_RUN\"}\r\n"
+    }
+  ]
+}

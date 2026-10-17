@@ -1,0 +1,20 @@
+{
+  "version": "QT_R7_C_READER_SOURCE_REVIEW_MANIFEST_V1",
+  "files": [
+    {
+      "file": "REVIEW.md",
+      "bytes": 4695,
+      "sha256": "b98374a1144efc21dbe4197df1ee18b6fcbb913c2f9b9b667ebb71bfe1f9cf07"
+    },
+    {
+      "file": "SOURCES.json",
+      "bytes": 2027,
+      "sha256": "19ea814dade7262f338af18432bed68f8ac081eb29cdd2f3ece90dbdfbec3090"
+    },
+    {
+      "file": "verify.py",
+      "bytes": 1107,
+      "sha256": "5e9a75c12d734c411c110a51a6cd243a78e9f85467f04ef79f9e8ad93a4b6b31"
+    }
+  ]
+}

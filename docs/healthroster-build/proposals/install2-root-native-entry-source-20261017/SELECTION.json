@@ -1,0 +1,23 @@
+{
+  "version": "INSTALL2_ADDITIVE_ENTRY_SELECTION_V1",
+  "targets": [
+    {
+      "file": "scripts/healthroster-install2-native-coordinator.mjs",
+      "bytes": 28669,
+      "sha256": "daf357f994e2afe782f7ee8e663e2027d0dfe02765dce0839a2f8a0c8e0172d3",
+      "mode": "ADDITIVE_ONLY_PARENT_ENTRY_UNCHANGED"
+    },
+    {
+      "file": "scripts/healthroster-install2-archive-preflight.mjs",
+      "bytes": 8427,
+      "sha256": "867224c19cea5ed12ad9a402a88aefa9c9df674cd6eb6c9cbae149a807e4168e",
+      "mode": "ADDITIVE_ONLY_PARENT_ENTRY_UNCHANGED"
+    },
+    {
+      "file": "tests/healthroster-install2-native-coordinator.test.mjs",
+      "bytes": 7642,
+      "sha256": "dfcf797c9b1c972b98e0a7edcb47b6876926dac212615de06f056e7883703d6e",
+      "mode": "ADDITIVE_TEST_ONLY"
+    }
+  ]
+}

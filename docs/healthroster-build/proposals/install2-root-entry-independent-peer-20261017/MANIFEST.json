@@ -1,0 +1,26 @@
+{
+  "version": "INSTALL2_ROOT_ENTRY_INDEPENDENT_PEER_V1",
+  "sourceOnly": true,
+  "files": [
+    {
+      "file": "independent.test.mjs",
+      "bytes": 4787,
+      "sha256": "e7f219f1af5cca4167273d1f0557f2c696da39ea3c523c6ce852c84a26b9871c"
+    },
+    {
+      "file": "RESULTS.json",
+      "bytes": 3807,
+      "sha256": "69e79255a37f6f8483d97745760d34ad2efc628d39395c2ac698e368999a311f"
+    },
+    {
+      "file": "REVIEW.md",
+      "bytes": 3325,
+      "sha256": "aec6986c038cded938c4c522ae64fc9e739ef06c6a9ef9fe028656e121e04468"
+    },
+    {
+      "file": "SOURCE_PINS.json",
+      "bytes": 1781,
+      "sha256": "d64dcc2d65ff35f6ac177f764939111b9c53aa8dcc51c1bcbdc5eb0b28d785c5"
+    }
+  ]
+}
