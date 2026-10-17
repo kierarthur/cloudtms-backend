@@ -1,6 +1,16 @@
 # Current HealthRoster TEST install plan
 
-## Latest continuation — 17 October 2026, source checkpoint acee28f5
+## Current continuation — 17 October 2026, after actual S0 R7
+
+Install1 is COMPLETE/featuresOFF. The sole remaining normal Install2 is NOT_INSTALLED; final critics NOT_RUN. Same/Separate, Source/current read, Office Keep, nine closed private helpers and the Daily pure adapter/component are now mounted; preserve their existing source/native receipts. Last full joined source gate148fc0c passed2260 SQL sources/79 RPC roots/183 routine-work/41 typed-transport signatures; later source-only helper corrections are individually checked and require the final exact-candidate gate/reseal.
+
+Actual Contact constructors/background R4 passed full original canonical restoration. Actual genuine S0 R7 passed original native/child qualification with all11 reserved scopes vacant and its A released; public prefix is committed at b8bdd991. S1–S4 remain NOT_RUN. QT/Admin literal-SPI R3 still times out in its first full audit snapshot; rollback/fresh fixture absence/LEGACY1 pass, positive/canonical-after do not. Retain all three failures, every assertion and unchanged timeout; no unchanged retry.
+
+Concrete source corrections remaining: independently reviewed real Office Missing context/prepare caller and lossless revision successor, preserving historical numeric request bytes; managed root successor for Money3e728640 seven outbound revision-string casts and final metadata/reseal. Office cad4fd9 introduced a real protected KEEP-successor refusal caught by peer; it must be fixed before adoption. These supersede the historical early-lane source summary below. Source B051 and three Daily/four Contract public compositions retain genuine unprovided Banking owner joins. Current R5 named checkpoints leave CM02/16/17 and HR06 OPEN, HR11 source-only and F17 NOT_INSTALLED; no substitute implementation or chat message.
+
+Continue eligible native/API/currentness/permission/race/real-financial and genuine producer checks, cleanPG17 seal, exact pushed-candidate full rollback/restoration, protected DB-first Install2, postVERIFIED/prepublication F5, ordered Workers/Office, applicable TEST activation, genuine past open upload-empty acceptance week, current-main MyTMS/TestFlight/phone and both final critics. NEXT-dependent checks alone wait actual compatible F17. No unanswered owner decision; no reliable overall finish ETA. Retain1–3h per qualified rehearsal/release cycle plus remaining source/acceptance/Apple/device time.
+
+## Historical source checkpoint — 17 October 2026, acee28f5
 
 Install1 remains COMPLETE/featuresOFF. One normal Install2 remains NOT_INSTALLED. The complete current Later Accept/public Keep SQL and mandatory verifiers are mounted at ef64f439; finite F23 extension93328c55 and whole source gate PASS are saved at acee28f5b4d862bdf7e4425a65566dd2d060be35. All423 migrations/1090 repeatables and2995 final signatures/1601 registered owners are source-checked. The original92 schema/interface objects and prior approvals remain unchanged. The forward erratum corrects the historical virtual-loader omission of two uppercase.SQL migrations; prior frozen evidence is retained.
 

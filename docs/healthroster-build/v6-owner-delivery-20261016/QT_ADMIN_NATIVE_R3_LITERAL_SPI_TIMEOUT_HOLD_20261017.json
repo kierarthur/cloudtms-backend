@@ -1,0 +1,49 @@
+{
+  "version": "QT_ADMIN_ACTUAL_R3_LITERAL_SPI_TIMEOUT_HOLD_V1",
+  "status": "HOLD_NATIVE_POSITIVE_NOT_QUALIFIED",
+  "sourceCommitAtStart": "b8bdd9914724999598876c6b2b3d6359ee784775",
+  "ownedDirectory": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/.codex-tmp/contact-qt-positive-native-20261017-qt-admin-literal-spi-r3",
+  "sourceProposal": "docs/healthroster-build/proposals/qt-audit-unlimited-spi-forward-20261017",
+  "sourceProposalCommit": "fa2f3a595c87acf00bd8395133190271b46b0005",
+  "sourceRootMountCommit": "0184485",
+  "mainStatementCount": 64,
+  "lastReachedStatement": 59,
+  "lastReachedOperation": "First complete audit_events MD5 snapshot, DO line23 EXECUTE; final IF not reached",
+  "nativeFailure": {
+    "message": "canceling statement due to statement timeout",
+    "code": "57014",
+    "where": "SQL statement \"select md5(coalesce(string_agg(md5(to_jsonb(a)::text),'|' order by md5(to_jsonb(a)::text)),'')) from public.audit_events a\"\nPL/pgSQL function inline_code_block line 23 at EXECUTE",
+    "routine": "ProcessInterrupts"
+  },
+  "nativeCallTiming": {
+    "version": "ROOT_OBSERVED_MCP_CALL_TIMING_V1",
+    "route": "mcp__cloudtms_miget_operations_kier_codex__miget_db_transaction_rollback",
+    "sqlSha256": "e52b4e2c1d6b4e1598e9351d30c6362f0f871c11813746277e2eb93bbafbc0ca",
+    "callStartedAt": "2026-10-17T14:17:26.616Z",
+    "callReturnedAt": "2026-10-17T14:17:58.909Z"
+  },
+  "accepted": false,
+  "rolledBack": true,
+  "connectedFresh": true,
+  "postRollback": {
+    "module": "LEGACY:1",
+    "markerAbsent": true,
+    "qtObjectsAbsent": true,
+    "userFixtureRowsRemaining": 0,
+    "applyingCount": 0
+  },
+  "ownTurn": {
+    "takenAt": "2026-10-17T14:16:29.222Z",
+    "releasedAt": "2026-10-17T14:18:00.103Z",
+    "explicitUnlockConfirmed": true,
+    "connectionClosed": true,
+    "proved": false
+  },
+  "processExitCode": 1,
+  "independentCanonicalAfter": "NOT_RUN",
+  "performance": "FIX_DID_NOT_MEET_EXISTING_30_SECOND_NATIVE_STATEMENT_CAP",
+  "timeoutsAndAssertionsChanged": false,
+  "unchangedRetryAllowed": false,
+  "install2": "NOT_INSTALLED",
+  "finalCritics": "NOT_RUN"
+}
