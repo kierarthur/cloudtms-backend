@@ -1,0 +1,3186 @@
+{
+  "source": "supabase/release/current-contract.json",
+  "sourceSha256": "da0e0870442c151534c04d108757a0d76a812879aafae71f01486c7077ce674a",
+  "relations": [
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": false,
+      "kind": "r",
+      "name": "bpay_next_work",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "applied_revision_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "approval_state",
+          "type": "text",
+          "default": "'PENDING'::text",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "booking_id",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "candidate_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "contract_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "created_at_utc",
+          "type": "timestamp with time zone",
+          "default": "transaction_timestamp()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "current_revision_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "current_revision_no",
+          "type": "bigint",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "default": "gen_random_uuid()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "origin_kind",
+          "type": "text",
+          "default": "'CONTRACT'::text",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "origin_work_date",
+          "type": "date",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "original_timesheet_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "pay_hold",
+          "type": "boolean",
+          "default": "false",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "pay_hold_changed_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "pay_hold_control_version",
+          "type": "bigint",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "pay_hold_financial_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "pay_hold_physical_timesheet_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "pay_hold_reason",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "updated_at_utc",
+          "type": "timestamp with time zone",
+          "default": "transaction_timestamp()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "week_ending_date",
+          "type": "date",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "work_kind",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "bpay_next_work_booking_id_key",
+          "definition": "CREATE UNIQUE INDEX bpay_next_work_booking_id_key ON private.bpay_next_work USING btree (booking_id)"
+        },
+        {
+          "name": "bpay_next_work_candidate_week_idx",
+          "definition": "CREATE INDEX bpay_next_work_candidate_week_idx ON private.bpay_next_work USING btree (candidate_id, week_ending_date, id)"
+        },
+        {
+          "name": "bpay_next_work_id_candidate_id_key",
+          "definition": "CREATE UNIQUE INDEX bpay_next_work_id_candidate_id_key ON private.bpay_next_work USING btree (id, candidate_id)"
+        },
+        {
+          "name": "bpay_next_work_id_original_timesheet_id_key",
+          "definition": "CREATE UNIQUE INDEX bpay_next_work_id_original_timesheet_id_key ON private.bpay_next_work USING btree (id, original_timesheet_id)"
+        },
+        {
+          "name": "bpay_next_work_original_timesheet_id_key",
+          "definition": "CREATE UNIQUE INDEX bpay_next_work_original_timesheet_id_key ON private.bpay_next_work USING btree (original_timesheet_id)"
+        },
+        {
+          "name": "bpay_next_work_pending_idx",
+          "definition": "CREATE INDEX bpay_next_work_pending_idx ON private.bpay_next_work USING btree (candidate_id, id) WHERE (approval_state = 'PENDING'::text)"
+        },
+        {
+          "name": "bpay_next_work_pkey",
+          "definition": "CREATE UNIQUE INDEX bpay_next_work_pkey ON private.bpay_next_work USING btree (id)"
+        },
+        {
+          "name": "bpay_next_work_unapplied_idx",
+          "definition": "CREATE INDEX bpay_next_work_unapplied_idx ON private.bpay_next_work USING btree (candidate_id, id) WHERE (current_revision_id IS DISTINCT FROM applied_revision_id)"
+        },
+        {
+          "name": "bpay_next_workbench_seed_work_idx",
+          "definition": "CREATE INDEX bpay_next_workbench_seed_work_idx ON private.bpay_next_work USING btree (id) WHERE ((approval_state = ANY (ARRAY['APPROVED'::text, 'WITHDRAWN'::text])) AND ((current_revision_id IS NOT NULL) OR (applied_revision_id IS NOT NULL)))"
+        }
+      ],
+      "options": [],
+      "force_rls": false,
+      "constraints": [
+        {
+          "name": "bpay_next_work_applied_revision_fk",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": true,
+          "definition": "FOREIGN KEY (id, applied_revision_id) REFERENCES private.bpay_next_work_revision(work_id, id) ON DELETE RESTRICT DEFERRABLE"
+        },
+        {
+          "name": "bpay_next_work_approval_state_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (approval_state = ANY (ARRAY['PENDING'::text, 'APPROVED'::text, 'WITHDRAWN'::text]))"
+        },
+        {
+          "name": "bpay_next_work_booking_id_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (char_length(booking_id) >= 1 AND char_length(booking_id) <= 200)"
+        },
+        {
+          "name": "bpay_next_work_booking_id_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (booking_id)"
+        },
+        {
+          "name": "bpay_next_work_candidate_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (candidate_id) REFERENCES candidates(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_work_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((approval_state = 'APPROVED'::text) = (current_revision_id IS NOT NULL))"
+        },
+        {
+          "name": "bpay_next_work_contract_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (contract_id) REFERENCES contracts(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_work_current_revision_fk",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": true,
+          "definition": "FOREIGN KEY (id, current_revision_id) REFERENCES private.bpay_next_work_revision(work_id, id) ON DELETE RESTRICT DEFERRABLE"
+        },
+        {
+          "name": "bpay_next_work_current_revision_no_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (current_revision_no >= 0)"
+        },
+        {
+          "name": "bpay_next_work_id_candidate_id_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (id, candidate_id)"
+        },
+        {
+          "name": "bpay_next_work_id_original_timesheet_id_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (id, original_timesheet_id)"
+        },
+        {
+          "name": "bpay_next_work_origin_identity_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (origin_kind = 'CONTRACT'::text AND contract_id IS NOT NULL AND origin_work_date IS NULL OR origin_kind = 'DAILY'::text AND contract_id IS NULL AND work_kind = 'ORDINARY'::text AND origin_work_date IS NOT NULL)"
+        },
+        {
+          "name": "bpay_next_work_original_timesheet_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (original_timesheet_id) REFERENCES timesheets(timesheet_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_work_original_timesheet_id_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (original_timesheet_id)"
+        },
+        {
+          "name": "bpay_next_work_pay_hold_control_version_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (pay_hold_control_version >= 0)"
+        },
+        {
+          "name": "bpay_next_work_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "bpay_next_work_work_kind_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (work_kind = ANY (ARRAY['ORDINARY'::text, 'SOURCE'::text, 'EXPENSE'::text, 'ADJUSTMENT'::text]))"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": false,
+      "kind": "r",
+      "name": "bpay_next_work_revision",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "approved_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "approved_source_ex_vat",
+          "type": "numeric(18,2)",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "band_label",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "candidate_display_name",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "candidate_reference",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "certified_zero",
+          "type": "boolean",
+          "default": "false",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "client_display_name",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "created_at_utc",
+          "type": "timestamp with time zone",
+          "default": "transaction_timestamp()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "currency",
+          "type": "text",
+          "default": "'GBP'::text",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "daily_approval_evidence_json",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "detail_kind",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "expected_line_count",
+          "type": "integer",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "expected_rate_schedule_count",
+          "type": "integer",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "financial_snapshot_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "default": "gen_random_uuid()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "job_title",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "payment_treatment_approval_revision_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "physical_timesheet_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "physical_timesheet_version",
+          "type": "integer",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "revision_no",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "sealed_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "source_event_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "source_head_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "source_inventory_digest",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "source_kind",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "source_pay_channel",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "source_rate_authority_kind",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "source_rate_default_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "source_rate_override_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "source_umbrella_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "timesheet_reference",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "valuation_policy_id",
+          "type": "uuid",
+          "default": "private.bpay_next_current_valuation_policy_id_v1()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "week_ending_date",
+          "type": "date",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "work_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "bpay_next_revision_work_idx",
+          "definition": "CREATE INDEX bpay_next_revision_work_idx ON private.bpay_next_work_revision USING btree (work_id, revision_no, id)"
+        },
+        {
+          "name": "bpay_next_snooze_revision_candidate_idx",
+          "definition": "CREATE INDEX bpay_next_snooze_revision_candidate_idx ON private.bpay_next_work_revision USING btree (\"left\"(lower(candidate_display_name), 512) COLLATE \"C\", work_id, id)"
+        },
+        {
+          "name": "bpay_next_snooze_revision_week_idx",
+          "definition": "CREATE INDEX bpay_next_snooze_revision_week_idx ON private.bpay_next_work_revision USING btree (week_ending_date, work_id, id)"
+        },
+        {
+          "name": "bpay_next_work_revision_pkey",
+          "definition": "CREATE UNIQUE INDEX bpay_next_work_revision_pkey ON private.bpay_next_work_revision USING btree (id)"
+        },
+        {
+          "name": "bpay_next_work_revision_snooze_physical_idx",
+          "definition": "CREATE INDEX bpay_next_work_revision_snooze_physical_idx ON private.bpay_next_work_revision USING btree (physical_timesheet_id, physical_timesheet_version, work_id, id) WHERE (sealed_at_utc IS NOT NULL)"
+        },
+        {
+          "name": "bpay_next_work_revision_source_event_id_key",
+          "definition": "CREATE UNIQUE INDEX bpay_next_work_revision_source_event_id_key ON private.bpay_next_work_revision USING btree (source_event_id)"
+        },
+        {
+          "name": "bpay_next_work_revision_work_id_id_key",
+          "definition": "CREATE UNIQUE INDEX bpay_next_work_revision_work_id_id_key ON private.bpay_next_work_revision USING btree (work_id, id)"
+        },
+        {
+          "name": "bpay_next_work_revision_work_id_revision_no_key",
+          "definition": "CREATE UNIQUE INDEX bpay_next_work_revision_work_id_revision_no_key ON private.bpay_next_work_revision USING btree (work_id, revision_no)"
+        }
+      ],
+      "options": [],
+      "force_rls": false,
+      "constraints": [
+        {
+          "name": "bpay_next_revision_daily_evidence_shape_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (daily_approval_evidence_json IS NULL OR jsonb_typeof(daily_approval_evidence_json) = 'object'::text)"
+        },
+        {
+          "name": "bpay_next_revision_source_inventory_digest_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (source_inventory_digest IS NULL OR octet_length(source_inventory_digest) = 32 AND (source_kind = ANY (ARRAY['SOURCE'::text, 'PROTECTED'::text])) AND source_event_id IS NOT NULL AND (source_kind <> 'PROTECTED'::text OR source_head_id IS NOT NULL))"
+        },
+        {
+          "name": "bpay_next_treatment_approval_distinct_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (payment_treatment_approval_revision_id IS NULL OR payment_treatment_approval_revision_id <> id AND source_event_id IS NULL)"
+        },
+        {
+          "name": "bpay_next_treatment_approval_revision_fk",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (work_id, payment_treatment_approval_revision_id) REFERENCES private.bpay_next_work_revision(work_id, id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_work_revision_candidate_display_name_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(candidate_display_name) <= 8192)"
+        },
+        {
+          "name": "bpay_next_work_revision_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((approved_at_utc IS NULL) = (sealed_at_utc IS NULL))"
+        },
+        {
+          "name": "bpay_next_work_revision_check1",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (expected_line_count <> 0 OR certified_zero)"
+        },
+        {
+          "name": "bpay_next_work_revision_check2",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (NOT certified_zero OR approved_source_ex_vat = 0::numeric)"
+        },
+        {
+          "name": "bpay_next_work_revision_client_display_name_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(client_display_name) <= 8192)"
+        },
+        {
+          "name": "bpay_next_work_revision_currency_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (currency = 'GBP'::text)"
+        },
+        {
+          "name": "bpay_next_work_revision_detail_kind_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (detail_kind = ANY (ARRAY['SHIFT'::text, 'AGGREGATE'::text, 'FIXED'::text]))"
+        },
+        {
+          "name": "bpay_next_work_revision_expected_line_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (expected_line_count >= 0)"
+        },
+        {
+          "name": "bpay_next_work_revision_expected_rate_schedule_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (expected_rate_schedule_count >= 0)"
+        },
+        {
+          "name": "bpay_next_work_revision_financial_snapshot_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (financial_snapshot_id) REFERENCES timesheets_financials(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_work_revision_job_title_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (job_title IS NULL OR octet_length(job_title) <= 8192)"
+        },
+        {
+          "name": "bpay_next_work_revision_physical_timesheet_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (physical_timesheet_id) REFERENCES timesheets(timesheet_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_work_revision_physical_timesheet_version_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (physical_timesheet_version > 0)"
+        },
+        {
+          "name": "bpay_next_work_revision_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "bpay_next_work_revision_revision_no_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (revision_no > 0)"
+        },
+        {
+          "name": "bpay_next_work_revision_source_event_id_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (source_event_id)"
+        },
+        {
+          "name": "bpay_next_work_revision_source_kind_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (source_kind = ANY (ARRAY['ORDINARY'::text, 'SOURCE'::text, 'PROTECTED'::text, 'EXPENSE'::text, 'ADJUSTMENT'::text]))"
+        },
+        {
+          "name": "bpay_next_work_revision_source_pay_channel_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (source_pay_channel = ANY (ARRAY['PAYE'::text, 'UMBRELLA'::text]))"
+        },
+        {
+          "name": "bpay_next_work_revision_source_rate_authority_kind_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (source_rate_authority_kind IS NULL OR char_length(source_rate_authority_kind) >= 1 AND char_length(source_rate_authority_kind) <= 128)"
+        },
+        {
+          "name": "bpay_next_work_revision_source_umbrella_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (source_umbrella_id) REFERENCES umbrellas(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_work_revision_valuation_policy_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (valuation_policy_id) REFERENCES private.bpay_next_valuation_policy(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_work_revision_work_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (work_id) REFERENCES private.bpay_next_work(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_work_revision_work_id_id_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (work_id, id)"
+        },
+        {
+          "name": "bpay_next_work_revision_work_id_revision_no_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (work_id, revision_no)"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "timesheets",
+      "owner": "postgres",
+      "schema": "public",
+      "columns": [
+        {
+          "name": "active_document_operation_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "actual_schedule_json",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "additional_units_per_day",
+          "type": "jsonb",
+          "default": "'{}'::jsonb",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "additional_units_week",
+          "type": "jsonb",
+          "default": "'{}'::jsonb",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "adjustment_origin",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "archived_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "archived_by_user_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "archived_reason_code",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "auth_job_title",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "auth_name",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "authorised_at_server",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "band",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "booking_id",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "bpay_work_key_v1",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "bpay_work_revision_v1",
+          "type": "bigint",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "break_end_iso",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "break_minutes",
+          "type": "integer",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "break_start_iso",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "candidate_hint_text",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "candidate_manager_approved_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "candidate_submission_route_intent",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "candidate_workflow_generation",
+          "type": "integer",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "candidate_workflow_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "client_hash",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "client_ua",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "contract_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "correction_id",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "correction_kind",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "default": "now()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "current_document_version_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "day_references_json",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "document_revision",
+          "type": "bigint",
+          "default": "1",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "document_state",
+          "type": "text",
+          "default": "'NOT_REQUESTED'::text",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "generated_pdf_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "generated_pdf_refs_captured_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "generated_pdf_refs_sig",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "generated_pdf_refs_snapshot_json",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "hospital_norm",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "idempotency_key",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "img_sha256_auth",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "img_sha256_nurse",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "is_adjustment",
+          "type": "boolean",
+          "default": "false",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "is_current",
+          "type": "boolean",
+          "default": "true",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "job_title_norm",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "last_document_error_json",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "line_type",
+          "type": "timesheet_line_type_enum",
+          "default": "'HOURS'::timesheet_line_type_enum",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "manual_document_asset_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "manual_pdf_r2_key",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "manual_pdf_rotation_degrees",
+          "type": "integer",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "occupant_key_norm",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "parent_timesheet_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "qr_generated_at",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "qr_last_sent_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "qr_last_sent_hash",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "qr_payload_json",
+          "type": "jsonb",
+          "default": "'{}'::jsonb",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "qr_r2_key",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "qr_scan_info_json",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "qr_scanned_at",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "qr_sent_refs_captured_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "qr_sent_refs_sig",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "qr_sent_refs_snapshot_json",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "qr_signed_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "qr_signed_hash",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "qr_status",
+          "type": "timesheet_qr_status_enum",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "qr_token",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "r2_auth_key",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "r2_nurse_key",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "reference_number",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "reference_set_at",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "revoked_at",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "revoked_by",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "revoked_reason",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "scheduled_end_iso",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "scheduled_start_iso",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "settings_authority_fingerprint",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "settings_authority_json",
+          "type": "jsonb",
+          "default": "'{}'::jsonb",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "settings_authority_resolved_at",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "settings_authority_version",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "sheet_scope",
+          "type": "timesheet_scope_enum",
+          "default": "'DAILY'::timesheet_scope_enum",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "shift_label_norm",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "status",
+          "type": "timesheet_status_enum",
+          "default": "'RECEIVED'::timesheet_status_enum",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "submission_mode",
+          "type": "submission_mode_enum",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "timesheet_id",
+          "type": "uuid",
+          "default": "gen_random_uuid()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "default": "now()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "version",
+          "type": "integer",
+          "default": "1",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "ward_norm",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "week_ending_date",
+          "type": "date",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "worked_end_iso",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "worked_minutes",
+          "type": "integer",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "worked_start_iso",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "bpay_next_timesheet_current_trim_booking_idx",
+          "definition": "CREATE INDEX bpay_next_timesheet_current_trim_booking_idx ON public.timesheets USING btree (btrim(booking_id)) WHERE (is_current AND (booking_id IS NOT NULL) AND (btrim(booking_id) <> ''::text))"
+        },
+        {
+          "name": "bpay_timesheet_work_identity_v1",
+          "definition": "CREATE UNIQUE INDEX bpay_timesheet_work_identity_v1 ON public.timesheets USING btree (timesheet_id, bpay_work_revision_v1)"
+        },
+        {
+          "name": "idx_timesheets_active_document_operation",
+          "definition": "CREATE INDEX idx_timesheets_active_document_operation ON public.timesheets USING btree (active_document_operation_id) WHERE (active_document_operation_id IS NOT NULL)"
+        },
+        {
+          "name": "idx_timesheets_active_tools",
+          "definition": "CREATE INDEX idx_timesheets_active_tools ON public.timesheets USING btree (is_current, week_ending_date DESC, timesheet_id) WHERE (archived_at_utc IS NULL)"
+        },
+        {
+          "name": "idx_timesheets_archive_actor",
+          "definition": "CREATE INDEX idx_timesheets_archive_actor ON public.timesheets USING btree (archived_by_user_id, archived_at_utc DESC) WHERE (archived_at_utc IS NOT NULL)"
+        },
+        {
+          "name": "idx_timesheets_archived_tools",
+          "definition": "CREATE INDEX idx_timesheets_archived_tools ON public.timesheets USING btree (archived_at_utc DESC, week_ending_date DESC, timesheet_id) WHERE (archived_at_utc IS NOT NULL)"
+        },
+        {
+          "name": "idx_timesheets_band",
+          "definition": "CREATE INDEX idx_timesheets_band ON public.timesheets USING btree (band)"
+        },
+        {
+          "name": "idx_timesheets_booking_id",
+          "definition": "CREATE INDEX idx_timesheets_booking_id ON public.timesheets USING btree (booking_id)"
+        },
+        {
+          "name": "idx_timesheets_candidate_paper_source_v1",
+          "definition": "CREATE INDEX idx_timesheets_candidate_paper_source_v1 ON public.timesheets USING btree (booking_id, contract_id, week_ending_date, timesheet_id) WHERE ((is_current = true) AND (archived_at_utc IS NULL))"
+        },
+        {
+          "name": "idx_timesheets_contract",
+          "definition": "CREATE INDEX idx_timesheets_contract ON public.timesheets USING btree (contract_id)"
+        },
+        {
+          "name": "idx_timesheets_contract_scope",
+          "definition": "CREATE INDEX idx_timesheets_contract_scope ON public.timesheets USING btree (contract_id, sheet_scope)"
+        },
+        {
+          "name": "idx_timesheets_contract_weekending",
+          "definition": "CREATE INDEX idx_timesheets_contract_weekending ON public.timesheets USING btree (contract_id, week_ending_date)"
+        },
+        {
+          "name": "idx_timesheets_current_document",
+          "definition": "CREATE INDEX idx_timesheets_current_document ON public.timesheets USING btree (current_document_version_id) WHERE (current_document_version_id IS NOT NULL)"
+        },
+        {
+          "name": "idx_timesheets_hosp_current",
+          "definition": "CREATE INDEX idx_timesheets_hosp_current ON public.timesheets USING btree (hospital_norm) WHERE (is_current = true)"
+        },
+        {
+          "name": "idx_timesheets_hosp_current_auth",
+          "definition": "CREATE INDEX idx_timesheets_hosp_current_auth ON public.timesheets USING btree (hospital_norm) WHERE ((is_current = true) AND (authorised_at_server IS NOT NULL))"
+        },
+        {
+          "name": "idx_timesheets_invoice_batch_week_scope",
+          "definition": "CREATE INDEX idx_timesheets_invoice_batch_week_scope ON public.timesheets USING btree (week_ending_date, timesheet_id) WHERE (is_current AND (revoked_at IS NULL))"
+        },
+        {
+          "name": "idx_timesheets_is_adjustment_true",
+          "definition": "CREATE INDEX idx_timesheets_is_adjustment_true ON public.timesheets USING btree (is_adjustment) WHERE (is_adjustment = true)"
+        },
+        {
+          "name": "idx_timesheets_is_current",
+          "definition": "CREATE INDEX idx_timesheets_is_current ON public.timesheets USING btree (is_current)"
+        },
+        {
+          "name": "idx_timesheets_line_type",
+          "definition": "CREATE INDEX idx_timesheets_line_type ON public.timesheets USING btree (line_type)"
+        },
+        {
+          "name": "idx_timesheets_manual_document_asset",
+          "definition": "CREATE INDEX idx_timesheets_manual_document_asset ON public.timesheets USING btree (manual_document_asset_id) WHERE (manual_document_asset_id IS NOT NULL)"
+        },
+        {
+          "name": "idx_timesheets_occ_current",
+          "definition": "CREATE INDEX idx_timesheets_occ_current ON public.timesheets USING btree (occupant_key_norm) WHERE (is_current = true)"
+        },
+        {
+          "name": "idx_timesheets_occ_current_auth",
+          "definition": "CREATE INDEX idx_timesheets_occ_current_auth ON public.timesheets USING btree (occupant_key_norm) WHERE ((is_current = true) AND (authorised_at_server IS NOT NULL))"
+        },
+        {
+          "name": "idx_timesheets_parent_timesheet_id",
+          "definition": "CREATE INDEX idx_timesheets_parent_timesheet_id ON public.timesheets USING btree (parent_timesheet_id)"
+        },
+        {
+          "name": "idx_timesheets_qr_token",
+          "definition": "CREATE UNIQUE INDEX idx_timesheets_qr_token ON public.timesheets USING btree (qr_token) WHERE (qr_token IS NOT NULL)"
+        },
+        {
+          "name": "idx_timesheets_reference_number",
+          "definition": "CREATE INDEX idx_timesheets_reference_number ON public.timesheets USING btree (reference_number)"
+        },
+        {
+          "name": "idx_timesheets_status",
+          "definition": "CREATE INDEX idx_timesheets_status ON public.timesheets USING btree (status)"
+        },
+        {
+          "name": "idx_timesheets_sub_mode",
+          "definition": "CREATE INDEX idx_timesheets_sub_mode ON public.timesheets USING btree (submission_mode)"
+        },
+        {
+          "name": "idx_timesheets_weekending",
+          "definition": "CREATE INDEX idx_timesheets_weekending ON public.timesheets USING btree (week_ending_date)"
+        },
+        {
+          "name": "timesheets_booking_id_current_uidx",
+          "definition": "CREATE UNIQUE INDEX timesheets_booking_id_current_uidx ON public.timesheets USING btree (booking_id) WHERE is_current"
+        },
+        {
+          "name": "timesheets_booking_id_version_uidx",
+          "definition": "CREATE UNIQUE INDEX timesheets_booking_id_version_uidx ON public.timesheets USING btree (booking_id, version)"
+        },
+        {
+          "name": "timesheets_candidate_workflow_idx",
+          "definition": "CREATE INDEX timesheets_candidate_workflow_idx ON public.timesheets USING btree (candidate_workflow_id, candidate_workflow_generation) WHERE (candidate_workflow_id IS NOT NULL)"
+        },
+        {
+          "name": "timesheets_generated_pdf_refs_sig_idx",
+          "definition": "CREATE INDEX timesheets_generated_pdf_refs_sig_idx ON public.timesheets USING btree (generated_pdf_refs_sig)"
+        },
+        {
+          "name": "timesheets_manual_adjustment_idempotency_uq",
+          "definition": "CREATE UNIQUE INDEX timesheets_manual_adjustment_idempotency_uq ON public.timesheets USING btree (parent_timesheet_id, idempotency_key) WHERE ((adjustment_origin = 'MANUAL_ADJUSTMENT'::text) AND (parent_timesheet_id IS NOT NULL) AND (NULLIF(btrim(idempotency_key), ''::text) IS NOT NULL))"
+        },
+        {
+          "name": "timesheets_pkey",
+          "definition": "CREATE UNIQUE INDEX timesheets_pkey ON public.timesheets USING btree (timesheet_id)"
+        },
+        {
+          "name": "timesheets_qr_sent_refs_sig_idx",
+          "definition": "CREATE INDEX timesheets_qr_sent_refs_sig_idx ON public.timesheets USING btree (qr_sent_refs_sig)"
+        },
+        {
+          "name": "uq_timesheets_correction_id_kind",
+          "definition": "CREATE UNIQUE INDEX uq_timesheets_correction_id_kind ON public.timesheets USING btree (correction_id, correction_kind) WHERE (correction_id IS NOT NULL)"
+        },
+        {
+          "name": "uq_timesheets_idempotency_key",
+          "definition": "CREATE UNIQUE INDEX uq_timesheets_idempotency_key ON public.timesheets USING btree (idempotency_key) WHERE (idempotency_key IS NOT NULL)"
+        }
+      ],
+      "options": [],
+      "force_rls": false,
+      "constraints": [
+        {
+          "name": "bpay_timesheet_work_identity_v1",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (timesheet_id, bpay_work_revision_v1)"
+        },
+        {
+          "name": "bpay_timesheet_work_key_expression_v1",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (NOT bpay_work_key_v1 IS DISTINCT FROM\nCASE\n    WHEN booking_id IS NOT NULL AND btrim(booking_id) <> ''::text THEN booking_id\n    ELSE NULL::text\nEND)"
+        },
+        {
+          "name": "chk_timesheets_minutes_positive",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((break_minutes IS NULL OR break_minutes >= 0) AND (worked_minutes IS NULL OR worked_minutes >= 0))"
+        },
+        {
+          "name": "chk_ts_signatures_for_electronic",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (submission_mode IS NULL OR submission_mode <> 'ELECTRONIC'::submission_mode_enum OR r2_nurse_key IS NOT NULL AND r2_auth_key IS NOT NULL)"
+        },
+        {
+          "name": "timesheets_active_document_operation_fk",
+          "type": "f",
+          "deferred": true,
+          "validated": true,
+          "deferrable": true,
+          "definition": "FOREIGN KEY (active_document_operation_id) REFERENCES invoice_operations(id) ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED"
+        },
+        {
+          "name": "timesheets_archive_metadata_coherent_chk",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (archived_at_utc IS NULL AND archived_by_user_id IS NULL AND archived_reason_code IS NULL OR archived_at_utc IS NOT NULL AND archived_by_user_id IS NOT NULL AND NULLIF(btrim(archived_reason_code), ''::text) IS NOT NULL)"
+        },
+        {
+          "name": "timesheets_archived_by_user_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (archived_by_user_id) REFERENCES tms_users(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "timesheets_archived_not_authorised_chk",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (archived_at_utc IS NULL OR authorised_at_server IS NULL)"
+        },
+        {
+          "name": "timesheets_candidate_hint_text_is_object",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (candidate_hint_text IS NULL OR jsonb_typeof(candidate_hint_text) = 'object'::text)"
+        },
+        {
+          "name": "timesheets_candidate_submission_route_intent_ck",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (candidate_submission_route_intent IS NULL OR candidate_submission_route_intent = 'ELECTRONIC'::text AND submission_mode = 'MANUAL'::submission_mode_enum AND sheet_scope = 'DAILY'::timesheet_scope_enum OR candidate_submission_route_intent = 'PAPER'::text AND submission_mode = 'MANUAL'::submission_mode_enum AND sheet_scope = 'WEEKLY'::timesheet_scope_enum)"
+        },
+        {
+          "name": "timesheets_candidate_workflow_fk",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (candidate_workflow_id) REFERENCES candidate_submission_workflows(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "timesheets_candidate_workflow_generation_ck",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (candidate_workflow_generation IS NULL OR candidate_workflow_generation > 0)"
+        },
+        {
+          "name": "timesheets_candidate_workflow_pair_ck",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (candidate_workflow_id IS NULL AND candidate_workflow_generation IS NULL OR candidate_workflow_id IS NOT NULL AND candidate_workflow_generation IS NOT NULL)"
+        },
+        {
+          "name": "timesheets_contract_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (contract_id) REFERENCES contracts(id) ON DELETE SET NULL"
+        },
+        {
+          "name": "timesheets_current_document_version_fk",
+          "type": "f",
+          "deferred": true,
+          "validated": true,
+          "deferrable": true,
+          "definition": "FOREIGN KEY (current_document_version_id) REFERENCES invoice_document_versions(id) ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED"
+        },
+        {
+          "name": "timesheets_document_state_ck",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (document_state = ANY (ARRAY['NOT_REQUESTED'::text, 'QUEUED'::text, 'STALE'::text, 'PREPARING'::text, 'READY'::text, 'FAILED'::text]))"
+        },
+        {
+          "name": "timesheets_manual_document_asset_fk",
+          "type": "f",
+          "deferred": true,
+          "validated": true,
+          "deferrable": true,
+          "definition": "FOREIGN KEY (manual_document_asset_id) REFERENCES invoice_document_assets(id) ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED"
+        },
+        {
+          "name": "timesheets_manual_pdf_rotation_chk",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (manual_pdf_rotation_degrees = ANY (ARRAY[0, 90, 180, 270]))"
+        },
+        {
+          "name": "timesheets_parent_timesheet_id_adjustment_chk",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (parent_timesheet_id IS NULL OR is_adjustment = true)"
+        },
+        {
+          "name": "timesheets_parent_timesheet_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (parent_timesheet_id) REFERENCES timesheets(timesheet_id) ON DELETE SET NULL"
+        },
+        {
+          "name": "timesheets_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (timesheet_id)"
+        },
+        {
+          "name": "timesheets_settings_authority_identity_ck",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (settings_authority_json = '{}'::jsonb AND settings_authority_version IS NULL AND settings_authority_fingerprint IS NULL AND settings_authority_resolved_at IS NULL OR settings_authority_json <> '{}'::jsonb AND settings_authority_version = 'CONTRACT_SETTINGS_AUTHORITY_V1'::text AND settings_authority_fingerprint ~ '^[0-9a-f]{64}$'::text AND settings_authority_resolved_at IS NOT NULL)"
+        },
+        {
+          "name": "timesheets_settings_authority_object_ck",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (jsonb_typeof(settings_authority_json) = 'object'::text)"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "timesheets_financials",
+      "owner": "postgres",
+      "schema": "public",
+      "columns": [
+        {
+          "name": "accommodation_charge_ex_vat",
+          "type": "numeric",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "accommodation_pay_ex_vat",
+          "type": "numeric",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "actual_minutes_by_day_json",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "actual_schedule_json",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "additional_charge_ex_vat",
+          "type": "numeric",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "additional_margin_ex_vat",
+          "type": "numeric",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "additional_pay_ex_vat",
+          "type": "numeric",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "additional_units_json",
+          "type": "jsonb",
+          "default": "'{}'::jsonb",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "authorised_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "authorised_by_user_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "band",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "basis",
+          "type": "timesheet_fin_basis_enum",
+          "default": "'SELF_REPORTED'::timesheet_fin_basis_enum",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "break_end_iso",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "break_minutes",
+          "type": "integer",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "break_start_iso",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "candidate_assignment",
+          "type": "candidate_assignment_enum",
+          "default": "'UNASSIGNED'::candidate_assignment_enum",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "candidate_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "charge_bh",
+          "type": "numeric",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "charge_day",
+          "type": "numeric",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "charge_night",
+          "type": "numeric",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "charge_sat",
+          "type": "numeric",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "charge_sun",
+          "type": "numeric",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "client_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "computed_at_utc",
+          "type": "timestamp with time zone",
+          "default": "now()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "default": "now()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "expenses_charge_ex_vat",
+          "type": "numeric",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "expenses_description",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "expenses_evidence_manifest",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "expenses_evidence_r2_key",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "expenses_pay_ex_vat",
+          "type": "numeric",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "external_source_rows_json",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "has_pay_channel_issue",
+          "type": "boolean",
+          "default": "false",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "has_rate_issue",
+          "type": "boolean",
+          "default": "false",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "hours_bh",
+          "type": "numeric",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "hours_day",
+          "type": "numeric",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "hours_night",
+          "type": "numeric",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "hours_sat",
+          "type": "numeric",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "hours_sun",
+          "type": "numeric",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "hr_crosscheck_issues",
+          "type": "text[]",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "hr_crosscheck_status",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "default": "gen_random_uuid()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "invoice_breakdown_json",
+          "type": "jsonb",
+          "default": "'{}'::jsonb",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "is_current",
+          "type": "boolean",
+          "default": "true",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "is_stale",
+          "type": "boolean",
+          "default": "false",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "locked_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "locked_by_invoice_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "margin_ex_vat",
+          "type": "numeric",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "mileage_charge_ex_vat",
+          "type": "numeric",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "mileage_charge_rate",
+          "type": "numeric",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "mileage_evidence_manifest",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "mileage_evidence_r2_key",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "mileage_pay_ex_vat",
+          "type": "numeric",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "mileage_pay_rate",
+          "type": "numeric",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "mileage_units",
+          "type": "numeric",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "nhsp_import_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "occupant_key_norm",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "other_charge_ex_vat",
+          "type": "numeric",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "other_pay_ex_vat",
+          "type": "numeric",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "paid_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "paid_by_user_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "pay_bh",
+          "type": "numeric",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "pay_day",
+          "type": "numeric",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "pay_method",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "pay_night",
+          "type": "numeric",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "pay_on_hold",
+          "type": "boolean",
+          "default": "false",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "pay_on_hold_reason",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "pay_on_hold_since_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "pay_sat",
+          "type": "numeric",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "pay_sun",
+          "type": "numeric",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "pay_total_inc_vat_snapshot",
+          "type": "numeric",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "pay_vat_amount_snapshot",
+          "type": "numeric",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "pay_vat_rate_pct_snapshot",
+          "type": "numeric",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "pay_wtr_rate_pct_snapshot",
+          "type": "numeric",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "payment_reference",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "po_number",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "policy_snapshot_json",
+          "type": "jsonb",
+          "default": "'{}'::jsonb",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "processed_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "processed_by_user_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "processing_status",
+          "type": "ts_fin_processing_status_enum",
+          "default": "'UNASSIGNED'::ts_fin_processing_status_enum",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "rate_source_refs_json",
+          "type": "jsonb",
+          "default": "'{}'::jsonb",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "remittance_last_sent_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "remittance_send_count",
+          "type": "integer",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "role",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "stale_reason",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "timesheet_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "timesheet_version",
+          "type": "integer",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "total_charge_ex_vat",
+          "type": "numeric",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "total_hours",
+          "type": "numeric",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "total_pay_ex_vat",
+          "type": "numeric",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "travel_charge_ex_vat",
+          "type": "numeric",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "travel_pay_ex_vat",
+          "type": "numeric",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "unlocked_by_credit_note_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "default": "now()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "worked_end_iso",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "worked_start_iso",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "bpay_clock_financial_event_v1",
+          "definition": "CREATE INDEX bpay_clock_financial_event_v1 ON public.timesheets_financials USING btree (timesheet_id, authorised_at_utc DESC NULLS LAST)"
+        },
+        {
+          "name": "idx_tsfin_assignment",
+          "definition": "CREATE INDEX idx_tsfin_assignment ON public.timesheets_financials USING btree (candidate_assignment)"
+        },
+        {
+          "name": "idx_tsfin_candidate_current",
+          "definition": "CREATE INDEX idx_tsfin_candidate_current ON public.timesheets_financials USING btree (candidate_id) WHERE (is_current = true)"
+        },
+        {
+          "name": "idx_tsfin_candidate_current_unlocked",
+          "definition": "CREATE INDEX idx_tsfin_candidate_current_unlocked ON public.timesheets_financials USING btree (candidate_id) WHERE (is_current AND (locked_by_invoice_id IS NULL))"
+        },
+        {
+          "name": "idx_tsfin_client",
+          "definition": "CREATE INDEX idx_tsfin_client ON public.timesheets_financials USING btree (client_id)"
+        },
+        {
+          "name": "idx_tsfin_client_current_unlocked",
+          "definition": "CREATE INDEX idx_tsfin_client_current_unlocked ON public.timesheets_financials USING btree (client_id) WHERE (is_current AND (locked_by_invoice_id IS NULL))"
+        },
+        {
+          "name": "idx_tsfin_current_timesheet",
+          "definition": "CREATE INDEX idx_tsfin_current_timesheet ON public.timesheets_financials USING btree (timesheet_id) WHERE (is_current = true)"
+        },
+        {
+          "name": "idx_tsfin_invoice_batch_candidate_scope",
+          "definition": "CREATE INDEX idx_tsfin_invoice_batch_candidate_scope ON public.timesheets_financials USING btree (client_id, candidate_id, timesheet_id) WHERE is_current"
+        },
+        {
+          "name": "idx_tsfin_invoice_batch_client_scope",
+          "definition": "CREATE INDEX idx_tsfin_invoice_batch_client_scope ON public.timesheets_financials USING btree (client_id, timesheet_id) WHERE is_current"
+        },
+        {
+          "name": "idx_tsfin_lock",
+          "definition": "CREATE INDEX idx_tsfin_lock ON public.timesheets_financials USING btree (locked_by_invoice_id)"
+        },
+        {
+          "name": "idx_tsfin_nhsp_import",
+          "definition": "CREATE INDEX idx_tsfin_nhsp_import ON public.timesheets_financials USING btree (nhsp_import_id)"
+        },
+        {
+          "name": "idx_tsfin_paid_at",
+          "definition": "CREATE INDEX idx_tsfin_paid_at ON public.timesheets_financials USING btree (paid_at_utc)"
+        },
+        {
+          "name": "idx_tsfin_paid_by_user",
+          "definition": "CREATE INDEX idx_tsfin_paid_by_user ON public.timesheets_financials USING btree (paid_by_user_id)"
+        },
+        {
+          "name": "idx_tsfin_pay_on_hold",
+          "definition": "CREATE INDEX idx_tsfin_pay_on_hold ON public.timesheets_financials USING btree (pay_on_hold)"
+        },
+        {
+          "name": "idx_tsfin_remit_last_sent",
+          "definition": "CREATE INDEX idx_tsfin_remit_last_sent ON public.timesheets_financials USING btree (remittance_last_sent_at_utc)"
+        },
+        {
+          "name": "idx_tsfin_stale",
+          "definition": "CREATE INDEX idx_tsfin_stale ON public.timesheets_financials USING btree (is_stale)"
+        },
+        {
+          "name": "idx_tsfin_status",
+          "definition": "CREATE INDEX idx_tsfin_status ON public.timesheets_financials USING btree (processing_status)"
+        },
+        {
+          "name": "idx_tsfin_ts",
+          "definition": "CREATE INDEX idx_tsfin_ts ON public.timesheets_financials USING btree (timesheet_id, timesheet_version DESC)"
+        },
+        {
+          "name": "idx_tsfin_unpaid_current_not_on_hold",
+          "definition": "CREATE INDEX idx_tsfin_unpaid_current_not_on_hold ON public.timesheets_financials USING btree (client_id, candidate_id) WHERE (is_current AND (paid_at_utc IS NULL) AND (pay_on_hold = false))"
+        },
+        {
+          "name": "timesheets_financials_pkey",
+          "definition": "CREATE UNIQUE INDEX timesheets_financials_pkey ON public.timesheets_financials USING btree (id)"
+        },
+        {
+          "name": "uq_tsfin_current",
+          "definition": "CREATE UNIQUE INDEX uq_tsfin_current ON public.timesheets_financials USING btree (timesheet_id) WHERE is_current"
+        }
+      ],
+      "options": [],
+      "force_rls": false,
+      "constraints": [
+        {
+          "name": "chk_tsfin_lock_pair",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (locked_by_invoice_id IS NULL AND locked_at_utc IS NULL OR locked_by_invoice_id IS NOT NULL AND locked_at_utc IS NOT NULL)"
+        },
+        {
+          "name": "chk_tsfin_mileage_units_nonneg",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (mileage_units >= 0::numeric)"
+        },
+        {
+          "name": "timesheets_financials_authorised_by_user_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (authorised_by_user_id) REFERENCES tms_users(id) ON DELETE SET NULL"
+        },
+        {
+          "name": "timesheets_financials_candidate_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (candidate_id) REFERENCES candidates(id)"
+        },
+        {
+          "name": "timesheets_financials_client_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (client_id) REFERENCES clients(id)"
+        },
+        {
+          "name": "timesheets_financials_locked_by_invoice_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (locked_by_invoice_id) REFERENCES invoices(id)"
+        },
+        {
+          "name": "timesheets_financials_nhsp_import_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (nhsp_import_id) REFERENCES hr_imports(id) ON DELETE SET NULL"
+        },
+        {
+          "name": "timesheets_financials_paid_by_user_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (paid_by_user_id) REFERENCES tms_users(id) ON DELETE SET NULL"
+        },
+        {
+          "name": "timesheets_financials_pay_method_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (pay_method = ANY (ARRAY['PAYE'::text, 'UMBRELLA'::text]))"
+        },
+        {
+          "name": "timesheets_financials_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "timesheets_financials_processed_by_user_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (processed_by_user_id) REFERENCES tms_users(id) ON DELETE SET NULL"
+        },
+        {
+          "name": "timesheets_financials_timesheet_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (timesheet_id) REFERENCES timesheets(timesheet_id) ON DELETE CASCADE"
+        },
+        {
+          "name": "timesheets_financials_unlocked_by_credit_note_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (unlocked_by_credit_note_id) REFERENCES invoices(id)"
+        }
+      ],
+      "view_definition_sha256": null
+    }
+  ]
+}

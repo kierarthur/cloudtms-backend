@@ -1,0 +1,58 @@
+{
+  "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+  "commit": "a8dc643b193d531509f3fb926d34aee6d3718b30",
+  "inputs": [
+    {
+      "source": "supabase/repeatable/21072026_1235_36_tsfin_load_context_batch.sql",
+      "commit": "a8dc643b193d531509f3fb926d34aee6d3718b30",
+      "wholeBytes": 14256,
+      "wholeSha256": "a42094b5b39c2a1d858c6c995951c7f9a1e82092d4949a38b9a58401f834e1d9",
+      "captured": "reference/tsfin_load_context_batch.sql",
+      "bytes": 14256,
+      "sha256": "a42094b5b39c2a1d858c6c995951c7f9a1e82092d4949a38b9a58401f834e1d9",
+      "savedHeadIndexEqual": true
+    },
+    {
+      "source": "supabase/repeatable/17102026_0910_nhsp_v6_daily_role_identity/01_complete_context.sqlinc",
+      "commit": "a8dc643b193d531509f3fb926d34aee6d3718b30",
+      "wholeBytes": 8650,
+      "wholeSha256": "032153eb7425c21c1f7bbe0fe6abd29689fe6ba8fb0d154e8e6476a11d26c7d6",
+      "captured": "reference/0910_complete_context.sqlinc",
+      "bytes": 8650,
+      "sha256": "032153eb7425c21c1f7bbe0fe6abd29689fe6ba8fb0d154e8e6476a11d26c7d6",
+      "savedHeadIndexEqual": true
+    },
+    {
+      "source": "supabase/baseline/22082026_1503_cloudtms_test_routines_19.sql",
+      "commit": "a8dc643b193d531509f3fb926d34aee6d3718b30",
+      "wholeBytes": 280735,
+      "wholeSha256": "114fe1b3f66d44d45a7328e242f859bb1cc561203fd506e596cc9b45f5e8609d",
+      "captured": "reference/trg_tsfin_candidates_wakeup.sql",
+      "bytes": 2846,
+      "sha256": "d508547ded756a1fe4be25646eabf8d7340f8c428995d0c041250ccd10583cdd",
+      "savedHeadIndexEqual": true
+    },
+    {
+      "source": "supabase/baseline/22082026_1504_cloudtms_test_views_and_triggers.sql",
+      "commit": "a8dc643b193d531509f3fb926d34aee6d3718b30",
+      "wholeBytes": 256392,
+      "wholeSha256": "7e026b6196bc8bddf9e7aea51e4039c8d8e09e0941c67ace4966de25cbb5faba",
+      "captured": "reference/candidate_wakeup_trigger.sql",
+      "bytes": 212,
+      "sha256": "f6961944d57af85cb785004fee5720d8b83ce28aac32116582e549095eec4c23",
+      "savedHeadIndexEqual": true
+    },
+    {
+      "source": "supabase/baseline/22082026_1500_cloudtms_test_structural_baseline.sql",
+      "commit": "a8dc643b193d531509f3fb926d34aee6d3718b30",
+      "wholeBytes": 154756,
+      "wholeSha256": "aec4d8985fed34c08cfd61521db4ad27b273a85e90251ccd8007eee0489b7730",
+      "captured": "reference/timesheets_ddl.sql",
+      "bytes": 2879,
+      "sha256": "b9cd187b78ba5768ed6a2bac01330869376db12f15b0d51a6ff883a88d498302",
+      "savedHeadIndexEqual": true
+    }
+  ],
+  "native": "NOT_RUN",
+  "BankingBodies": "NOT_REVIEWED"
+}

@@ -1,0 +1,365 @@
+{
+  "version": "DAILY_CURRENT_PLACEMENT_FINITE_SOURCE_TYPES_V1",
+  "grammar": [
+    {
+      "file": "health/20_current_placement.sqlinc",
+      "bytes": 8663,
+      "sha256": "9e0551951deab1f161ca682e963cb1e0b7352bf64ac333a5ae657f507c883a55",
+      "statements": 2,
+      "plpgsqlPrograms": 1,
+      "substitutions": 0
+    },
+    {
+      "file": "health/99_acl.sqlinc",
+      "bytes": 2006,
+      "sha256": "af8b211e20e96d3ca85910b1f0884d8cbcb19294e4e10460e02501b3cf6ea088",
+      "statements": 18,
+      "plpgsqlPrograms": 0,
+      "substitutions": 0
+    },
+    {
+      "file": "admission/ONE_TIME_ADMISSION.sqlinc",
+      "bytes": 1139,
+      "sha256": "809b8998ab30629ca062d564d042d6d747a88a32b752c702d1a196ad75d1a132",
+      "statements": 1,
+      "plpgsqlPrograms": 1,
+      "substitutions": 0
+    },
+    {
+      "file": "verification/mandatory_security.sql",
+      "bytes": 3326,
+      "sha256": "9676b9e489e77380562ce03a2a4bf5549e8d145ba469bb5118067a4c92be516b",
+      "statements": 1,
+      "plpgsqlPrograms": 1,
+      "substitutions": 0
+    },
+    {
+      "file": "ADDITIVE_REVERSE.sqlinc",
+      "bytes": 769,
+      "sha256": "fa1fc28cfb2a173217d7d5a07bd26ce2a874f9a502c6e91f352e00614e0327a3",
+      "statements": 9,
+      "plpgsqlPrograms": 0,
+      "substitutions": 0
+    }
+  ],
+  "aliasScopes": [
+    {
+      "file": "health/20_current_placement.sqlinc",
+      "programme": 0,
+      "rangeAliasDeclarationCollisions": []
+    },
+    {
+      "file": "admission/ONE_TIME_ADMISSION.sqlinc",
+      "programme": 0,
+      "rangeAliasDeclarationCollisions": []
+    },
+    {
+      "file": "verification/mandatory_security.sql",
+      "programme": 0,
+      "rangeAliasDeclarationCollisions": []
+    }
+  ],
+  "helperSqlExpressions": 22,
+  "sourceContractSha256": "da0e0870442c151534c04d108757a0d76a812879aafae71f01486c7077ce674a",
+  "operationsMembersDdl": {
+    "file": "reference/root/supabase/migrations/16102026_0159_nhsp_v6_01_physical_source_review_schema.sql",
+    "sha256": "d46481d0cd53880041b126c554d34dccc39854ff3bf31ac98883f85949cc1d82",
+    "exactCreateTableSpans": [
+      {
+        "relation": "private.timesheet_contract_move_operations",
+        "start": 2142,
+        "end": 6052,
+        "sha256": "2d1de78da15127a0f9bc0647362603d2793e6e76b2e1ff0de0af1092b89052e5",
+        "sourceBytesChanged": 0
+      },
+      {
+        "relation": "private.timesheet_contract_move_members",
+        "start": 8230,
+        "end": 9911,
+        "sha256": "bb9116ff76777233116cfb60c185cb589fb3fff54fb9ae1e17f12611833a05e9",
+        "sourceBytesChanged": 0
+      }
+    ],
+    "wholeMigration": "NOT_PARSED_PSQL_INCLUDE_RETAINED"
+  },
+  "relations": [
+    "private.bpay_next_work",
+    "private.bpay_next_work_revision",
+    "public.timesheets",
+    "public.timesheets_financials",
+    "private.timesheet_contract_move_operations",
+    "private.timesheet_contract_move_members"
+  ],
+  "referencedColumns": [
+    {
+      "relation": "private.bpay_next_work",
+      "column": "approval_state",
+      "type": "text"
+    },
+    {
+      "relation": "private.bpay_next_work",
+      "column": "booking_id",
+      "type": "text"
+    },
+    {
+      "relation": "private.bpay_next_work",
+      "column": "candidate_id",
+      "type": "uuid"
+    },
+    {
+      "relation": "private.bpay_next_work",
+      "column": "contract_id",
+      "type": "uuid"
+    },
+    {
+      "relation": "private.bpay_next_work",
+      "column": "current_revision_id",
+      "type": "uuid"
+    },
+    {
+      "relation": "private.bpay_next_work",
+      "column": "current_revision_no",
+      "type": "bigint"
+    },
+    {
+      "relation": "private.bpay_next_work",
+      "column": "id",
+      "type": "uuid"
+    },
+    {
+      "relation": "private.bpay_next_work",
+      "column": "origin_kind",
+      "type": "text"
+    },
+    {
+      "relation": "private.bpay_next_work",
+      "column": "original_timesheet_id",
+      "type": "uuid"
+    },
+    {
+      "relation": "private.bpay_next_work",
+      "column": "work_kind",
+      "type": "text"
+    },
+    {
+      "relation": "private.bpay_next_work_revision",
+      "column": "approved_at_utc",
+      "type": "timestamp with time zone"
+    },
+    {
+      "relation": "private.bpay_next_work_revision",
+      "column": "financial_snapshot_id",
+      "type": "uuid"
+    },
+    {
+      "relation": "private.bpay_next_work_revision",
+      "column": "id",
+      "type": "uuid"
+    },
+    {
+      "relation": "private.bpay_next_work_revision",
+      "column": "physical_timesheet_id",
+      "type": "uuid"
+    },
+    {
+      "relation": "private.bpay_next_work_revision",
+      "column": "physical_timesheet_version",
+      "type": "integer"
+    },
+    {
+      "relation": "private.bpay_next_work_revision",
+      "column": "revision_no",
+      "type": "bigint"
+    },
+    {
+      "relation": "private.bpay_next_work_revision",
+      "column": "sealed_at_utc",
+      "type": "timestamp with time zone"
+    },
+    {
+      "relation": "private.bpay_next_work_revision",
+      "column": "source_kind",
+      "type": "text"
+    },
+    {
+      "relation": "private.bpay_next_work_revision",
+      "column": "work_id",
+      "type": "uuid"
+    },
+    {
+      "relation": "private.timesheet_contract_move_members",
+      "column": "from_contract_id",
+      "type": "uuid"
+    },
+    {
+      "relation": "private.timesheet_contract_move_members",
+      "column": "from_timesheet_id",
+      "type": "uuid"
+    },
+    {
+      "relation": "private.timesheet_contract_move_members",
+      "column": "operation_id",
+      "type": "uuid"
+    },
+    {
+      "relation": "private.timesheet_contract_move_members",
+      "column": "original_booking_id",
+      "type": "text"
+    },
+    {
+      "relation": "private.timesheet_contract_move_members",
+      "column": "to_contract_id",
+      "type": "uuid"
+    },
+    {
+      "relation": "private.timesheet_contract_move_members",
+      "column": "to_financial_id",
+      "type": "uuid"
+    },
+    {
+      "relation": "private.timesheet_contract_move_members",
+      "column": "to_timesheet_id",
+      "type": "uuid"
+    },
+    {
+      "relation": "private.timesheet_contract_move_members",
+      "column": "to_version",
+      "type": "pg_catalog.int4"
+    },
+    {
+      "relation": "private.timesheet_contract_move_operations",
+      "column": "accepted_review_id",
+      "type": "uuid"
+    },
+    {
+      "relation": "private.timesheet_contract_move_operations",
+      "column": "actual_client_id",
+      "type": "uuid"
+    },
+    {
+      "relation": "private.timesheet_contract_move_operations",
+      "column": "candidate_id",
+      "type": "uuid"
+    },
+    {
+      "relation": "private.timesheet_contract_move_operations",
+      "column": "created_by_user_id",
+      "type": "uuid"
+    },
+    {
+      "relation": "private.timesheet_contract_move_operations",
+      "column": "family_root_id",
+      "type": "uuid"
+    },
+    {
+      "relation": "private.timesheet_contract_move_operations",
+      "column": "from_timesheet_id",
+      "type": "uuid"
+    },
+    {
+      "relation": "private.timesheet_contract_move_operations",
+      "column": "id",
+      "type": "uuid"
+    },
+    {
+      "relation": "private.timesheet_contract_move_operations",
+      "column": "placement_receipt_json",
+      "type": "jsonb"
+    },
+    {
+      "relation": "public.timesheets",
+      "column": "archived_at_utc",
+      "type": "timestamp with time zone"
+    },
+    {
+      "relation": "public.timesheets",
+      "column": "booking_id",
+      "type": "text"
+    },
+    {
+      "relation": "public.timesheets",
+      "column": "contract_id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.timesheets",
+      "column": "is_current",
+      "type": "boolean"
+    },
+    {
+      "relation": "public.timesheets",
+      "column": "revoked_at",
+      "type": "timestamp with time zone"
+    },
+    {
+      "relation": "public.timesheets",
+      "column": "sheet_scope",
+      "type": "timesheet_scope_enum"
+    },
+    {
+      "relation": "public.timesheets",
+      "column": "timesheet_id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.timesheets",
+      "column": "version",
+      "type": "integer"
+    },
+    {
+      "relation": "public.timesheets_financials",
+      "column": "authorised_at_utc",
+      "type": "timestamp with time zone"
+    },
+    {
+      "relation": "public.timesheets_financials",
+      "column": "basis",
+      "type": "timesheet_fin_basis_enum"
+    },
+    {
+      "relation": "public.timesheets_financials",
+      "column": "candidate_id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.timesheets_financials",
+      "column": "client_id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.timesheets_financials",
+      "column": "id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.timesheets_financials",
+      "column": "is_current",
+      "type": "boolean"
+    },
+    {
+      "relation": "public.timesheets_financials",
+      "column": "is_stale",
+      "type": "boolean"
+    },
+    {
+      "relation": "public.timesheets_financials",
+      "column": "rate_source_refs_json",
+      "type": "jsonb"
+    },
+    {
+      "relation": "public.timesheets_financials",
+      "column": "timesheet_id",
+      "type": "uuid"
+    },
+    {
+      "relation": "public.timesheets_financials",
+      "column": "timesheet_version",
+      "type": "integer"
+    }
+  ],
+  "strictSelector": "Actual Work ID/current revision/current financial; strict cardinality refuses absence or ambiguity",
+  "newTupleReads": "Both operation row SELECTs target the original source-declared primary-key id; no singleton/history inference",
+  "ResultTemplate": "NOT_PARSED_UNPROVIDED_BANK_RESULT_SLOT_RETAINED",
+  "native": "NOT_RUN",
+  "catalogueVerification": "NOT_RUN"
+}

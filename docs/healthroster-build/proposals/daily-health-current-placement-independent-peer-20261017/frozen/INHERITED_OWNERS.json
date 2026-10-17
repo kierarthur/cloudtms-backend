@@ -1,0 +1,52 @@
+{
+  "inherited": [
+    {
+      "file": "health/00_presentation.sqlinc",
+      "ownerCommit": "4b1067c859f921855989eb7f147636cebf9286c3",
+      "ownerFile": "docs/healthroster-build/proposals/daily-health-composer-current0910-forward-20261017/health/00_presentation.sqlinc",
+      "bytes": 4550,
+      "sha256": "a3c7ce4e96fd67395e292752df2274e7464536ce3566b543a23f149de49fafc0",
+      "status": "UNCHANGED_COMPLETE_BODY"
+    },
+    {
+      "file": "health/05_review_enrollment.sqlinc",
+      "ownerCommit": "4b1067c859f921855989eb7f147636cebf9286c3",
+      "ownerFile": "docs/healthroster-build/proposals/daily-health-composer-current0910-forward-20261017/health/05_review_enrollment.sqlinc",
+      "bytes": 2917,
+      "sha256": "006dd80653b9156ad1f162b9a2e78bc1e243fa38b5cdc75e123d5bc88119f3e6",
+      "status": "UNCHANGED_COMPLETE_BODY"
+    },
+    {
+      "file": "health/10_revision_apply.sqlinc",
+      "ownerCommit": "39d4e2d23e4865c74d775bab6a0c825879b36b39",
+      "ownerFile": "docs/healthroster-build/proposals/daily-health-native-revision-mapping-forward-20261017/health/10_revision_apply.sqlinc",
+      "bytes": 9309,
+      "sha256": "90b49c5606b136e95bda3f2d2623a022085ed506df221e2a1201e4a5bab3a61d",
+      "status": "UNCHANGED_COMPLETE_BODY"
+    },
+    {
+      "file": "templates/01_review.sql.tmpl",
+      "ownerCommit": "4b1067c859f921855989eb7f147636cebf9286c3",
+      "ownerFile": "docs/healthroster-build/proposals/daily-health-composer-current0910-forward-20261017/templates/01_review.sql.tmpl",
+      "bytes": 8788,
+      "sha256": "ea6ee0ffd4b25e7c2843c18b2e6f94fb48a1abf28da6463274ad75c52ed858ef",
+      "status": "UNCHANGED_COMPLETE_BODY"
+    },
+    {
+      "file": "templates/02_accept.sql.tmpl",
+      "ownerCommit": "4b1067c859f921855989eb7f147636cebf9286c3",
+      "ownerFile": "docs/healthroster-build/proposals/daily-health-composer-current0910-forward-20261017/templates/02_accept.sql.tmpl",
+      "bytes": 7621,
+      "sha256": "7bae24fa58c854f4e8df0b16e17cef8a04aff52fa88792f316f2daa7f42f21d3",
+      "status": "UNCHANGED_COMPLETE_BODY"
+    }
+  ],
+  "healthDefinitions": 9,
+  "threeUnprovidedSlots": [
+    "@@BANK_REVIEW@@",
+    "@@BANK_ACCEPT@@",
+    "@@BANK_RESULT@@"
+  ],
+  "runtimeEmission": "REFUSED_UNPROVIDED_GENUINE_BANK_COMPOSITION",
+  "native": "NOT_RUN"
+}

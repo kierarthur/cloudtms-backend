@@ -1,0 +1,34 @@
+{
+  "runs": [
+    {
+      "name": "placement-ast",
+      "exitCode": 0
+    },
+    {
+      "name": "grammar-types",
+      "exitCode": 0
+    },
+    {
+      "name": "source-tests",
+      "exitCode": 0
+    }
+  ],
+  "sourceNodeTests": 16,
+  "controlledActualHealthAstCases": 47,
+  "publicDecoderCases": 6,
+  "completeGrammarInputs": 5,
+  "sourceRelations": 6,
+  "referencedColumns": 53,
+  "fullParentReversals": 5,
+  "newPrivateSignatures": 1,
+  "publicDtoChanges": 0,
+  "rawGateInputs": 11,
+  "rawGateHazards": 0,
+  "allowancesAdded": 0,
+  "ResultTemplate": "HELD_NOT_PARSED_BANK_RESULT_UNPROVIDED",
+  "native": "NOT_RUN",
+  "catalogueVerification": "NOT_RUN",
+  "installation": "NOT_RUN",
+  "BankBodyReads": 0,
+  "rootWrites": 0
+}

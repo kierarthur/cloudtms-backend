@@ -1,0 +1,16 @@
+{
+  "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+  "rootHead": "5b4f4e4c196871fa85722435deeee3ad418908f2",
+  "file": "supabase/repeatable/21072026_1235_36_tsfin_load_context_batch.sql",
+  "bytes": 14256,
+  "sha256": "a42094b5b39c2a1d858c6c995951c7f9a1e82092d4949a38b9a58401f834e1d9",
+  "savedHeadIndexEqual": true,
+  "currentResolverFields": [
+    "effective_timesheet_id",
+    "out_candidate.id",
+    "out_client_id",
+    "out_cur_fin.id"
+  ],
+  "consumer": "Actual0910 canonical read-only usage; no mutation-context actor gate reused",
+  "native": "NOT_RUN"
+}

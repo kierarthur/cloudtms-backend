@@ -1,0 +1,34 @@
+{
+  "runs": [
+    {
+      "name": "ast",
+      "exitCode": 0
+    },
+    {
+      "name": "grammar-types",
+      "exitCode": 0
+    },
+    {
+      "name": "node",
+      "exitCode": 0
+    }
+  ],
+  "nodeTests": 14,
+  "controlledHealthAstCases": 66,
+  "F1Counterexamples": 19,
+  "publicDecoderCases": 6,
+  "grammarInputs": 5,
+  "referencedSourceColumns": 70,
+  "sourceRelations": 6,
+  "fullParentReversals": 1,
+  "unchangedCompleteFiles": 10,
+  "newSignatures": 0,
+  "publicDtoChanges": 0,
+  "rawGateInputs": 2,
+  "rawHazards": 0,
+  "Result": "HELD_NOT_PARSED_GENUINE_BANK_RESULT_UNPROVIDED",
+  "native": "NOT_RUN",
+  "races": "NOT_RUN",
+  "rootWrites": 0,
+  "BankBodyReads": 0
+}

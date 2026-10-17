@@ -1,0 +1,20 @@
+-- ONE_TIME_ADMISSION ONLY. Never in the rerunnable complete root.
+do $admit$
+declare signature text;
+begin
+ if exists(select 1 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace
+  where n.nspname='private' and p.proname='daily_rate_correction_health_current_placement_v1') then
+  raise exception 'DAILY_CURRENT_PLACEMENT_NAME_COLLISION';end if;
+ foreach signature in array array[
+ 'private.daily_rate_correction_health_current_placement_v1(uuid,uuid)',
+ 'private.daily_rate_correction_health_financial_projection_assert_v1(jsonb,boolean)',
+ 'private.daily_rate_correction_health_invoice_effect_v1(jsonb)',
+ 'private.daily_rate_correction_health_actions_assert_v1(jsonb)',
+ 'private.daily_rate_correction_health_review_enroll_v1(jsonb)',
+ 'private.daily_rate_correction_health_revision_apply_v1(jsonb)',
+ 'private.daily_rate_correction_review_v1(jsonb)',
+ 'private.daily_rate_correction_accept_v1(jsonb)',
+ 'private.daily_rate_correction_result_v1(uuid,uuid)'
+ ] loop
+ if to_regprocedure(signature) is not null then raise exception 'DAILY_COMPOSER_NAME_COLLISION: %',signature;end if;
+ end loop;end; $admit$;

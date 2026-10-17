@@ -1,0 +1,158 @@
+{
+  "version": "DAILY_HEALTH_NATIVE_REVISION_MAPPING_FORWARD_FREEZE_V1",
+  "completeSourceParent": "4b1067c859f921855989eb7f147636cebf9286c3",
+  "technicalPeer": "3dcee2696454c64f99d158a261d0ba5db44f12fa",
+  "selectionSha256": "30299faacd45f34753c6a0afd99759b2b3a949fd39078bed8b6801646c3aadd6",
+  "forwardEditsSha256": "da80fe3040b8f74fc77048715597407adbea9599522d3c07115f7983db753321",
+  "fullBodiesChanged": 2,
+  "completeClosedBodyGrammar": "PASS_NOT_NATIVE",
+  "ResultBody": "HELD_UNPROVIDED_BANK_AND_CURRENT_PLACEMENT_READ",
+  "sourceTests": 7,
+  "rawF23Hazards": 0,
+  "allowancesAdded": 0,
+  "runtimeTargets": [],
+  "newSignatures": [],
+  "schemaChanges": 0,
+  "aclChanges": 0,
+  "registryChanges": 0,
+  "ownerPermissionRequired": false,
+  "native": "NOT_RUN",
+  "databaseConnections": 0,
+  "files": [
+    {
+      "file": "build.mjs",
+      "sha256": "e96a87c9b800abe23fd5cab826788cbeeb381b957962eab78df286b61129e0e3",
+      "bytes": 8898
+    },
+    {
+      "file": "census.mjs",
+      "sha256": "7bc4a6626fe2dc5e224612b0da03b7a98a35acfd29ebfefadb057c82ec483472",
+      "bytes": 1471
+    },
+    {
+      "file": "FORWARD_EDITS.json",
+      "sha256": "da80fe3040b8f74fc77048715597407adbea9599522d3c07115f7983db753321",
+      "bytes": 7847
+    },
+    {
+      "file": "freeze.mjs",
+      "sha256": "8c1cfb99080bc75ed03f80ba4a175208f78c4312e5e9f267309ccf6cde4e0342",
+      "bytes": 2691
+    },
+    {
+      "file": "GRAMMAR_RESULTS.json",
+      "sha256": "62f45324a2f87e31aa638b713fb2c66cba6e101dedd304ebff9fae2e43cd97a9",
+      "bytes": 383
+    },
+    {
+      "file": "grammar.py",
+      "sha256": "d08aa225f30ab550192699a5547f23792c51bf5e50643329611ae869a6312354",
+      "bytes": 968
+    },
+    {
+      "file": "health/10_revision_apply.sqlinc",
+      "sha256": "90b49c5606b136e95bda3f2d2623a022085ed506df221e2a1201e4a5bab3a61d",
+      "bytes": 9309
+    },
+    {
+      "file": "RAW_F23_CENSUS.json",
+      "sha256": "a63083cc9ec04bcd04a2fd769d9d20f3ea71944d98663795f810179d08dcaf1c",
+      "bytes": 831
+    },
+    {
+      "file": "README.md",
+      "sha256": "9e001f81576164acc52f893e674ac9d50b21cb2c1ca59c0a0b2cb1a4064be911",
+      "bytes": 3735
+    },
+    {
+      "file": "reference/actual_native_relations.json",
+      "sha256": "224c6fc17e5a53af40172542f306b5c1103496554f4bb518d4f8f2a6eac741e9",
+      "bytes": 28901
+    },
+    {
+      "file": "reference/current0910/supabase/repeatable/17102026_0910_nhsp_v6_daily_role_identity/01_complete_context.sqlinc",
+      "sha256": "032153eb7425c21c1f7bbe0fe6abd29689fe6ba8fb0d154e8e6476a11d26c7d6",
+      "bytes": 8650
+    },
+    {
+      "file": "reference/parent/ADDITIVE_REVERSE.sqlinc",
+      "sha256": "84b62bf38324601f871cc3356ee6b0a24bde27a08349c5f1482765fe5f97cc75",
+      "bytes": 675
+    },
+    {
+      "file": "reference/parent/ASSEMBLY_STATE.json",
+      "sha256": "eca50b4edb5b684b8c65666c45b029709ef15a77a3532ee44215395d56939f9c",
+      "bytes": 969
+    },
+    {
+      "file": "reference/parent/CURRENT0910_BINDING.json",
+      "sha256": "12665d62aafd6b9d472d335bff0e25a1979a5953cf719a3779e8f6ef00f16822",
+      "bytes": 85045
+    },
+    {
+      "file": "reference/parent/health/10_revision_apply.sqlinc",
+      "sha256": "58cb6c60005c2e731cd4fe31b26c62aa70a2b4a10bf051ff1ef5e69783a28adf",
+      "bytes": 8104
+    },
+    {
+      "file": "reference/parent/health/99_acl.sqlinc",
+      "sha256": "d0941f0c92c247d86772a0c179f01ad9e2be95e9556556b7618045bdf362d43e",
+      "bytes": 1766
+    },
+    {
+      "file": "reference/parent/OWNER_BLOCKS.json",
+      "sha256": "6dcc99a25a5080ca3d35260aa4c589274cd03c5c9164a5535fb90dd4493cf718",
+      "bytes": 4431
+    },
+    {
+      "file": "reference/parent/templates/03_result.sql.tmpl",
+      "sha256": "325f48bdc55048c42392105d055bc8fe2dcd138f4d4b9ec6a1d1e77c7f42dc1b",
+      "bytes": 3741
+    },
+    {
+      "file": "reference/parent/verification/mandatory_security.sql",
+      "sha256": "3753fc86b3d12c0a64053410b99078c08bd30db25c8209ce0a79f0bafe80b114",
+      "bytes": 3202
+    },
+    {
+      "file": "reference/peer/SCALAR_MAPPING_EVIDENCE.json",
+      "sha256": "7821a9364fa39bbd28a56d7214cf22a71eae61e58619c201151ca6b982c38f09",
+      "bytes": 2563
+    },
+    {
+      "file": "reference/peer/TECHNICAL_SCALAR_DISPOSITION.md",
+      "sha256": "e2a792537175226a6d9dd48b4d8afa61f43031e8ae5c85223e302bf7111923ec",
+      "bytes": 5245
+    },
+    {
+      "file": "reference/root/supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/02_admission.sqlinc",
+      "sha256": "8b592b3833650f82159d703b960dab7baaf46d5958e02204a38bce45a407216e",
+      "bytes": 38065
+    },
+    {
+      "file": "SOURCE_SELECTION.json",
+      "sha256": "30299faacd45f34753c6a0afd99759b2b3a949fd39078bed8b6801646c3aadd6",
+      "bytes": 1172
+    },
+    {
+      "file": "templates/03_result.sql.tmpl",
+      "sha256": "81e786d99c75a14b0896ffe53d4e9d3b71de15c2c91f3ef94ada5a33eae95768",
+      "bytes": 6815
+    },
+    {
+      "file": "TEST_RESULTS.json",
+      "sha256": "e2f9bb72a40b06c91412813c2a331667128b63c13f00427e0e5f39afe3b82edd",
+      "bytes": 1263
+    },
+    {
+      "file": "test.mjs",
+      "sha256": "407482d864546d0472314c9b8bc9e87aaf66065e3299a7c328d39602b0b3215e",
+      "bytes": 6089
+    },
+    {
+      "file": "verify.mjs",
+      "sha256": "f1f15bea007233df8b651c360c6453e92db79b780e202d63f0292c96c8f6b204",
+      "bytes": 1496
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+✔ one full current helper forward reverses every byte to frozen040bb (44.8703ms)
+✔ all ten other source/security files remain exactly040bb (338.5945ms)
+✔ current native context ABI is actual complete stable SQL owner used by0910 (1.1238ms)
+✔ both actual canonical reads bind effective physical, Candidate, Client and current financial (0.1558ms)
+✔ both current selectors preserve actual0910 physical-hours/approval/non-adjustment identity guards (0.1329ms)
+✔ F1 actual predicate counterexamples reproduce old acceptance and corrected refusal (0.1194ms)
+✔ no mutation-context or new Bank ABI, side effect, ACL, schema or public shape change (0.6273ms)
+✔ unchanged Result calls helper on both sides of the real Bank slot and retains old receipt proof (0.338ms)
+✔ unchanged five-field public decoder A_current (0.5132ms)
+✔ unchanged five-field public decoder A_after_B (0.1739ms)
+✔ unchanged five-field public decoder A_after_C (0.0887ms)
+✔ unchanged five-field public decoder A_after_new_A (0.0594ms)
+✔ unchanged five-field public decoder large_int63 (0.0591ms)
+✔ unchanged five-field public decoder max_int63 (0.0456ms)
+ℹ tests 14
+ℹ suites 0
+ℹ pass 14
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 487.0363

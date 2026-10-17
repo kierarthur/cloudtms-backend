@@ -1,0 +1,1 @@
+CREATE TRIGGER trg_tsfin_candidates_wakeup_aiu AFTER INSERT OR UPDATE OF key_norm, nhsp_hr_name_aliases, pay_method, umbrella_id, active ON candidates FOR EACH ROW EXECUTE FUNCTION trg_tsfin_candidates_wakeup();

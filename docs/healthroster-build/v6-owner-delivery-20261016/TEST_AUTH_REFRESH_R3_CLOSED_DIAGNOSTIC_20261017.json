@@ -1,0 +1,29 @@
+{
+  "version": "TEST_AUTH_REFRESH_R3_CLOSED_DIAGNOSTIC_V1",
+  "executionCommit": "384d6b5aa266211bf8ea233aca7c12016f6e29fe",
+  "sourceCommit": "aaf6e878dff85a1612a98e32910dffe34e5e1e6b",
+  "status": "HOLD",
+  "code": "AUTH_NETWORK_BOUNDARY_HELD",
+  "browserClosed": true,
+  "loginRequests": 1,
+  "refreshRequests": 0,
+  "blockedReadRequests": 6,
+  "forbiddenWriteRequests": 1,
+  "refusedRequests": 0,
+  "diagnostic": {
+    "phase": "EXPLICIT_ADMISSION_RETURNED",
+    "admission": {"meStatus":200,"actorUuid":true,"admin":true,"workspaceStatus":200,"contract":true,"queries":true},
+    "blockedWriteLabel": "STATIC_CHANGES_PING",
+    "blockedWriteMethod": "POST"
+  },
+  "blockedRequestForwarded": false,
+  "stateExported": false,
+  "sharedFrontendStateUntouched": true,
+  "ownOutputDirectory": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/.codex-tmp/test-auth-refresh-20261017-e3479e3f479b95bbb00bca56237190d1",
+  "retention": "Protected scratch retained; no private profile contents inspected; no deletion attempted",
+  "nativeIntervalActive": false,
+  "genuineBusinessActorBinding": "NOT_QUALIFIED_BY_LOGIN_ONLY",
+  "next": "Finite reviewed successor may suppress exactly one queryless startup ping without forwarding or fabricating a response; all unknown writes remain failures",
+  "install2": "NOT_INSTALLED",
+  "finalCritics": "NOT_RUN"
+}

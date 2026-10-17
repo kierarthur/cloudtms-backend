@@ -1,0 +1,27 @@
+{
+  "verdict": "HOLD_SOURCE_CURRENT_IDENTITY",
+  "reviewedCommit": "040bb062b9b0fdf3fa6bb45e400494d65929f40a",
+  "findings": [
+    {
+      "id": "F1",
+      "priority": 1,
+      "file": "health/20_current_placement.sqlinc",
+      "scope": "initial current selector and final current tuple recheck",
+      "problem": "Current saved Work/financial association does not prove the physical canonical Candidate/Client/current-financial resolution or complete authorised ordinary Daily identity.",
+      "required": "Genuine read-only native resolution and physical guards before/after real Bank slot; preserve active Office read admission, immutable accepted history and exact five-field Placement.",
+      "authorAcknowledged": true,
+      "nativeReproduction": "NOT_RUN"
+    }
+  ],
+  "originalNodeTests": 16,
+  "originalControlledAstCases": 47,
+  "independentSourceCounterexamples": 11,
+  "completeGrammarInputs": 5,
+  "rawGateInputs": 11,
+  "rawGateHazards": 0,
+  "fullParentReversals": 5,
+  "bankSlots": "THREE_UNPROVIDED",
+  "databaseReachabilityAndRace": "NOT_PROVED",
+  "native": "NOT_RUN",
+  "BankingOwnerBodies": "NOT_REVIEWED"
+}
