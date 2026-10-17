@@ -1,0 +1,11 @@
+{
+  "version": "DAILY_GENUINE_AUTH_R9_SOURCE_CONTROLLED_RESULTS_V1",
+  "nodeTests": 17,
+  "wholeRuntimeImageReverseRecipe": 9,
+  "actualBase": "00548ecadba24f9d088182f427f622a307abddd6",
+  "predicateWholeParentInverse": true,
+  "sourceRuntimeNetworkPidCapsUnchanged": true,
+  "futureActualR9": "NOT_PROVIDED",
+  "actualAuthBrowserPreflightNative": "NOT_RUN",
+  "privateTargetAccess": "NONE"
+}

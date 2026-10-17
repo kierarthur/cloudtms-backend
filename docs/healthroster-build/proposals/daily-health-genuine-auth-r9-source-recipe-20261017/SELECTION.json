@@ -1,0 +1,70 @@
+{
+  "version": "DAILY_GENUINE_AUTH_R9_FINITE_NINE_IMAGE_RECIPE_SELECTION_V1",
+  "baseCommit": "00548ecadba24f9d088182f427f622a307abddd6",
+  "phases": [
+    {
+      "phase": "operator",
+      "targets": [
+        {
+          "target": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/contract.mjs",
+          "beforeSha256": "92da72cf00390a629e1cf959db6f2cae30e617c217a7ceca3611b71ce4960d9c"
+        },
+        {
+          "target": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/SOURCE_PINS.json",
+          "beforeSha256": "a1e4ff63b5919b7ee2f447dbb952a73eb99adee4c6343cb11ccf8044da910c31"
+        },
+        {
+          "target": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/MANIFEST.json",
+          "beforeSha256": "7357e7f14528317f2e268723d9d50bd6707179791b51bb07facb2e7e9631be11"
+        }
+      ],
+      "afterImages": "GENUINE_PUBLIC_R9_RECEIPT_AND_ACTUAL_PRECEDING_COMMITS_REQUIRED"
+    },
+    {
+      "phase": "holder",
+      "targets": [
+        {
+          "target": "docs/healthroster-build/proposals/daily-health-s0-catalogue-holder-20261017/EXTERNAL_SOURCE_PINS.json",
+          "beforeSha256": "fc5d8566dab287e2c2fef26c1b38ec16c7a9c46b75f1ae31165e203f26a7b9f9"
+        },
+        {
+          "target": "docs/healthroster-build/proposals/daily-health-s0-catalogue-holder-20261017/MANIFEST.json",
+          "beforeSha256": "81f626622c61046faa1da07f12a9088e13e6baef6a1e3f33c87e9c1df3148e06"
+        }
+      ],
+      "afterImages": "GENUINE_PUBLIC_R9_RECEIPT_AND_ACTUAL_PRECEDING_COMMITS_REQUIRED"
+    },
+    {
+      "phase": "coordinator",
+      "targets": [
+        {
+          "target": "docs/healthroster-build/proposals/daily-health-s0-stage-coordinator-20261017/SOURCE_PINS.json",
+          "beforeSha256": "e369f5193c9254350a03b333281efce940f3dd58e7305db5df57f66fb302f162"
+        },
+        {
+          "target": "docs/healthroster-build/proposals/daily-health-s0-stage-coordinator-20261017/MANIFEST.json",
+          "beforeSha256": "b3fa9c9d0dd2b27173728a04a65f1acfefbae579710dd34d6cc0dc7ac249b5ac"
+        }
+      ],
+      "afterImages": "GENUINE_PUBLIC_R9_RECEIPT_AND_ACTUAL_PRECEDING_COMMITS_REQUIRED"
+    },
+    {
+      "phase": "continuation",
+      "targets": [
+        {
+          "target": "docs/healthroster-build/proposals/daily-health-genuine-single-stage-coordinator-20261017/SOURCE_PINS.json",
+          "beforeSha256": "3bf2289161ff97febbdf7250c1840e2e76b27c679d94f81cf27389305195f218"
+        },
+        {
+          "target": "docs/healthroster-build/proposals/daily-health-genuine-single-stage-coordinator-20261017/MANIFEST.json",
+          "beforeSha256": "9f96feaac47ca4afffe28cb2757ce698fec37ce156c7abae53de3a033d5dd4ea"
+        }
+      ],
+      "afterImages": "GENUINE_PUBLIC_R9_RECEIPT_AND_ACTUAL_PRECEDING_COMMITS_REQUIRED"
+    }
+  ],
+  "runtimeTargets": 9,
+  "actualCommits": 4,
+  "futureReceipt": "NOT_PROVIDED",
+  "privateTargetAccess": "NONE"
+}
