@@ -1,0 +1,17 @@
+{
+  "version": "TEST_AUTH_DIAGNOSTIC_ROOT_REVIEW_V1",
+  "authorCommit": "aaf6e878dff85a1612a98e32910dffe34e5e1e6b",
+  "proposal": "docs/healthroster-build/proposals/test-auth-refresh-diagnostic-forward-20261017",
+  "files": 23,
+  "manifestSha256": "f25c6189cfdd0a61d0b09c5c764a5387bee26af5c7f3b510f57e6df6188e1c08",
+  "rawAuthorGitSavedCopiedEqual": true,
+  "rootReview": "ACCEPT_FINITE_DIAGNOSTIC_ONLY",
+  "checksReplayed": {"original":88,"ps5Forward":86,"diagnostic":113,"nodeTests":15,"routeDecisionComparisons":550},
+  "reviewed": ["Complete runtime policy, worker, transformed callback and launcher", "Four complete runtime parent inverses and adapted test verified", "Credential loader, admission, ACL, child environment and existing caps unchanged", "Fixed closed route-label and method enum; actual six-field admission or null; no URL, query, body, cookie, UUID or URL-hash output", "Unexpected business writes remain aborted and prevent state export", "One actual bounded login permitted only outside every native interval using the existing approved child-only credential route"],
+  "originalR2MethodAndRoute": "NOT_RECORDED",
+  "actualAuthExecution": "NOT_RUN_AT_REVIEW",
+  "businessFixtures": "NOT_CREATED",
+  "normalTestDeployment": "NOT_RUN",
+  "install2": "NOT_INSTALLED",
+  "finalCritics": "NOT_RUN"
+}

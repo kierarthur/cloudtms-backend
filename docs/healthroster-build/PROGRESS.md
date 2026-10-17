@@ -1142,3 +1142,11 @@ SEND_7 turn: {"chat":"HealthRoster","task":"SOURCE_STATUS_CHILD_EXACT_PURE_NATIV
 
 
 17 October DailycurrentPlacement040bb original53files capturedGit-exact, root16Node/47actualAST/6decoder/5PG17/53columns6relations/11rawgate0hazards PASS. IndependentReportsourceF1 identifies missingcurrentcanonicalphysical Candidate/Client/HOURS/non-adjustment/authorisation despitevalidsavedWork/TSFINidentity; actualcandidatewakecanretainlockedpaidfinancialsnapshots, so oldfinancialidentityisnotproof. Authoracceptsfiniteforwardusingrealcanonicalread+pointguards, preservingordinaryactiveOfficereadandall3Bankjoinsheld. F1acceptedforcorrection,0appliedatthischeckpoint/0rejected; noownerdecision/nativefinding/runtime mount. Original92schemaobjects/priorapprovals preserved, newprivatehelperproposalstatusadditive. AuthR2boundaryHOLDpreserved; finiteclosedroute-enumdiagnosis continues withbusinessPOSTsblocked.
+
+
+Correction17OctoberauthR2: actualfrozenreceipt recordsoneforbiddenWriteRequests, notHTTPmethod. EarlierrootprosecalleditPOST; exactpolicyalsoincludesPATCH/PUT/DELETE. MethodandpathremainNOTRECORDED, noPOST-specificinference. Preserveactualcounter/HOLD andoriginalhistory; currentdiagnosticmustaddclosedmethod/publicrouteenumwithoutprivateURL/bodylogging. Allsuchwritesremainblocked andno sessionexportoccurred. Correctionreceipt TEST_AUTH_R2_BLOCKED_METHOD_CORRECTION_20261017.json.
+
+
+### 17 October 2026 - closed authentication diagnostic source reviewed
+
+Root independently replayed original88, PS5-forward86, diagnostic113 checks and15 Node tests, including550 unchanged old/new route decisions. All23 files of aaf6e878dff85a1612a98e32910dffe34e5e1e6b match saved author Git and the frozen manifest. Diagnostic-only successor preserves blocked writes and exact admission/state-export gates. Actual bounded login is next, outside any native interval; no actual authentication success is inferred. Original R2 method/path remain NOT_RECORDED. Install2 remains NOT_INSTALLED; final critics NOT_RUN.

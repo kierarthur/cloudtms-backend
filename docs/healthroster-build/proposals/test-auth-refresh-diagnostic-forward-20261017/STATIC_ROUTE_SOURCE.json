@@ -1,0 +1,41 @@
+{
+  "version": "STATIC_PUBLIC_FRONTEND_BLOCKED_WRITE_DIAGNOSTIC_V1",
+  "root": "D:/Development/GitHub/TEST-Frontend",
+  "file": "js/main.js",
+  "commit": "7a75111ec2923693e75feef4a7ccbcb6ecba942e",
+  "gitBlob": "d56e03240bb0e7d756ae706964c5a73884242324",
+  "savedBytes": 17616949,
+  "savedSha256": "02b44699ffef0dabab73b2ce8743d62195f003e86a3879881909a04f11cdc684",
+  "gitLineEndingRule": "Complete saved/index/pinned Git RAW byte equality; no translation",
+  "routes": [
+    {
+      "literal": "/api/changes/ping",
+      "method": "POST",
+      "label": "STATIC_CHANGES_PING",
+      "occurrences": [
+        {
+          "line": 385379,
+          "source": "doFetch(API('/api/changes/ping'), {\r\n              method: 'POST',"
+        }
+      ]
+    },
+    {
+      "literal": "/api/users/me/grid-prefs",
+      "method": "PATCH",
+      "label": "STATIC_USER_GRID_PREFS",
+      "occurrences": [
+        {
+          "line": 589,
+          "source": "authFetch(API('/api/users/me/grid-prefs'), {\r\n        method: 'PATCH',"
+        },
+        {
+          "line": 1940,
+          "source": "authFetch(API('/api/users/me/grid-prefs'), {\r\n      method: 'PATCH',"
+        }
+      ]
+    }
+  ],
+  "actualR2Write": "NOT_IDENTIFIED_BY_COUNTER_ONLY",
+  "runtimeQueriesBodiesCookiesOrIds": "NEVER_RETAINED_OR_HASHED",
+  "permissionChanges": 0
+}

@@ -1,0 +1,20 @@
+{
+  "version": "ROOT_AUTH_R2_BLOCKED_METHOD_CORRECTION_V1",
+  "recordedAt": "2026-10-17T08:41:23.594Z",
+  "originalReceipt": "docs/healthroster-build/v6-owner-delivery-20261016/TEST_AUTH_REFRESH_R2_NETWORK_HOLD_20261017.json",
+  "originalClosedCounter": {
+    "forbiddenWriteRequests": 1,
+    "loginRequests": 1,
+    "refreshRequests": 0,
+    "blockedReadRequests": 6,
+    "refusedRequests": 0,
+    "browserClosed": true
+  },
+  "actualMethod": "NOT_RECORDED",
+  "actualPath": "NOT_RECORDED",
+  "correction": "Earlier root prose called this an extra POST. The frozen policy also classifies PATCH/PUT/DELETE and other non-read methods as FORBIDDEN_WRITE. Only one blocked non-admitted write request is proved; no POST-specific claim is retained as a current conclusion.",
+  "requestForwarded": false,
+  "privateStateExported": false,
+  "originalReceiptNotRewritten": true,
+  "next": "Closed method enum/public-source route category diagnostics; no additional write allowance or guessed endpoint."
+}
