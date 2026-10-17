@@ -1,0 +1,37 @@
+{
+  "version": "DAILY_GENUINE_BATCH_PREFLIGHT_TIMING_V1",
+  "calls": [
+    {
+      "invocation": "parent-sourcePreflight",
+      "elapsedMs": 1207,
+      "operatorCommit": "163646cb752fc64d4221ac70b685ecd952afe7b0",
+      "rootCommit": "783d97c8e844fedce9e300d5051aabf7f484ed7a"
+    },
+    {
+      "invocation": "child-sourcePreflight",
+      "elapsedMs": 1228,
+      "operatorCommit": "163646cb752fc64d4221ac70b685ecd952afe7b0",
+      "rootCommit": "783d97c8e844fedce9e300d5051aabf7f484ed7a"
+    },
+    {
+      "invocation": "submit-reviewed-execution-sourcePreflight",
+      "elapsedMs": 1206,
+      "operatorCommit": "163646cb752fc64d4221ac70b685ecd952afe7b0",
+      "rootCommit": "783d97c8e844fedce9e300d5051aabf7f484ed7a"
+    }
+  ],
+  "historicalImageMs": 309,
+  "image": {
+    "reviewedCommit": "163646cb752fc64d4221ac70b685ecd952afe7b0",
+    "executionCommit": "163646cb752fc64d4221ac70b685ecd952afe7b0",
+    "selectedImagesUnchanged": true
+  },
+  "entryPreflightMs": 2435,
+  "submitPreflightMs": 3950,
+  "qualification": "Real original public source images and actual Git refs. New helper receives the exact original source location, and preserves all path/image guards. No simulated Git, native or browser.",
+  "privateContentsRead": false,
+  "browser": false,
+  "ipc": false,
+  "network": false,
+  "native": false
+}
