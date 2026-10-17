@@ -1,0 +1,38 @@
+{
+  "verdict": "ACCEPT_BOUNDED_SOURCE_FORWARD",
+  "sourceOnly": true,
+  "authorTests": 23,
+  "independentActualFunctionTests": 20,
+  "all13AuthorBytesEqual": true,
+  "wholeRawInverse": true,
+  "literalSpans": 3,
+  "unchangedEntryImagesToEnd": true,
+  "sourceAdmission": "NOT_RUN",
+  "authNative": "NOT_RUN",
+  "runs": [
+    {
+      "name": "author-tests",
+      "exitCode": 0,
+      "closedSummary": "l end-HEAD movement remains refusal (1.9301ms)\n\u2714 unsafe non-public/traversal path refuses before metadata (0.6081ms)\n\u2714 new real entrypoint E is accepted by unchanged actual entryImages reader contract (0.8534ms)\n\u2714 complete raw parent inverse changes only three declared reader source spans (0.1457ms)\n\u2139 tests 23\n\u2139 suites 0\n\u2139 pass 23\n\u2139 fail 0\n\u2139 cancelled 0\n\u2139 skipped 0\n\u2139 todo 0\n\u2139 duration_ms 135.1118\n",
+      "outputSha256": "703d562ac4d48c0b8acb3b74ae5d1484e50d1b044d041409e7d8ed7ba7555683"
+    },
+    {
+      "name": "author-verify",
+      "exitCode": 0,
+      "closedSummary": "{\"sourceOnly\":true,\"completePublisherInverse\":true,\"readerSpans\":3,\"actualParents\":4,\"actualSavedIndexHeadHistorical\":16,\"defaultBytes\":2000000,\"exactFixtureBytes\":2975604,\"unchangedSuffixFromEntryImages\":true,\"sourceAdmission\":\"NOT_RUN\",\"authNative\":\"NOT_RUN\"}\n",
+      "outputSha256": "bcfa019dce443a3ed5a2b3f2c554a48c2415848eac8196dcbe8c291212fab666"
+    },
+    {
+      "name": "independent-tests",
+      "exitCode": 0,
+      "closedSummary": "s)\n\u2714 fixed source does not bypass symlink physical guard (0.4296ms)\n\u2714 fixed source does not bypass redirect physical guard (0.4202ms)\n\u2714 genuine fixed hash never bypasses ancestry or final HEAD check (3.6279ms)\n\u2714 private/traversal/absolute path and malformed history still refuse before use (2.9104ms)\n\u2139 tests 20\n\u2139 suites 0\n\u2139 pass 20\n\u2139 fail 0\n\u2139 cancelled 0\n\u2139 skipped 0\n\u2139 todo 0\n\u2139 duration_ms 141.5087\n",
+      "outputSha256": "ec4c7b6b9b214cbe21d81e40a1af7f4e58e13ee369d0d880f5d37fa44a800b63"
+    },
+    {
+      "name": "node-syntax",
+      "exitCode": 0,
+      "closedSummary": "",
+      "outputSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ]
+}

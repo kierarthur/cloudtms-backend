@@ -1,0 +1,31 @@
+✔ real reviewed 2,975,604-byte fixture reproduces old bound HOLD (3.4256ms)
+✔ only exact size/SHA fixture is read and all four actual reader images remain required (4.0634ms)
+✔ rewritten same-size fixture refuses even if all controlled Git images agree (3.37ms)
+✔ truncated fixture refuses on metadata before content read (0.7404ms)
+✔ read-length mismatch despite claimed lstat size refuses (0.7414ms)
+✔ same large bytes at other path refuse: docs/healthroster-build/public.json (0.6811ms)
+✔ same large bytes at other path refuse: docs/healthroster-build/proposals/daily-health-genuine-auth-r11-b2-source-recipe-20261017/OTHER.json (0.6355ms)
+✔ same large bytes at other path refuse: docs/healthroster-build/proposals/daily-health-genuine-auth-r11-b2-source-recipe-20261017/historical_source_fixture.json (0.8082ms)
+✔ same large bytes at other path refuse: docs/healthroster-build/proposals/daily-health-genuine-auth-r11-b2-source-recipe-20261017/HISTORICAL_SOURCE_FIXTURE.json/extra (0.6755ms)
+✔ same large bytes at other path refuse: docs/healthroster-build/proposals/daily-health-genuine-auth-r11-b2-source-recipe-20261017-copy/HISTORICAL_SOURCE_FIXTURE.json (0.7444ms)
+✔ unchanged ordinary cap admits exact decimal2e6 (0.7814ms)
+✔ ordinary cap refuses decimal2e6+1 (0.7273ms)
+✔ actual reader retains symlink refusal (0.6919ms)
+✔ actual reader retains not regular refusal (1.0969ms)
+✔ actual reader retains physical redirect refusal (0.6534ms)
+✔ actual reader retains changed index refusal (2.4881ms)
+✔ actual reader retains changed cccccccccccccccccccccccccccccccccccccccc refusal (2.4468ms)
+✔ actual reader retains changed 125915e9f5f43aaa7e4eb54cd8b8355d134bb81a refusal (2.4797ms)
+✔ actual ancestry failure remains refusal (2.703ms)
+✔ actual end-HEAD movement remains refusal (2.5124ms)
+✔ unsafe non-public/traversal path refuses before metadata (0.7892ms)
+✔ new real entrypoint E is accepted by unchanged actual entryImages reader contract (1.0773ms)
+✔ complete raw parent inverse changes only three declared reader source spans (0.1755ms)
+ℹ tests 23
+ℹ suites 0
+ℹ pass 23
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 175.3085

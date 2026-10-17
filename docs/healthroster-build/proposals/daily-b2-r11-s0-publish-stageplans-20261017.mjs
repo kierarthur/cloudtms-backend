@@ -7,6 +7,7 @@ const exact=(v,k)=>v&&typeof v==='object'&&!Array.isArray(v)&&Object.keys(v).sor
 const metadataKeys=['functionalReport','functionalRoot','operatorMetadata','coordinatorMetadata','oneMetadata','bookkeeperMetadata','rootMetadata'];
 const g=(root,...a)=>cp.execFileSync('git',['-c','gc.auto=0','-c','maintenance.auto=false','-c','core.autocrlf=false','-c','core.longpaths=true','-C',root,...a],{windowsHide:true,maxBuffer:32e6,stdio:['ignore','pipe','ignore']});
 const physical=f=>fs.realpathSync.native(f).replaceAll('\\','/');
+const LARGE_RECIPE_FIXTURE=Object.freeze({file:'docs/healthroster-build/proposals/daily-health-genuine-auth-r11-b2-source-recipe-20261017/HISTORICAL_SOURCE_FIXTURE.json',bytes:2975604,sha256:'a183d1f68a321cc1c1cf805e52d0452d54829e7c5ae1d055c851f98b75eadb81'});
 const entryFiles=[PROP+'daily-genuine-root-s0-b2-r11-bookkeeper-20261017.mjs',PROP+'daily-genuine-s0-b2-r11-tools-orchestration-20261017.js.txt',PROP+'daily-b2-r11-s0-publish-stageplans-20261017.mjs',PROP+'daily-five-stage-b2-r11-source-plan-20261017/compose.mjs',PROP+'daily-five-stage-b2-r11-source-plan-20261017/MANIFEST.json'];
 function shape(c,preparation=false){
  check(exact(c,['version','operatorCommit','metadataCommits','entrypointCommit','recipeCommit','authReviewCommit','authSupersession',...preparation?[]:['sourceReviewCommit']])&&c.version===cfgVersion,'CLOSED_REAL_CONFIG_REQUIRED');
@@ -16,8 +17,8 @@ function shape(c,preparation=false){
 export function committedReader(root=ROOT){
  const head=g(root,'rev-parse','HEAD').toString().trim();return (file,historical=null)=>{
   check(typeof file==='string'&&/^docs\/healthroster-build\/[A-Za-z0-9_./-]+$/.test(file)&&!file.split('/').includes('..'),'PUBLIC_FILE_REQUIRED');
-  const f=root+'/'+file,s=fs.lstatSync(f);check(physical(f)===f&&s.isFile()&&!s.isSymbolicLink()&&s.size>0&&s.size<=2e6,'BOUNDED_PHYSICAL_PUBLIC_REQUIRED');
-  const b=fs.readFileSync(f);if(historical){check(/^[a-f0-9]{40}$/.test(historical),'ACTUAL_HISTORY_REQUIRED');g(root,'merge-base','--is-ancestor',historical,head);}
+  const f=root+'/'+file,s=fs.lstatSync(f);check(physical(f)===f&&s.isFile()&&!s.isSymbolicLink()&&s.size>0&&(file===LARGE_RECIPE_FIXTURE.file?s.size===LARGE_RECIPE_FIXTURE.bytes:s.size<=2e6),'BOUNDED_PHYSICAL_PUBLIC_REQUIRED');
+  const b=fs.readFileSync(f);if(file===LARGE_RECIPE_FIXTURE.file)check(b.length===LARGE_RECIPE_FIXTURE.bytes&&hash(b)===LARGE_RECIPE_FIXTURE.sha256,'EXACT_LARGE_PUBLIC_RECIPE_REQUIRED');if(historical){check(/^[a-f0-9]{40}$/.test(historical),'ACTUAL_HISTORY_REQUIRED');g(root,'merge-base','--is-ancestor',historical,head);}
   check([head,'',...historical?[historical]:[]].every(ref=>b.equals(g(root,'show',ref+':'+file))),'CURRENT_COMPLETE_PUBLIC_IMAGES_REQUIRED');check(g(root,'rev-parse','HEAD').toString().trim()===head,'PUBLIC_HEAD_MOVED');return b;
  };
 }

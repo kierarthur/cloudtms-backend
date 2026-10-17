@@ -1,0 +1,9 @@
+{
+  "version": "ROOT_OBSERVED_MCP_CALL_TIMING_V1",
+  "route": "mcp__cloudtms_miget_operations_kier_codex__miget_db_transaction_rollback",
+  "sqlSha256": "26d7bc7e6e7b09b546a8d62896e48a4caa497c75fde8457de2ff5312537bb53c",
+  "callStartedAt": "2026-10-17T18:37:59.003Z",
+  "callReturnedAt": "2026-10-17T18:38:40.872Z",
+  "rootObservedCallMilliseconds": 41869,
+  "authority": "ACTUAL_ROOT_ORCHESTRATION_CLOCK_OBSERVATIONS_NOT_SERVER_OR_TRANSPORT_LATENCY"
+}

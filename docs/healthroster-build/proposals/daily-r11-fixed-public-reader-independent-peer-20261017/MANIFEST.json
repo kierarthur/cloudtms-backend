@@ -1,0 +1,26 @@
+{
+  "version": "R11_EXACT_PUBLIC_FIXTURE_READER_INDEPENDENT_PEER_V1",
+  "sourceOnly": true,
+  "files": [
+    {
+      "file": "actual-reader.test.mjs",
+      "bytes": 5609,
+      "sha256": "bcc152603df42eea8c40342c9f8693b665404a3d720490fdf9fd61c296404f59"
+    },
+    {
+      "file": "RESULTS.json",
+      "bytes": 2315,
+      "sha256": "4b6b53e9a6ae9356a038e27ec885ac599de369e8d9929f95e37e84d512c9ed27"
+    },
+    {
+      "file": "REVIEW.md",
+      "bytes": 2011,
+      "sha256": "a3eff443d05024e9338303f3695ba0e93ab3c9fd95189cae41efd01e9f65939d"
+    },
+    {
+      "file": "SOURCE_PINS.json",
+      "bytes": 1031,
+      "sha256": "2443bda01d16fed598096ea5480582f268b5e40e2d430520fabe3f617cb570c0"
+    }
+  ]
+}

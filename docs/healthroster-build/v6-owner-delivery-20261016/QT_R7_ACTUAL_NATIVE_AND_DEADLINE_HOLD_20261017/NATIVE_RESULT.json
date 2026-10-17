@@ -1,0 +1,732 @@
+{
+  "accepted": true,
+  "databaseTarget": "agency_test",
+  "database": "cloudtms_test_clone",
+  "label": "HR_CONTACT_QT_QT_ADMIN_CONTROLS_V1_02D2CE20669FA57382DC2F0801BCC305",
+  "sqlSha256": "26d7bc7e6e7b09b546a8d62896e48a4caa497c75fde8457de2ff5312537bb53c",
+  "statementCount": 69,
+  "statements": [
+    {
+      "statement": 1,
+      "command": "SET",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 2,
+      "command": "SET",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 3,
+      "command": "SET",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 4,
+      "command": "SET",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 5,
+      "command": "SELECT",
+      "rowCount": 1,
+      "fields": [
+        "hr_guard_clock"
+      ],
+      "rows": [
+        {
+          "hr_guard_clock": {
+            "phase": "B_GUARD_BEFORE",
+            "readOnly": false,
+            "holderPid": 301484,
+            "backendPid": 301554,
+            "observedAt": "2026-10-17T18:38:01.26103+00:00",
+            "databaseOid": 324139,
+            "holderGranted": true,
+            "physicalDatabase": "cloudtms_test_clone",
+            "statementStartedAt": "2026-10-17T18:38:01.244867+00:00",
+            "transactionStartedAt": "2026-10-17T18:38:01.021099+00:00"
+          }
+        }
+      ],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 6,
+      "command": "DO",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 7,
+      "command": "SELECT",
+      "rowCount": 1,
+      "fields": [
+        "hr_guard_clock"
+      ],
+      "rows": [
+        {
+          "hr_guard_clock": {
+            "phase": "B_GUARD_AFTER",
+            "readOnly": false,
+            "holderPid": 301484,
+            "backendPid": 301554,
+            "observedAt": "2026-10-17T18:38:01.324149+00:00",
+            "databaseOid": 324139,
+            "holderGranted": true,
+            "physicalDatabase": "cloudtms_test_clone",
+            "statementStartedAt": "2026-10-17T18:38:01.323157+00:00",
+            "transactionStartedAt": "2026-10-17T18:38:01.021099+00:00"
+          }
+        }
+      ],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 8,
+      "command": "CREATE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 9,
+      "command": "SELECT",
+      "rowCount": 1,
+      "fields": [
+        "?column?"
+      ],
+      "rows": [
+        {
+          "?column?": "HR_REHEARSAL_TRANSACTION_JSON {\"xid\": \"414571679\", \"database\": \"cloudtms_test_clone\", \"epochZero\": true, \"backendPid\": 301554}"
+        }
+      ],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 10,
+      "command": "SET",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 11,
+      "command": "DO",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 12,
+      "command": "DO",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 13,
+      "command": "DO",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 14,
+      "command": "CREATE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 15,
+      "command": "ALTER",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 16,
+      "command": "REVOKE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 17,
+      "command": "DO",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 18,
+      "command": "CREATE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 19,
+      "command": "ALTER",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 20,
+      "command": "REVOKE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 21,
+      "command": "DO",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 22,
+      "command": "CREATE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 23,
+      "command": "ALTER",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 24,
+      "command": "REVOKE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 25,
+      "command": "CREATE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 26,
+      "command": "ALTER",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 27,
+      "command": "CREATE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 28,
+      "command": "ALTER",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 29,
+      "command": "ALTER",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 30,
+      "command": "ALTER",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 31,
+      "command": "ALTER",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 32,
+      "command": "ALTER",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 33,
+      "command": "CREATE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 34,
+      "command": "CREATE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 35,
+      "command": "REVOKE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 36,
+      "command": "CREATE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 37,
+      "command": "CREATE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 38,
+      "command": "CREATE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 39,
+      "command": "CREATE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 40,
+      "command": "CREATE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 41,
+      "command": "DROP",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 42,
+      "command": "CREATE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 43,
+      "command": "DROP",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 44,
+      "command": "CREATE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 45,
+      "command": "CREATE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 46,
+      "command": "CREATE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 47,
+      "command": "ALTER",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 48,
+      "command": "ALTER",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 49,
+      "command": "ALTER",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 50,
+      "command": "ALTER",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 51,
+      "command": "ALTER",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 52,
+      "command": "ALTER",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 53,
+      "command": "ALTER",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 54,
+      "command": "REVOKE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 55,
+      "command": "REVOKE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 56,
+      "command": "GRANT",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 57,
+      "command": "NOTIFY",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 58,
+      "command": "CREATE",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 59,
+      "command": "DO",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 60,
+      "command": "SELECT",
+      "rowCount": 1139776,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 61,
+      "command": "DO",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 62,
+      "command": "DO",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 63,
+      "command": "SELECT",
+      "rowCount": 1139776,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 64,
+      "command": "DO",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 65,
+      "command": "SELECT",
+      "rowCount": 1,
+      "fields": [
+        "programme_result"
+      ],
+      "rows": [
+        {
+          "programme_result": {
+            "programme": "QT_ADMIN_CONTROLS_V1",
+            "policyRows": 1,
+            "fixtureUsers": 6,
+            "postWaitRace": "NOT_RUN",
+            "directRoleApi": "NOT_RUN",
+            "outerIsolation": "read committed",
+            "commandAuditRows": 2,
+            "crossAgencyProof": "NOT_RUN",
+            "staleCasRefusals": 1,
+            "changedBodyRefusals": 1,
+            "effectiveRoleAclChecks": 3,
+            "ordinaryPayInactiveDenials": 10,
+            "sameTransactionRevocationRefusals": 2
+          }
+        }
+      ],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 66,
+      "command": "RESET",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 67,
+      "command": "RESET",
+      "rowCount": null,
+      "fields": [],
+      "rows": [],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 68,
+      "command": "SELECT",
+      "rowCount": 1,
+      "fields": [
+        "?column?"
+      ],
+      "rows": [
+        {
+          "?column?": "HR_FIXTURE_OBSERVATION_JSON {\"xid\": \"414571679\", \"rows\": [], \"unit\": 0, \"database\": \"cloudtms_test_clone\", \"epochZero\": true, \"backendPid\": 301554}"
+        }
+      ],
+      "rowsTruncated": false
+    },
+    {
+      "statement": 69,
+      "command": "SELECT",
+      "rowCount": 1,
+      "fields": [
+        "jsonb_build_object"
+      ],
+      "rows": [
+        {
+          "jsonb_build_object": {
+            "xid": "414571679",
+            "marker": "hr_install2_02d2ce20669fa57382dc2f0801bcc305",
+            "holderPid": 301484,
+            "backendPid": 301554,
+            "markerRows": 0,
+            "observedAt": "2026-10-17T18:38:42.00263+00:00",
+            "databaseOid": 324139,
+            "noRoleSwitch": true,
+            "holderGranted": true,
+            "markerPresent": true,
+            "physicalDatabase": "cloudtms_test_clone",
+            "statementStartedAt": "2026-10-17T18:38:41.998768+00:00",
+            "transactionStartedAt": "2026-10-17T18:38:01.021099+00:00"
+          }
+        }
+      ],
+      "rowsTruncated": false
+    }
+  ],
+  "rolledBack": true,
+  "rollbackVerification": {
+    "connectedFresh": true,
+    "database": "cloudtms_test_clone",
+    "statements": [
+      {
+        "statement": 1,
+        "command": "SELECT",
+        "rowCount": 1,
+        "fields": [
+          "set_config"
+        ],
+        "rows": [
+          {
+            "set_config": "pg_catalog, public"
+          }
+        ],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 2,
+        "command": "SELECT",
+        "rowCount": 1,
+        "fields": [
+          "jsonb_build_object"
+        ],
+        "rows": [
+          {
+            "jsonb_build_object": "{\"module\": \"LEGACY:1\", \"identityTest\": true, \"markerAbsent\": true, \"applyingCount\": 0, \"latestRelease\": {\"commit\": \"f743b81fe537830d81b1de93ec4f9cb0331532a7\", \"status\": \"VERIFIED\", \"releaseId\": \"20261007-candidate-emergency-complete-roster-v1-upgrade-f743b81fe537\", \"completedAt\": \"2026-10-14T15:47:03.075975+00:00\", \"installedContract\": \"7e3c00b70366c2c036cfea419adf32c77df5b65070771591e75168b68f3336d6\", \"repositoryContract\": \"7e3c00b70366c2c036cfea419adf32c77df5b65070771591e75168b68f3336d6\"}, \"customerKeyNull\": true, \"physicalDatabase\": \"cloudtms_test_clone\"}"
+          }
+        ],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 3,
+        "command": "SELECT",
+        "rowCount": 1,
+        "fields": [
+          "jsonb_build_object"
+        ],
+        "rows": [
+          {
+            "jsonb_build_object": {
+              "readOnly": true,
+              "holderPid": 301484,
+              "backendPid": 301579,
+              "observedAt": "2026-10-17T18:38:42.370492+00:00",
+              "databaseOid": 324139,
+              "noRoleSwitch": true,
+              "holderGranted": true,
+              "physicalDatabase": "cloudtms_test_clone",
+              "statementStartedAt": "2026-10-17T18:38:42.36759+00:00",
+              "transactionStartedAt": "2026-10-17T18:38:42.230366+00:00"
+            }
+          }
+        ],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 4,
+        "command": "SELECT",
+        "rowCount": 1,
+        "fields": [
+          "jsonb_build_object"
+        ],
+        "rows": [
+          {
+            "jsonb_build_object": {
+              "readOnly": true,
+              "backendPid": 301579,
+              "qtObjectsAbsent": true,
+              "userFixtureRowsRemaining": 0
+            }
+          }
+        ],
+        "rowsTruncated": false
+      }
+    ]
+  },
+  "warnings": [
+    "All transactional database and catalog changes were rolled back.",
+    "PostgreSQL sequence increments (including serial/identity nextval calls) are not rolled back and can leave harmless gaps.",
+    "Do not invoke functions with payment, provider, email, network, or other effects outside PostgreSQL; those effects are not covered by rollback."
+  ]
+}

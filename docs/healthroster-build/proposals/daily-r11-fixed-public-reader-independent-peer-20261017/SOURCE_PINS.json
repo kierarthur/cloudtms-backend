@@ -1,0 +1,18 @@
+{
+  "authorPacket": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026/.codex-tmp/daily-r11-fixed-public-fixture-reader-forward-20261017",
+  "manifestSha256": "a9f5e0de5db3febb071217d72c875e3958da5bd5a6d99f095803f775c0a5ec55",
+  "authorFiles": 13,
+  "forwardSha256": "df25f0acb4c7f815510973f851ac39c3d29a1b6c0e65d676fed2db44f35ce262",
+  "target": "docs/healthroster-build/proposals/daily-b2-r11-s0-publish-stageplans-20261017.mjs",
+  "parentSha256": "e1ee2c4713b069a481a21e18afbccf71fe82a810a6145a66a3f4eb8d58cea413",
+  "postimageSha256": "515016d1d3ef9bedfa4599d5b8cb9453a4afc4c469c86f28661e37eedc730573",
+  "parentCommit": "125915e9f5f43aaa7e4eb54cd8b8355d134bb81a",
+  "independentlyObservedRootHead": "d88b5b2ebc115a20f3750bf12e10d51fe66b7639",
+  "currentParentComparisons": 16,
+  "exactFixture": {
+    "file": "HISTORICAL_SOURCE_FIXTURE.json",
+    "bytes": 2975604,
+    "sha256": "a183d1f68a321cc1c1cf805e52d0452d54829e7c5ae1d055c851f98b75eadb81"
+  },
+  "postimageAdopted": false
+}
