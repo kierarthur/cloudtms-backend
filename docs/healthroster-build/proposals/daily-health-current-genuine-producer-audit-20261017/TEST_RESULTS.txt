@@ -1,0 +1,76 @@
+TAP version 13
+# Subtest: exact current saved/committed source and physical root, twenty-two complete functions
+ok 1 - exact current saved/committed source and physical root, twenty-two complete functions
+  ---
+  duration_ms: 854.1668
+  type: 'test'
+  ...
+# Subtest: actual pure Worker derivation supplies booking scope, never native IDs or snapshot
+ok 2 - actual pure Worker derivation supplies booking scope, never native IDs or snapshot
+  ---
+  duration_ms: 19.7679
+  type: 'test'
+  ...
+# Subtest: actual S1 wrapper forwards only genuine allowlisted fields and exact five RPC args
+ok 3 - actual S1 wrapper forwards only genuine allowlisted fields and exact five RPC args
+  ---
+  duration_ms: 2.8073
+  type: 'test'
+  ...
+# Subtest: actual targeted empty drain reads settings then returns without enqueue/dequeue/worker
+ok 4 - actual targeted empty drain reads settings then returns without enqueue/dequeue/worker
+  ---
+  duration_ms: 0.9965
+  type: 'test'
+  ...
+# Subtest: actual Client enqueue is scoped to current, uninvoiced TSFIN and empty read causes no POST
+ok 5 - actual Client enqueue is scoped to current, uninvoiced TSFIN and empty read causes no POST
+  ---
+  duration_ms: 1.0881
+  type: 'test'
+  ...
+# Subtest: actual S3 fresh path posts one row and reaches scoped enqueue for the October window
+ok 6 - actual S3 fresh path posts one row and reaches scoped enqueue for the October window
+  ---
+  duration_ms: 1.1254
+  type: 'test'
+  ...
+# Subtest: actual S3 incumbent path can PATCH an old window before later POST failure
+ok 7 - actual S3 incumbent path can PATCH an old window before later POST failure
+  ---
+  duration_ms: 1.4245
+  type: 'test'
+  ...
+# Subtest: actual Worker targeted list chooses only specific dequeue; omitted list is general branch
+ok 8 - actual Worker targeted list chooses only specific dequeue; omitted list is general branch
+  ---
+  duration_ms: 1.0495
+  type: 'test'
+  ...
+# Subtest: actual recalculation forwards exact target and refuses nominal or wrong completion evidence
+ok 9 - actual recalculation forwards exact target and refuses nominal or wrong completion evidence
+  ---
+  duration_ms: 2.5733
+  type: 'test'
+  ...
+# Subtest: actual S4 failed recalculation plus failed DELETE returns 500 after an INSERT
+ok 10 - actual S4 failed recalculation plus failed DELETE returns 500 after an INSERT
+  ---
+  duration_ms: 4.4748
+  type: 'test'
+  ...
+# Subtest: native S1 body identity receipt is definition-only and no actor/vacancy/API claim
+ok 11 - native S1 body identity receipt is definition-only and no actor/vacancy/API claim
+  ---
+  duration_ms: 1.9974
+  type: 'test'
+  ...
+1..11
+# tests 11
+# suites 0
+# pass 11
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 989.1129

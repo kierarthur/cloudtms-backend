@@ -1,0 +1,158 @@
+{
+  "version": "DAILY_PRODUCERS_CURRENT_ACTIVE_RUNTIME_SOURCE_BINDING_V1",
+  "freshLatestDeployment": {
+    "id": "79c61c45-9ec5-48be-bfdd-6e837262cb07",
+    "source": "wrangler",
+    "strategy": "percentage",
+    "author_email": "kier@arthur-rai.co.uk",
+    "annotations": {
+      "workers/triggered_by": "deployment"
+    },
+    "versions": [
+      {
+        "version_id": "5501aaa3-3302-456d-8805-d5e7e82ec86a",
+        "percentage": 100
+      }
+    ],
+    "created_on": "2026-10-14T15:52:08.252999Z"
+  },
+  "matchedOriginalPublication": {
+    "file": "docs/healthroster-build/install1-completed-20261014/CLOUDFLARE_ACTIVE_READBACK.json",
+    "buildCommit": "f743b81fe537830d81b1de93ec4f9cb0331532a7",
+    "buildUuid": "8c641156-38d2-4104-b663-57a38e925d1f",
+    "branch": "deploy/cloudflare/test-cloudtms-backend"
+  },
+  "wholeCurrentWorkerEqualsDeployed": false,
+  "qualification": "Only the exact selected22 functions and complete2 modules are compared; current I2 HEAD is not claimed deployed",
+  "selectedFunctions": [
+    {
+      "name": "createClientWithSettingsAtomic",
+      "sha256": "8bacd300e3a39b2b0aa0e1d0807fc9075f30bd64b1a88d0e63d031bc91e9fb8d",
+      "exactPublishedOccurrences": 1
+    },
+    {
+      "name": "handleCreateClient",
+      "sha256": "a0cda4932d3e08ef288fd74249d3b20cf10e2f0fe45d361dfc6e9fc44f75a09e",
+      "exactPublishedOccurrences": 1
+    },
+    {
+      "name": "handleCreateCandidate",
+      "sha256": "42642fcfbe70961b2b8276e875e75c69a673a15a3442a04fe3c2d4e6046b4231",
+      "exactPublishedOccurrences": 1
+    },
+    {
+      "name": "handleUpsertClientRate",
+      "sha256": "5e6c7f3b1a5dc5302971c91d5cf80a5ea464e76b6119312e6ee9b981bc43d518",
+      "exactPublishedOccurrences": 1
+    },
+    {
+      "name": "handleTimesheetCreateManualDaily",
+      "sha256": "23cd9c38a20d43398756965210b4d47391eee94583ea61347d548c8d39344a77",
+      "exactPublishedOccurrences": 1
+    },
+    {
+      "name": "saveAndRecalculateCanonicalDaily",
+      "sha256": "860f54d4fc2a807ddd77c17151e5c47f93541d6c20c4e28824c6ba936445409b",
+      "exactPublishedOccurrences": 1
+    },
+    {
+      "name": "runTsfinWorkerOnce",
+      "sha256": "024d4352267936829914046f1b0ec3bb33cc9b053d9c39d35711606948ee50a9",
+      "exactPublishedOccurrences": 1
+    },
+    {
+      "name": "requireUser",
+      "sha256": "72cb3dc069bbec6c973eff2e7258f1649b721978c47cd56d75dd8ad81089ca2a",
+      "exactPublishedOccurrences": 1
+    },
+    {
+      "name": "tsfinTargetedDrainNow",
+      "sha256": "af80a52b263df6e769d797eaa2a3739512ef594800da9d79a76e26d8fef8c74f",
+      "exactPublishedOccurrences": 1
+    },
+    {
+      "name": "enqueueTsfinRecomputeForClient",
+      "sha256": "787e0be9d2018fb0754462c736fef321a176ad4ba15cd2971b8b77e8dd678827",
+      "exactPublishedOccurrences": 1
+    },
+    {
+      "name": "rpcTsfinDequeueSpecific",
+      "sha256": "db527150e9e48a6ff35e6e3bfbd88b8d0ab5c0bfffb200aec0c64f01236735e1",
+      "exactPublishedOccurrences": 1
+    },
+    {
+      "name": "rpcTsfinLoadContextBatch",
+      "sha256": "4cb6a97b9581449cda587a6d45a004d6707977cffad363635f8700157cde287e",
+      "exactPublishedOccurrences": 1
+    },
+    {
+      "name": "rpcTsfinResolveRatesBatch",
+      "sha256": "839218845ebccb87037ee44b6e605a2b2eb4969a8b627e41b0e4b39bf30ad899",
+      "exactPublishedOccurrences": 1
+    },
+    {
+      "name": "rpcTsfinWriteSnapshotsAndComplete",
+      "sha256": "74db970602f274f27504035ad9a625926bf41e3c37be3a8d09a0bd6123f285da",
+      "exactPublishedOccurrences": 1
+    },
+    {
+      "name": "loadSettingsDefaults",
+      "sha256": "973fc5a6f63ddfdc13b28bf69ad100b9ac0b1cc19a4491842ee5cb8f42d0f3fe",
+      "exactPublishedOccurrences": 1
+    },
+    {
+      "name": "writeAudit",
+      "sha256": "73e81314601a0e57ad866545e7726f9c084a85bf5fdb874f8bc48ef74e8e2870",
+      "exactPublishedOccurrences": 1
+    },
+    {
+      "name": "makeBookingId",
+      "sha256": "27519889ad2885c69d7ab1fd401fd9880642e702a34016f4671e19a4e5f7bd7a",
+      "exactPublishedOccurrences": 1
+    },
+    {
+      "name": "norm",
+      "sha256": "5b766f6462eae3d2535fc017aaba906acf5308ad2074a4be6e27199b73bd6978",
+      "exactPublishedOccurrences": 1
+    },
+    {
+      "name": "sha256Hex",
+      "sha256": "faccc75d3ac3697bbbf133df2a9d387e04da0d69e8b9dcacbf1b17a406e52ed9",
+      "exactPublishedOccurrences": 1
+    },
+    {
+      "name": "ukLocalToUtcISO",
+      "sha256": "f0030af99c0d3e0713495cb46cf2e81556f8151a33fd0c8914c36edf9c872c60",
+      "exactPublishedOccurrences": 1
+    },
+    {
+      "name": "weekEndingSunday",
+      "sha256": "14fa1e01d3652db803462235e4e2b6a756d8473d38b2d41be602701cfbee91c7",
+      "exactPublishedOccurrences": 1
+    },
+    {
+      "name": "londonDate",
+      "sha256": "0baff5db38fd97eae959a12706216221dbff4e25bab385bc6d9ec25d2dc6bd3e",
+      "exactPublishedOccurrences": 1
+    }
+  ],
+  "completeModules": [
+    {
+      "file": "broker/src/daily-canonical-authority.js",
+      "savedSha256": "baa0df9bc653d0c4159a3401a903154444e17cfc3ea0c7b3bd30c5bdfae91942",
+      "publishedSha256": "64cd2109da90f9ee277c2829a734683e7e06649ebebe14b1e2d296ac1c04d00b",
+      "wholeRawEqual": false
+    },
+    {
+      "file": "broker/src/daily-schedule-authority.js",
+      "savedSha256": "1623f5294d7da3860731ac6eee91f8fe6aed1f3fc27f01ab42eb1ea4c7fbeb2e",
+      "publishedSha256": "1623f5294d7da3860731ac6eee91f8fe6aed1f3fc27f01ab42eb1ea4c7fbeb2e",
+      "wholeRawEqual": true
+    }
+  ],
+  "unmatchedFunctions": [],
+  "allSelectedFunctionsRawEqualPublishedOnce": true,
+  "allTwoModulesRawEqual": false,
+  "nativeOrFixtureInvocation": false,
+  "vacancyAndActorScope": "NOT_QUALIFIED_BY_THIS_SOURCE_BINDING"
+}

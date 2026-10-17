@@ -1,0 +1,20 @@
+async function rpcTsfinLoadContextBatch(env, { timesheetIds = [] } = {}) {
+  if (!Array.isArray(timesheetIds) || timesheetIds.length === 0) return [];
+  const args = { p_timesheet_ids: timesheetIds };
+
+  _tsfinRpcLog('tsfin_load_context_batch -> call', { count: timesheetIds.length });
+  try {
+    const res = await sbRpc(env, 'tsfin_load_context_batch', args);
+    const rows = _asArray(res);
+    _tsfinRpcLog('tsfin_load_context_batch -> ok', { rows: rows.length });
+    return rows;
+    // [{
+    //   effective_timesheet_id,
+    //   out_timesheet, out_cur_fin, out_candidate, out_umbrella,
+    //   out_client_id, out_effective_flags, out_policy
+    // }, ...]
+  } catch (e) {
+    _tsfinRpcLog('tsfin_load_context_batch -> fail', { err: String(e?.message || e) });
+    throw e;
+  }
+}

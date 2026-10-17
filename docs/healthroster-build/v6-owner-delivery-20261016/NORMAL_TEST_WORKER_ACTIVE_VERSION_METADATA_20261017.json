@@ -1,0 +1,21 @@
+{
+  "version": "NORMAL_TEST_ACTIVE_VERSION_METADATA_READONLY_V1",
+  "worker": "test-cloudtms-backend",
+  "activeVersion": {
+    "id": "5501aaa3-3302-456d-8805-d5e7e82ec86a",
+    "number": 3462,
+    "metadata": {
+      "created_on": "2026-10-14T15:52:04.970075Z",
+      "source": "wrangler",
+      "author_id": "5342d9bd78fa698dadcac6f1769baef2",
+      "author_email": "kier@arthur-rai.co.uk",
+      "has_preview": true
+    },
+    "annotations": {
+      "workers/triggered_by": "version_upload"
+    }
+  },
+  "selectedTraffic": 100,
+  "source": "Fresh deployment listing followed by exact version GET; existing OAuth, no deployment",
+  "runtimeSourceClaim": "Version metadata only; compare against actual Install1 publication/source receipt"
+}

@@ -1,0 +1,89 @@
+async function writeAudit(env, user, action, details = null, opts = {}) {
+  try {
+    const req = opts.req || null;
+
+    // Request meta (all optional)
+    const ip  = req?.headers?.get('cf-connecting-ip')
+             || (req?.headers?.get('x-forwarded-for') || '').split(',')[0].trim()
+             || null;
+    const ua  = req?.headers?.get('user-agent') || null;
+
+    // Prefer an explicit correlation_id (e.g., mail_outbox.id), then fallbacks
+    const correlationId =
+      opts.correlation_id ??
+      (details && (details.mail_id || details.mailId)) ??
+      req?.headers?.get('x-correlation-id') ??
+      req?.headers?.get('x-request-id') ??
+      req?.headers?.get('idempotency-key') ??
+      req?.headers?.get('x-idempotency-key') ??
+      null;
+
+    // Actor normalization
+    const actor_user_id      = user?.id ?? user?.sub ?? null;
+    const actor_role_at_time = user?.role ?? 'system';
+
+    // Prefer display_name from DB (tms_users) so audit renders nicely
+    let actor_display = user?.display_name ?? user?.email ?? null;
+    if (actor_user_id && !user?.display_name) {
+      try {
+        const enc = encodeURIComponent;
+        const { rows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/tms_users` +
+            `?id=eq.${enc(String(actor_user_id))}` +
+            `&select=display_name,email` +
+            `&limit=1`
+        );
+        const u = rows?.[0] || null;
+        actor_display = (u?.display_name || '').trim()
+          || (u?.email || '').trim()
+          || actor_display;
+      } catch {
+        // non-fatal
+      }
+    }
+    if (!actor_display) actor_display = 'CloudTMS server';
+
+    // Object targeting
+    const object_type = opts.entity || opts.object_type || 'generic';
+    const object_id_text =
+      opts.subject_id != null
+        ? String(opts.subject_id)
+        : (opts.object_id_text != null ? String(opts.object_id_text) : null);
+
+    // Build payload aligned to audit_events schema
+    const payload = {
+      object_type,
+      object_id_text,
+      action: String(action),
+
+      before_json: opts.before ?? null,
+      after_json: details ?? null,
+
+      reason: opts.reason ?? null,
+
+      actor_user_id,
+      actor_display,
+      actor_role_at_time,
+
+      ip,
+      user_agent: ua,
+      correlation_id: correlationId
+      // ts_utc is implicit (DEFAULT now()) – no need to send
+    };
+
+    // Best-effort POST; do not throw on failure
+    const res = await fetch(`${env.SUPABASE_URL}/rest/v1/audit_events`, {
+      method: 'POST',
+      headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+      body: JSON.stringify(payload)
+    });
+
+    if (!res.ok) {
+      const txt = await res.text().catch(() => '');
+      console.warn('writeAudit failed', res.status, txt);
+    }
+  } catch (err) {
+    console.warn('writeAudit error', err);
+  }
+}

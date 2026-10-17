@@ -1,0 +1,39 @@
+async function requireUser(env, req, allowedRoles = []) {
+  const hdr = req.headers.get('authorization') || '';
+  const m = hdr.match(/^Bearer\s+(.+)$/i);
+  if (!m) return null;
+
+  const ver = await verifyToken(sessionSecret(env), m[1]);
+  if (!ver.ok) return null;
+
+  const p = ver.payload || {};
+  if (p.typ !== 'access' || !p.sub) return null;
+
+  // Ensure the user still exists, is active, and session_version matches
+  const user = await sbGetUserById(env, p.sub);
+  if (!user || user.is_active !== true) return null;
+  if ((user.session_version|0) !== (p.sv|0)) return null;
+
+  if (Array.isArray(allowedRoles) && allowedRoles.length && !allowedRoles.includes(user.role)) return null;
+  let tenantId = null;
+  try {
+    const configuredTenantId = bankingPayCorrectionTenantAuthority(env);
+    const tokenTenantId = String(p.tenant_id || '').trim().toLowerCase();
+    tenantId = configuredTenantId && tokenTenantId === configuredTenantId ? configuredTenantId : null;
+  } catch {
+    return null;
+  }
+  return {
+    id: user.id,
+    email: user.email,
+    role: user.role,
+    is_active: user.is_active === true,
+    payment_authoriser: user.payment_authoriser === true,
+    payment_golden_key: user.payment_golden_key === true,
+    sv: user.session_version|0,
+    sid: p.sid,
+    session_id: p.sid,
+    tenant_id: tenantId,
+    session_issued_at_epoch_seconds: Number(p.iat)
+  };
+}
