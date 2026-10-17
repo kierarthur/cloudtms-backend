@@ -1,0 +1,24 @@
+{
+  "version": "DAILY_GENUINE_ROOT_STAGE_BOOKKEEPER_PLAN_V1",
+  "stage": "S1",
+  "operatorSourceCommit": "6b5ebedecf95c8a1adfda5141bbf3eccf5294d23",
+  "qualifiedPrefix": [
+    "S0"
+  ],
+  "previousEvidence": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_S0_R9_COMPLETED_PREFIX_20261017.json",
+  "beforeEvidence": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_S1_R10_BEFORE_NATIVE_QUALIFICATION_20261017.json",
+  "afterEvidence": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_S1_R10_AFTER_NATIVE_QUALIFICATION_20261017.json",
+  "completedEvidence": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_S1_R10_COMPLETED_PREFIX_20261017.json",
+  "beforeEffectDecision": "ROOT_REVIEWED_EXACT_EXISTING_STAGE_EFFECTS",
+  "beforeReviewedEvidence": [
+    "docs/healthroster-build/v6-owner-delivery-20261016/GENUINE_CLIENT_NATIVE_SOURCE_IDENTITY_20261017.json",
+    "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_S1_FIXED_CATALOGUE_INDEPENDENT_REVIEW_20261017/REVIEW.json",
+    "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_S1_R10_PREDECISION_20261017.json"
+  ],
+  "afterEffectDecision": null,
+  "afterReviewedEvidence": [
+    "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_S1_R10_AFTER_NATIVE_QUALIFICATION_20261017.json",
+    "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_S1_R10_ACTUAL_CHANGES_20261017.json",
+    "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_S1_R10_BACKGROUND_OBSERVATIONS_20261017.json"
+  ]
+}
