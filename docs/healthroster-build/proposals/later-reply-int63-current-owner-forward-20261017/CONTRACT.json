@@ -1,0 +1,20 @@
+{
+  "sharedScalarContract": {
+    "path": "D:/Development/Legacy-Work/C-tmp/healthroster-handover/HealthRoster_Builder_Pack_16102026/NHSP_AUTHORISATION_AUDIT_15102026_HANDOFF_V6/MOVE_STAGE_CONTRACT.md",
+    "sha256": "e8fd1cbff0165343b7460d52a4c73d41d6ee1fc7b4cb6b624f5df3eedf55262f",
+    "bytes": 87319,
+    "line": 92,
+    "boundedClause": "JSON bigint/money/rate values are canonical decimal strings; digests are bytea32 internally/hex64 externally."
+  },
+  "existingSourceProtocolContract": "reference/LATER_CONTRACT.md paragraph on canonical decimal-string bundle revisions and bounded historical numeric compatibility",
+  "existingABI": {
+    "signature": "public.weekly_source_later_change_decide_atomic_v1(jsonb)",
+    "newKeys": [],
+    "newResultTypes": {
+      "bundle_revision": "canonical positive PostgreSQL bigint decimal string for newly built JSON",
+      "reviewed_bundle_revision": "canonical positive PostgreSQL bigint decimal string for newly built JSON"
+    },
+    "historicalReplay": "Stored JSON scalar types retained; no rewriting or blanket coercion",
+    "internalNativePublicationRequest": "Original native numeric JSON revision, request canonicalization and hashes retained"
+  }
+}

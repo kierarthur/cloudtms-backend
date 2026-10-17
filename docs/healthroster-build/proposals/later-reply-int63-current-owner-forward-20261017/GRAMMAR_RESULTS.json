@@ -1,0 +1,171 @@
+{
+  "verdict": "PASS",
+  "pglast": "v7.20",
+  "postgresParser": [
+    17,
+    7
+  ],
+  "completeSQLStatements": 2,
+  "completePLPrograms": 2,
+  "sqlBodySubstitutions": 0,
+  "completePLProgrammeComparison": "Seven exact expression casts only",
+  "outboundTextExpressions": 7,
+  "unchangedStoredReplayReturns": 2,
+  "nativeRequestAndBigintCASArithmeticUnchanged": true,
+  "missingOrWrongCastMutationsRefused": [
+    {
+      "offset": 9061,
+      "missingCast": "REFUSED"
+    },
+    {
+      "offset": 14799,
+      "missingCast": "REFUSED"
+    },
+    {
+      "offset": 15262,
+      "missingCast": "REFUSED"
+    },
+    {
+      "offset": 23070,
+      "missingCast": "REFUSED"
+    },
+    {
+      "offset": 23129,
+      "missingCast": "REFUSED"
+    },
+    {
+      "offset": 23537,
+      "missingCast": "REFUSED"
+    },
+    {
+      "offset": 23598,
+      "missingCast": "REFUSED"
+    },
+    {
+      "wrongType": "REFUSED"
+    }
+  ],
+  "wireVectors": [
+    {
+      "bigint": "1",
+      "parsedOutboundValues": [
+        {
+          "field": "bundle_revision",
+          "expression": "v_bundle_revision::text",
+          "value": "1"
+        },
+        {
+          "field": "bundle_revision",
+          "expression": "v_bundle.bundle_revision::text",
+          "value": "1"
+        },
+        {
+          "field": "bundle_revision",
+          "expression": "v_bundle.bundle_revision::text",
+          "value": "1"
+        },
+        {
+          "field": "bundle_revision",
+          "expression": "v_successor_revision::text",
+          "value": "1"
+        },
+        {
+          "field": "reviewed_bundle_revision",
+          "expression": "v_bundle.bundle_revision::text",
+          "value": "1"
+        },
+        {
+          "field": "bundle_revision",
+          "expression": "v_successor_revision::text",
+          "value": "1"
+        },
+        {
+          "field": "reviewed_bundle_revision",
+          "expression": "v_bundle.bundle_revision::text",
+          "value": "1"
+        }
+      ]
+    },
+    {
+      "bigint": "9007199254740993",
+      "parsedOutboundValues": [
+        {
+          "field": "bundle_revision",
+          "expression": "v_bundle_revision::text",
+          "value": "9007199254740993"
+        },
+        {
+          "field": "bundle_revision",
+          "expression": "v_bundle.bundle_revision::text",
+          "value": "9007199254740993"
+        },
+        {
+          "field": "bundle_revision",
+          "expression": "v_bundle.bundle_revision::text",
+          "value": "9007199254740993"
+        },
+        {
+          "field": "bundle_revision",
+          "expression": "v_successor_revision::text",
+          "value": "9007199254740993"
+        },
+        {
+          "field": "reviewed_bundle_revision",
+          "expression": "v_bundle.bundle_revision::text",
+          "value": "9007199254740993"
+        },
+        {
+          "field": "bundle_revision",
+          "expression": "v_successor_revision::text",
+          "value": "9007199254740993"
+        },
+        {
+          "field": "reviewed_bundle_revision",
+          "expression": "v_bundle.bundle_revision::text",
+          "value": "9007199254740993"
+        }
+      ]
+    },
+    {
+      "bigint": "9223372036854775807",
+      "parsedOutboundValues": [
+        {
+          "field": "bundle_revision",
+          "expression": "v_bundle_revision::text",
+          "value": "9223372036854775807"
+        },
+        {
+          "field": "bundle_revision",
+          "expression": "v_bundle.bundle_revision::text",
+          "value": "9223372036854775807"
+        },
+        {
+          "field": "bundle_revision",
+          "expression": "v_bundle.bundle_revision::text",
+          "value": "9223372036854775807"
+        },
+        {
+          "field": "bundle_revision",
+          "expression": "v_successor_revision::text",
+          "value": "9223372036854775807"
+        },
+        {
+          "field": "reviewed_bundle_revision",
+          "expression": "v_bundle.bundle_revision::text",
+          "value": "9223372036854775807"
+        },
+        {
+          "field": "bundle_revision",
+          "expression": "v_successor_revision::text",
+          "value": "9223372036854775807"
+        },
+        {
+          "field": "reviewed_bundle_revision",
+          "expression": "v_bundle.bundle_revision::text",
+          "value": "9223372036854775807"
+        }
+      ]
+    }
+  ],
+  "native": "NOT_RUN"
+}

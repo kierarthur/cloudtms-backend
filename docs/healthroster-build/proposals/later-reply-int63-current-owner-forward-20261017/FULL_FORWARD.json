@@ -1,0 +1,36 @@
+{
+  "targetCurrentOwner": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/10_complete_later_change_decide.sqlinc",
+  "payload": "payload/complete_later_change_decide.sqlinc",
+  "beforeBytes": 24352,
+  "beforeSha256": "46d1a546f9ec985e6eec27d032f52f04a6518e2ce7bdc15005621042c1bda7d1",
+  "afterBytes": 24394,
+  "afterSha256": "9357db1034e171b133c9a95dfbd056284b3c09e0ff9dc24999c761e9a799a0b6",
+  "edits": [
+    {
+      "before": "'bundle_revision',v_bundle_revision)",
+      "after": "'bundle_revision',v_bundle_revision::text)",
+      "expected": 1
+    },
+    {
+      "before": "'bundle_revision',v_bundle.bundle_revision,",
+      "after": "'bundle_revision',v_bundle.bundle_revision::text,",
+      "expected": 2
+    },
+    {
+      "before": "'bundle_revision',v_successor_revision,",
+      "after": "'bundle_revision',v_successor_revision::text,",
+      "expected": 2
+    },
+    {
+      "before": "'reviewed_bundle_revision',v_bundle.bundle_revision,",
+      "after": "'reviewed_bundle_revision',v_bundle.bundle_revision::text,",
+      "expected": 2
+    }
+  ],
+  "wholeRawInverse": true,
+  "outboundScalarCastOccurrences": 7,
+  "storedHistoricalReplayModified": false,
+  "internalPublicationRequestModified": false,
+  "mounted": false,
+  "futureManagedScaffoldRequired": true
+}

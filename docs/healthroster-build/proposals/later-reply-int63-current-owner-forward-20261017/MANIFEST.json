@@ -1,0 +1,102 @@
+{
+  "version": "LATER_REPLY_INT63_CURRENT_OWNER_FORWARD_V1",
+  "sourceOnly": true,
+  "rootMounted": false,
+  "files": [
+    {
+      "file": "CONTRACT.json",
+      "bytes": 1230,
+      "sha256": "15475c75d3f3a5f98ac3aee0acdc945119f47577f930f5bd6d680f354e34c567"
+    },
+    {
+      "file": "CURRENT_OWNER.json",
+      "bytes": 4322,
+      "sha256": "d554a85aa9465d278448f9b58a5544d8a3c35b66464655a3801b2757ce6e730b"
+    },
+    {
+      "file": "FULL_FORWARD.json",
+      "bytes": 1336,
+      "sha256": "e6efbec5e5b4dcaf94f147d535639a44da17eaf5aac864e978515ca4904fda05"
+    },
+    {
+      "file": "grammar.py",
+      "bytes": 5467,
+      "sha256": "23ac0fcd6d32a055c779a80d032d4d01705762c9fbde41c8968b94f617be8325"
+    },
+    {
+      "file": "GRAMMAR_RESULTS.json",
+      "bytes": 4574,
+      "sha256": "6246b56d1c5717809b85ded95a573f05e28d06c99e2c8dc70a3a066ab7d090bf"
+    },
+    {
+      "file": "INTEGRATION.md",
+      "bytes": 4433,
+      "sha256": "1b2d8dd83cf7b37f683ecd660817297ed9a08b6d0c810fb60dd073de7ba6ec19"
+    },
+    {
+      "file": "payload/complete_later_change_decide.sqlinc",
+      "bytes": 24394,
+      "sha256": "9357db1034e171b133c9a95dfbd056284b3c09e0ff9dc24999c761e9a799a0b6"
+    },
+    {
+      "file": "reference/acl.sqlinc",
+      "bytes": 7204,
+      "sha256": "cadf699aecd2f1aa2af93f37c22cede7c3af55ddadf87e624570d501d519f247"
+    },
+    {
+      "file": "reference/kept-pay-command.mjs",
+      "bytes": 4713,
+      "sha256": "0460915380ef38aeff9437164ae93562b924712af996d89c8d880456c4d8c273"
+    },
+    {
+      "file": "reference/later.sqlinc",
+      "bytes": 24352,
+      "sha256": "46d1a546f9ec985e6eec27d032f52f04a6518e2ce7bdc15005621042c1bda7d1"
+    },
+    {
+      "file": "reference/LATER_CONTRACT.md",
+      "bytes": 7048,
+      "sha256": "dc14cfc1ca970a43c5521ef06622978e95c4f4ae6339627ac485467b240b0599"
+    },
+    {
+      "file": "reference/missing-accept.mjs",
+      "bytes": 2377,
+      "sha256": "47860ad7622ec1181501835517c5753f6cf6dd6fd8c73e206d90f9e9e746625d"
+    },
+    {
+      "file": "reference/prepare.sqlinc",
+      "bytes": 12059,
+      "sha256": "ef34b837d4bc7d15b2a4e19e3d181d6cac610e07d571bc711295b0d8066ab96b"
+    },
+    {
+      "file": "reference/push-timing-office.mjs",
+      "bytes": 8191,
+      "sha256": "afc586c62b4222a01361559b4d7ad2f8532651d8105cd1c3bba5e4bc58bc98aa"
+    },
+    {
+      "file": "reference/root.sql",
+      "bytes": 3198,
+      "sha256": "92e2df484839fb1e3e5665ea3611b1cd322686852bf814197465f03bf3ca26b9"
+    },
+    {
+      "file": "reference/routes.js",
+      "bytes": 73121,
+      "sha256": "196fefff89b45583c46ddea1cae5d4d22ea4f02d2f5089899a95e39e2601d9fe"
+    },
+    {
+      "file": "RESULTS.json",
+      "bytes": 631,
+      "sha256": "5982b5444a93ac9aa60dca584492362f4904fe98d090a19440b4f5cfcb88d03f"
+    },
+    {
+      "file": "test.mjs",
+      "bytes": 6339,
+      "sha256": "eccd4ea8708becab745983665642051b002529e854f6fd7700e8383f35f505aa"
+    },
+    {
+      "file": "verify.py",
+      "bytes": 3181,
+      "sha256": "733fb29fa13e3b54685c49a867f0df1f8e8d37e956b156169e2101373b8ceb07"
+    }
+  ]
+}
