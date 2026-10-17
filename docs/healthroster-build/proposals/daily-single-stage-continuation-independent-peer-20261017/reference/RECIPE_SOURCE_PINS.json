@@ -1,0 +1,20 @@
+[
+  {
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-auth-r8-batch-source-recipe-20261017/recipe.mjs",
+    "commit": "6028253427ff6bf9bc1d2f4b2d4da0dee57fb66f",
+    "bytes": 8079,
+    "sha256": "b6182e3f1f6b9d57660632e0a31024fc6c45aded3f9c9b2c9fce463be7c99a3a"
+  },
+  {
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-auth-r8-batch-source-recipe-20261017/materialize.mjs",
+    "commit": "6028253427ff6bf9bc1d2f4b2d4da0dee57fb66f",
+    "bytes": 5291,
+    "sha256": "602ed6dbae631b1418cc4b862db46adafb0276fca55590329240a1a8ff1298aa"
+  },
+  {
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-auth-r8-batch-source-recipe-20261017/MANIFEST.json",
+    "commit": "6028253427ff6bf9bc1d2f4b2d4da0dee57fb66f",
+    "bytes": 5231,
+    "sha256": "1def645ed648213f619493327dd2442f972b759695d3d301ff01905fa40566c8"
+  }
+]

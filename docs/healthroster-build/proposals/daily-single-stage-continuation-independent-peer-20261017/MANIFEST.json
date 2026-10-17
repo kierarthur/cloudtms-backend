@@ -1,0 +1,140 @@
+{
+  "version": "DAILY_SINGLE_STAGE_CONTINUATION_INDEPENDENT_PEER_V1",
+  "files": [
+    {
+      "file": "README.md",
+      "bytes": 3446,
+      "sha256": "46f2bfd40c15325cab20614c2b1f0dd71d21b8b1186fc895237b08f12f2f1593"
+    },
+    {
+      "file": "reference/BASE_PARENT_SELECTION.json",
+      "bytes": 4429,
+      "sha256": "cd456bc6be6ebeb5ba100aa4c4fac4294cd6c3f1f29176be22a29d03e51df20d"
+    },
+    {
+      "file": "reference/bind-parent.mjs",
+      "bytes": 6578,
+      "sha256": "25c36f05e8737ff938c4b0d3e46422416834aa331b338772c3fd929d89245aca"
+    },
+    {
+      "file": "reference/coordinate.mjs",
+      "bytes": 4938,
+      "sha256": "13127c4af70d3fdb32057d8c0a0cceaa58e430bbd22e2ec6accfaab169dcd614"
+    },
+    {
+      "file": "reference/FULL_PARENT_DERIVATIONS.json",
+      "bytes": 30906,
+      "sha256": "8ee6930debfb0d4ad4349b4cf880913a473ba2d80beb716605a7881791d1e2b8"
+    },
+    {
+      "file": "reference/MANIFEST.json",
+      "bytes": 3556,
+      "sha256": "1a55a4a1b6cf598a544963418cca459dba5fafb69ba3fa9bd7e427b826576cf9"
+    },
+    {
+      "file": "reference/prepare.mjs",
+      "bytes": 4285,
+      "sha256": "d90ef845d5cb854f9545ddfcc33033bc04d007e3c2147b4bd22900de84c5d320"
+    },
+    {
+      "file": "reference/progress.mjs",
+      "bytes": 4560,
+      "sha256": "fda0b2de5a53f29c1fbd77bee5ed172ee22d80bb0d081794bf63e2a3ee2e076c"
+    },
+    {
+      "file": "reference/progress.test.mjs",
+      "bytes": 3085,
+      "sha256": "2ebd89d70bcd9beecaa79974cb8e29b3a7db1d58dd28d864e98aa437b9682d8f"
+    },
+    {
+      "file": "reference/README.md",
+      "bytes": 7961,
+      "sha256": "0da90107906205c44bd8b7601d163b6eb8e7ebc7548537bcb53752cc78468a9d"
+    },
+    {
+      "file": "reference/RECIPE_SOURCE_PINS.json",
+      "bytes": 866,
+      "sha256": "decb4e0f2ec140669cbb0e49e3a4cb7d46ebd6ce1741d7afdc44f1d2b1854027"
+    },
+    {
+      "file": "reference/reference/coordinate.mjs",
+      "bytes": 4630,
+      "sha256": "570ccb26ad180f10909eb13e05dc652efab03f8a67a1b9239a56ec858fcc7f92"
+    },
+    {
+      "file": "reference/reference/phase.mjs",
+      "bytes": 859,
+      "sha256": "908efe47f24e00be5b2ca0b606079f61dac488a6c70d58ead3fe2eb592ce4cf0"
+    },
+    {
+      "file": "reference/reference/progress.mjs",
+      "bytes": 4417,
+      "sha256": "7229524c58454a542adb6bb457959c7c5143646c7df55cf2f60b108b2ef04676"
+    },
+    {
+      "file": "reference/reference/sequence.mjs",
+      "bytes": 1574,
+      "sha256": "f0d1c7e95bb9f81ab064bfc5bcb1145b81b0d991bbe3c584dadc0f74b25981a7"
+    },
+    {
+      "file": "reference/reference/source.mjs",
+      "bytes": 2056,
+      "sha256": "fc7de33f9e40ab9429692127b466444195f6894fc03aef700a0fc255a773363d"
+    },
+    {
+      "file": "reference/RESULT.json",
+      "bytes": 543,
+      "sha256": "16e399d2d0b21611c168ed349bc151941ab976aa9df6fea777daa53b5903cc8c"
+    },
+    {
+      "file": "reference/seal.mjs",
+      "bytes": 795,
+      "sha256": "9b258428d960f5daf3860cb9be1a82bd3c5841d26709ad4387df1dffb378f64f"
+    },
+    {
+      "file": "reference/sequence.mjs",
+      "bytes": 1631,
+      "sha256": "4edfc1a7103dc7eaee854bc1e535e9534fd9acb415ee6e6215dfd5ad494a4c1f"
+    },
+    {
+      "file": "reference/source-binding.test.mjs",
+      "bytes": 5636,
+      "sha256": "a2c9fdb5650cfd1945105be18585381d22ff57df7233f4f3a7e44691011f1fa1"
+    },
+    {
+      "file": "reference/source.mjs",
+      "bytes": 2362,
+      "sha256": "ae5269fca44137189e5f813d9a4159be65dbb235711a5523d80a0281a39123f6"
+    },
+    {
+      "file": "reference/SOURCE_PINS.json",
+      "bytes": 3,
+      "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+    },
+    {
+      "file": "reference/stage.mjs",
+      "bytes": 2089,
+      "sha256": "b33cd9943a80b87a04af6d0290e22a76549c741aed6666e338cf306ea784b39b"
+    },
+    {
+      "file": "reference/stage.test.mjs",
+      "bytes": 5800,
+      "sha256": "40691154c3d18a0b8030152eb0d708253fddbd7e562692419fb1327169aff5ef"
+    },
+    {
+      "file": "reference/verify.mjs",
+      "bytes": 1087,
+      "sha256": "336732508bad485730726ca25bb15f6be357ce0de5280406b44a6366e8a3b43e"
+    },
+    {
+      "file": "RESULTS.json",
+      "bytes": 611,
+      "sha256": "4f88e6cc64a7a6ca2dd367f5f7022b2ec64cf33ad6d224e50aa9e437b8859158"
+    },
+    {
+      "file": "SOURCE_PROOF.json",
+      "bytes": 17303,
+      "sha256": "71ab2a6db08e8174571339b2b860380f44b4fc2efed2269ee1d041f0f99b8d1b"
+    }
+  ]
+}
