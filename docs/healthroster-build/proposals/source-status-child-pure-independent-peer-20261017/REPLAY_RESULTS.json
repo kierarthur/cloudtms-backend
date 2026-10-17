@@ -1,0 +1,220 @@
+{
+  "sourceCommit": "5931ae9e2f1ab11de810996f5aea6a02570b7ce9",
+  "captureChecks": [
+    {
+      "file": "FREEZE_MANIFEST.json",
+      "rawSavedGitCaptureEqual": true
+    },
+    {
+      "file": "GENUINE_R2_COMMAND_EVIDENCE.json",
+      "rawSavedGitCaptureEqual": true
+    },
+    {
+      "file": "OFFLINE_INPUTS.json",
+      "rawSavedGitCaptureEqual": true
+    },
+    {
+      "file": "OFFLINE_RESULTS.json",
+      "rawSavedGitCaptureEqual": true
+    },
+    {
+      "file": "PG_RESULT_PARSER_EVIDENCE.json",
+      "rawSavedGitCaptureEqual": true
+    },
+    {
+      "file": "PROGRAMME_MILESTONE_MANIFEST.json",
+      "rawSavedGitCaptureEqual": true
+    },
+    {
+      "file": "PROGRAMME_SOURCE_TRANSFER.json",
+      "rawSavedGitCaptureEqual": true
+    },
+    {
+      "file": "PROGRESS.md",
+      "rawSavedGitCaptureEqual": true
+    },
+    {
+      "file": "README.md",
+      "rawSavedGitCaptureEqual": true
+    },
+    {
+      "file": "SETUP_INTENT.json",
+      "rawSavedGitCaptureEqual": true
+    },
+    {
+      "file": "SOURCE_MANIFEST.json",
+      "rawSavedGitCaptureEqual": true
+    },
+    {
+      "file": "SOURCE_PINS.json",
+      "rawSavedGitCaptureEqual": true
+    },
+    {
+      "file": "SOURCE_TRANSFERS.json",
+      "rawSavedGitCaptureEqual": true
+    },
+    {
+      "file": "SOURCE_VERIFY_RESULTS.json",
+      "rawSavedGitCaptureEqual": true
+    },
+    {
+      "file": "catalogue-vectors.py",
+      "rawSavedGitCaptureEqual": true
+    },
+    {
+      "file": "control.mjs",
+      "rawSavedGitCaptureEqual": true
+    },
+    {
+      "file": "fixed-metadata-reader.mjs",
+      "rawSavedGitCaptureEqual": true
+    },
+    {
+      "file": "hold-pure.mjs",
+      "rawSavedGitCaptureEqual": true
+    },
+    {
+      "file": "input-builder.mjs",
+      "rawSavedGitCaptureEqual": true
+    },
+    {
+      "file": "prepare-offline.mjs",
+      "rawSavedGitCaptureEqual": true
+    },
+    {
+      "file": "programme/PROGRAMME.sql",
+      "rawSavedGitCaptureEqual": true
+    },
+    {
+      "file": "programme/README.md",
+      "rawSavedGitCaptureEqual": true
+    },
+    {
+      "file": "programme/SOURCE_MANIFEST.json",
+      "rawSavedGitCaptureEqual": true
+    },
+    {
+      "file": "programme/assertions.sql",
+      "rawSavedGitCaptureEqual": true
+    },
+    {
+      "file": "programme/build-program.mjs",
+      "rawSavedGitCaptureEqual": true
+    },
+    {
+      "file": "programme/key-source.sqlinc",
+      "rawSavedGitCaptureEqual": true
+    },
+    {
+      "file": "programme/postflight.sql",
+      "rawSavedGitCaptureEqual": true
+    },
+    {
+      "file": "programme/preflight.sql",
+      "rawSavedGitCaptureEqual": true
+    },
+    {
+      "file": "programme/source-child.sqlinc",
+      "rawSavedGitCaptureEqual": true
+    },
+    {
+      "file": "programme/verify-programme.py",
+      "rawSavedGitCaptureEqual": true
+    },
+    {
+      "file": "reference/daily-build-program.mjs",
+      "rawSavedGitCaptureEqual": true
+    },
+    {
+      "file": "reference/daily/control.mjs",
+      "rawSavedGitCaptureEqual": true
+    },
+    {
+      "file": "reference/daily/fixed-metadata-reader.mjs",
+      "rawSavedGitCaptureEqual": true
+    },
+    {
+      "file": "reference/daily/hold-pure.mjs",
+      "rawSavedGitCaptureEqual": true
+    },
+    {
+      "file": "reference/daily/input-builder.mjs",
+      "rawSavedGitCaptureEqual": true
+    },
+    {
+      "file": "reference/daily/prepare-offline.mjs",
+      "rawSavedGitCaptureEqual": true
+    },
+    {
+      "file": "reference/daily/result-validator.mjs",
+      "rawSavedGitCaptureEqual": true
+    },
+    {
+      "file": "reference/daily/source.mjs",
+      "rawSavedGitCaptureEqual": true
+    },
+    {
+      "file": "reference/daily/test.mjs",
+      "rawSavedGitCaptureEqual": true
+    },
+    {
+      "file": "reference/daily/timing.mjs",
+      "rawSavedGitCaptureEqual": true
+    },
+    {
+      "file": "result-validator.mjs",
+      "rawSavedGitCaptureEqual": true
+    },
+    {
+      "file": "source.mjs",
+      "rawSavedGitCaptureEqual": true
+    },
+    {
+      "file": "test.mjs",
+      "rawSavedGitCaptureEqual": true
+    },
+    {
+      "file": "timing.mjs",
+      "rawSavedGitCaptureEqual": true
+    },
+    {
+      "file": "verify-adapter.py",
+      "rawSavedGitCaptureEqual": true
+    },
+    {
+      "file": "verify-freeze.py",
+      "rawSavedGitCaptureEqual": true
+    }
+  ],
+  "runs": [
+    {
+      "name": "node20",
+      "exitCode": 0,
+      "elapsedMs": 11790
+    },
+    {
+      "name": "prepare-offline",
+      "exitCode": 0,
+      "elapsedMs": 5442
+    },
+    {
+      "name": "python-source-grammar",
+      "exitCode": 0,
+      "elapsedMs": 6167
+    }
+  ],
+  "programmeSourceChecks": 41,
+  "catalogueAdmissionAstCases": 56,
+  "nodeTests": 20,
+  "sourceAndGrammarChecks": 177,
+  "wholeDailyParentInverses": 9,
+  "rootSourcePins": 42,
+  "programmeBytes": 20303,
+  "programmeSha256": "ed1eb564947cea75131284ba62967e0654154d7374eebb9bba4a436bc12908a8",
+  "native": "NOT_RUN",
+  "restoration": "NOT_RUN",
+  "publicB051Result": "NOT_PROVIDED",
+  "BankingProducer": "NOT_PROVIDED",
+  "rootWrites": 0,
+  "OfficeWrites": 0
+}

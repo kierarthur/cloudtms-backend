@@ -1,0 +1,323 @@
+{
+  "version": "SOURCE_STATUS_CHILD_PURE_INDEPENDENT_PEER_V1",
+  "model": "gpt-6.1-sol",
+  "reasoning": "xhigh",
+  "reviewedCommit": "5931ae9e2f1ab11de810996f5aea6a02570b7ce9",
+  "authorFreezeManifestSha256": "1c19cc71647619081a736d44cd794cdb3941b9d761e4bb9f88485e00bd3051a9",
+  "verdict": "ACCEPT_BOUNDED_EXECUTION_ADAPTER_SOURCE",
+  "actionableFindings": 0,
+  "programmeSourceChecks": 41,
+  "catalogueAdmissionAstCases": 56,
+  "nodeOfflineTests": 20,
+  "sourceGrammarChecks": 177,
+  "rootSourcePins": 42,
+  "wholeDailyParentReversals": 9,
+  "native": "NOT_RUN",
+  "restoration": "NOT_RUN",
+  "sourcePublicB051": "NOT_PROVIDED",
+  "BankingProducer": "NOT_PROVIDED",
+  "rootWrites": 0,
+  "OfficeWrites": 0,
+  "files": [
+    {
+      "file": "CAPTURE.json",
+      "bytes": 8829,
+      "sha256": "7269d990aaa17c67be35cbc25439a1f3e617f1259bb4b82191e561a0bc3c63e5"
+    },
+    {
+      "file": "freeze.mjs",
+      "bytes": 1665,
+      "sha256": "ff64e44140b31b30b4bc005230f2590ef7eee584a05a7fb5503e12730df70484"
+    },
+    {
+      "file": "frozen-write-guard.mjs",
+      "bytes": 1248,
+      "sha256": "3fc56b8d3032b66352e863055838990c5c6d672cd23447d009083dc088651681"
+    },
+    {
+      "file": "frozen/catalogue-vectors.py",
+      "bytes": 7591,
+      "sha256": "a34802d55c0ebbd767f88aa8315cc1e59428bc9730dfc5461859cd4ad2cda952"
+    },
+    {
+      "file": "frozen/control.mjs",
+      "bytes": 3225,
+      "sha256": "7d12027e918efa6d1d452e8c2de644bd35e974fb01f081f4adb81dfe83f94da9"
+    },
+    {
+      "file": "frozen/fixed-metadata-reader.mjs",
+      "bytes": 12278,
+      "sha256": "9f53ec75880ef8371ca37aae7163dcb275c582492a2912fa42ca2c57e2d0b2cf"
+    },
+    {
+      "file": "frozen/FREEZE_MANIFEST.json",
+      "bytes": 7248,
+      "sha256": "1c19cc71647619081a736d44cd794cdb3941b9d761e4bb9f88485e00bd3051a9"
+    },
+    {
+      "file": "frozen/GENUINE_R2_COMMAND_EVIDENCE.json",
+      "bytes": 2740,
+      "sha256": "4b8849e79e52cc474ba4a6025f415e2bd0be49452ef7be0b19b4b2295c35424a"
+    },
+    {
+      "file": "frozen/hold-pure.mjs",
+      "bytes": 8352,
+      "sha256": "f2ffb92e7187ed7224e6e01880c28ddcf7f3d75122bd25a179ba6bf75d72385c"
+    },
+    {
+      "file": "frozen/input-builder.mjs",
+      "bytes": 7665,
+      "sha256": "f2d82970749a9a523d2f375f31d4011e8e33dbc01a06002234e120c45f8e7edc"
+    },
+    {
+      "file": "frozen/OFFLINE_INPUTS.json",
+      "bytes": 97102,
+      "sha256": "927f56ca7388abb348a1be606a64307d806c21df179f7ec7f7659aa851551351"
+    },
+    {
+      "file": "frozen/OFFLINE_RESULTS.json",
+      "bytes": 1126,
+      "sha256": "57a42cbceaffe702a5a8dfa661cea15a56cbc2d09554e0397cf603938b2953a2"
+    },
+    {
+      "file": "frozen/PG_RESULT_PARSER_EVIDENCE.json",
+      "bytes": 2009,
+      "sha256": "40b7aab97bd707e1fc8d73960017fd33bb6294c26328ed2a23f5188d261422ba"
+    },
+    {
+      "file": "frozen/prepare-offline.mjs",
+      "bytes": 1695,
+      "sha256": "55fad7373179dbe9889a2956a4e29d3a909abcee3f7824d842ee07ad530a677d"
+    },
+    {
+      "file": "frozen/PROGRAMME_MILESTONE_MANIFEST.json",
+      "bytes": 2182,
+      "sha256": "b92324116ab90d896b002135c01f84eae79efdb0437ff34678a362f89b729198"
+    },
+    {
+      "file": "frozen/PROGRAMME_SOURCE_TRANSFER.json",
+      "bytes": 8584,
+      "sha256": "609d8852eaab05f46b86c64fb1587e10239730dd3f7a328380fe951824ca15a1"
+    },
+    {
+      "file": "frozen/programme/assertions.sql",
+      "bytes": 2902,
+      "sha256": "c8785a0cfc06b44849244e32ab68d2b412254614a9b89fc321fa88780227cb5f"
+    },
+    {
+      "file": "frozen/programme/build-program.mjs",
+      "bytes": 4453,
+      "sha256": "8a01debc06d70a190d2002f3c77b666a101373f14711c0b56613acc6bdeba543"
+    },
+    {
+      "file": "frozen/programme/key-source.sqlinc",
+      "bytes": 430,
+      "sha256": "88026e68c1aa4a13b954ec3ab1be3071f0d62329b5576bfa2a371bed01cddfb4"
+    },
+    {
+      "file": "frozen/programme/postflight.sql",
+      "bytes": 1965,
+      "sha256": "baac80aa7dfbe3cdfef1e23d352750c0737076ec733ff4b9150aea1db6b56606"
+    },
+    {
+      "file": "frozen/programme/preflight.sql",
+      "bytes": 2973,
+      "sha256": "9fe0984139bd6888ac694555ffc3e632038e64c06d5fdc375f775d04dbf779da"
+    },
+    {
+      "file": "frozen/programme/PROGRAMME.sql",
+      "bytes": 20303,
+      "sha256": "ed1eb564947cea75131284ba62967e0654154d7374eebb9bba4a436bc12908a8"
+    },
+    {
+      "file": "frozen/programme/README.md",
+      "bytes": 2912,
+      "sha256": "a39f96c40a800c4e53b7a42848bece52b04d75c7be1783103964fd8fa45d2aac"
+    },
+    {
+      "file": "frozen/programme/SOURCE_MANIFEST.json",
+      "bytes": 2800,
+      "sha256": "d0c166a356a96d1950233b9b274e84851a1dcf4578eb7dc229d1cdab3cf3ec5d"
+    },
+    {
+      "file": "frozen/programme/source-child.sqlinc",
+      "bytes": 12317,
+      "sha256": "ffae1fc04874e0b3590c89609f592b4ca33c6b95654a4272e0dd1cc8b6ffb30b"
+    },
+    {
+      "file": "frozen/programme/verify-programme.py",
+      "bytes": 3830,
+      "sha256": "7fc8efc2ef9139aef93c8e3136bebc8ca4d4ff6127b0cc651432ee4da2179026"
+    },
+    {
+      "file": "frozen/PROGRESS.md",
+      "bytes": 767,
+      "sha256": "228fbd7e0f9547ea04b3860569b561332abc6615a0a1626e11d85420e5779d0a"
+    },
+    {
+      "file": "frozen/README.md",
+      "bytes": 4050,
+      "sha256": "42026da7dd204a73818619980733a97f825de103932fce6d3dc1d6ea529813b2"
+    },
+    {
+      "file": "frozen/reference/daily-build-program.mjs",
+      "bytes": 3514,
+      "sha256": "1ec1bf64e57ec38856a509be1df433a3318a439271eb53cfed2008d8b151d69d"
+    },
+    {
+      "file": "frozen/reference/daily/control.mjs",
+      "bytes": 3225,
+      "sha256": "7d12027e918efa6d1d452e8c2de644bd35e974fb01f081f4adb81dfe83f94da9"
+    },
+    {
+      "file": "frozen/reference/daily/fixed-metadata-reader.mjs",
+      "bytes": 12270,
+      "sha256": "ed641533595b6a04b82f027183b82d2fc9b9a03c674bb2db6c294f52ff4f4173"
+    },
+    {
+      "file": "frozen/reference/daily/hold-pure.mjs",
+      "bytes": 8328,
+      "sha256": "3a1d5346f32669f76938386bb2260372109673dc1c654de15a78e6439b1dda5f"
+    },
+    {
+      "file": "frozen/reference/daily/input-builder.mjs",
+      "bytes": 6914,
+      "sha256": "930ccc5a393a499b0f8a7ee9c752178b80ee35acd7c83df9bcc333b70475c47a"
+    },
+    {
+      "file": "frozen/reference/daily/prepare-offline.mjs",
+      "bytes": 1694,
+      "sha256": "15157d3ca1760cdc788fcbd86413d77914e3bd5b83f640a350f13caa4b18336c"
+    },
+    {
+      "file": "frozen/reference/daily/result-validator.mjs",
+      "bytes": 11297,
+      "sha256": "a95635e396281a0d2d51c160097c9a174eb5d98d25ae35dcd8df846f6d3d13a0"
+    },
+    {
+      "file": "frozen/reference/daily/source.mjs",
+      "bytes": 6267,
+      "sha256": "26884004baae754df196c8efd34fd19f3234ec82909f184362a34c7a31d84e13"
+    },
+    {
+      "file": "frozen/reference/daily/test.mjs",
+      "bytes": 21645,
+      "sha256": "7eb5914344ffa5deaae0c3dd40f10a761d715b6dcfb3577e2739a99fc94f8e01"
+    },
+    {
+      "file": "frozen/reference/daily/timing.mjs",
+      "bytes": 1308,
+      "sha256": "db5a330bd11c4f1d1c5c23d68b1ec297f5503d21a86be0863f633f997f51531c"
+    },
+    {
+      "file": "frozen/result-validator.mjs",
+      "bytes": 11984,
+      "sha256": "ddf58caf3300c203c9190bbf27ce98aee152dc68e801c7969514957be5271fc5"
+    },
+    {
+      "file": "frozen/SETUP_INTENT.json",
+      "bytes": 1384,
+      "sha256": "cd955e98562341e07e8577fea2409897a5717e7532c9d70b4f9d4ea5acdcb9d0"
+    },
+    {
+      "file": "frozen/SOURCE_MANIFEST.json",
+      "bytes": 2495,
+      "sha256": "2518964f0142974ad1a75c024dec7eab9861d1f0d41923f276feb7b0f83c3964"
+    },
+    {
+      "file": "frozen/SOURCE_PINS.json",
+      "bytes": 9486,
+      "sha256": "d39584d9e176d31ed4295db6b7bb27300212ffc40b3c9ad2e96a6ecd04c16912"
+    },
+    {
+      "file": "frozen/SOURCE_TRANSFERS.json",
+      "bytes": 147276,
+      "sha256": "d20eabe01ea1c204cb7c85840f0de0656328430f87398457154bc371c3ef836a"
+    },
+    {
+      "file": "frozen/SOURCE_VERIFY_RESULTS.json",
+      "bytes": 765,
+      "sha256": "c15dc629d0b7b2faa5cdc0230d09275eebb2d40fb531381174dbe680fa6ef496"
+    },
+    {
+      "file": "frozen/source.mjs",
+      "bytes": 6713,
+      "sha256": "743ef3a0eadb7d7eb7c5e4a52b70bb5eb07393b88b269ddc290d9b16abfb8b15"
+    },
+    {
+      "file": "frozen/test.mjs",
+      "bytes": 24311,
+      "sha256": "9d3993a52499fc1c1c111ff7ff836352c7056051923c34d0a142895288016b0a"
+    },
+    {
+      "file": "frozen/timing.mjs",
+      "bytes": 1308,
+      "sha256": "db5a330bd11c4f1d1c5c23d68b1ec297f5503d21a86be0863f633f997f51531c"
+    },
+    {
+      "file": "frozen/verify-adapter.py",
+      "bytes": 4594,
+      "sha256": "28608981f119df4d04f841253b1c892c786b547f117b02803593966399ee0f2e"
+    },
+    {
+      "file": "frozen/verify-freeze.py",
+      "bytes": 1112,
+      "sha256": "8ddc637069860e21e83ebd82878e2e8d84f0e73bb7cda31d4f0ede287224a0f1"
+    },
+    {
+      "file": "PEER_REVIEW.md",
+      "bytes": 5992,
+      "sha256": "6257326426d190f91f50b3ee179bdde2f3be8812d5d56e8e359eee1b7f7758eb"
+    },
+    {
+      "file": "python-replay.py",
+      "bytes": 1614,
+      "sha256": "c048d7e4e76d1dda7f01487efca3a276e8dc4139d2b8884c8f7ff5a1f84608fe"
+    },
+    {
+      "file": "REPLAY_RESULTS.json",
+      "bytes": 5064,
+      "sha256": "04e8cbbef61bfe84720e5a75b3e1fb4b033f6280aed92f70602b413d6929a0ed"
+    },
+    {
+      "file": "replay.mjs",
+      "bytes": 3027,
+      "sha256": "b8b3b2da4bd6c4778d6a2b21869f96013dd87314e2f85be4b213556bc8238ca2"
+    },
+    {
+      "file": "replay/node20.stderr.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "replay/node20.stdout.txt",
+      "bytes": 2354,
+      "sha256": "d3b649c4645a75d235e91abb830711b31206ec67174805e3baa68f225ab5a566"
+    },
+    {
+      "file": "replay/prepare-offline.stderr.txt",
+      "bytes": 55,
+      "sha256": "c16eb2905cea5289a703b0eee4c11de2c514358914b112f90a367ad616bf76aa"
+    },
+    {
+      "file": "replay/prepare-offline.stdout.txt",
+      "bytes": 836,
+      "sha256": "1d0012f663c1fe539c81f585b56e5429647e6391070d57551e55a9ad28bd55f4"
+    },
+    {
+      "file": "replay/PYTHON_REPLAY_ADAPTER.json",
+      "bytes": 5360,
+      "sha256": "e6e07c60dcc0ff2f0e4b190800becc64f356b7d0bda9e1ecaafe756e0d6643d0"
+    },
+    {
+      "file": "replay/python-source-grammar.stderr.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "replay/python-source-grammar.stdout.txt",
+      "bytes": 1068,
+      "sha256": "2acdef7d0249269f97d65e2e1faa6a2103c551125a72f20b081bcad5c2191446"
+    }
+  ]
+}

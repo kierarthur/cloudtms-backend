@@ -1,0 +1,15 @@
+// Bounded offline peer replay; no execution adapter/hold/native calls.
+import fs from 'node:fs';import path from 'node:path';import cp from 'node:child_process';import crypto from 'node:crypto';import assert from 'node:assert/strict';import {fileURLToPath,pathToFileURL} from 'node:url';
+const here=path.dirname(fileURLToPath(import.meta.url)),repo=path.resolve(here,'../../../..'),author='D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026',frozen=path.join(here,'frozen'),sha=b=>crypto.createHash('sha256').update(b).digest('hex');
+const write=(file,data)=>{const target=path.join(here,file);fs.mkdirSync(path.dirname(target),{recursive:true});fs.writeFileSync(target,typeof data==='string'?data:JSON.stringify(data,null,2)+'\n');};
+const git=(root,...args)=>{const r=cp.spawnSync('git',['-c','gc.auto=0','-c','maintenance.auto=false','-C',root,...args],{maxBuffer:16e6});assert.equal(r.status,0,r.stderr.toString());return r.stdout;};
+const capture=JSON.parse(fs.readFileSync(path.join(here,'CAPTURE.json'))),checks=[];
+for(const row of capture.files){const bytes=fs.readFileSync(path.join(frozen,row.file));assert.equal(sha(bytes),row.sha256);assert.equal(bytes.length,row.bytes);assert(bytes.equals(git(author,'show',capture.commit+':'+capture.folder+'/'+row.file)));assert(bytes.equals(fs.readFileSync(path.join(author,capture.folder,row.file))));checks.push({file:row.file,rawSavedGitCaptureEqual:true});}
+const m=JSON.parse(fs.readFileSync(path.join(frozen,'FREEZE_MANIFEST.json')));for(const row of m.files){const bytes=fs.readFileSync(path.join(frozen,row.file));assert.equal(sha(bytes),row.sha256);assert.equal(bytes.length,row.bytes);}
+const runs=[];const run=(name,exe,args)=>{const started=Date.now(),r=cp.spawnSync(exe,args,{cwd:repo,encoding:'utf8',maxBuffer:8e6});write('replay/'+name+'.stdout.txt',r.stdout);write('replay/'+name+'.stderr.txt',r.stderr);assert.equal(r.status,0,r.stdout+r.stderr);runs.push({name,exitCode:r.status,elapsedMs:Date.now()-started});};
+const guard=pathToFileURL(path.join(here,'frozen-write-guard.mjs')).href;
+run('node20',process.execPath,['--import',guard,'--test',path.join(frozen,'test.mjs')]);
+run('prepare-offline',process.execPath,['--import',guard,path.join(frozen,'prepare-offline.mjs')]);
+run('python-source-grammar','C:/Users/KierArthur/AppData/Local/Programs/Python/Python312/python.exe',['//?/'+path.join(here,'python-replay.py').replaceAll('\\','/')]);
+write('REPLAY_RESULTS.json',{sourceCommit:capture.commit,captureChecks:checks,runs,programmeSourceChecks:41,catalogueAdmissionAstCases:56,nodeTests:20,sourceAndGrammarChecks:177,wholeDailyParentInverses:9,rootSourcePins:42,programmeBytes:20303,programmeSha256:'ed1eb564947cea75131284ba62967e0654154d7374eebb9bba4a436bc12908a8',native:'NOT_RUN',restoration:'NOT_RUN',publicB051Result:'NOT_PROVIDED',BankingProducer:'NOT_PROVIDED',rootWrites:0,OfficeWrites:0});
+console.log(JSON.stringify({frozenFiles:checks.length,node:20,programme:41,catalogue:56,sourceGrammar:177,native:'NOT_RUN'}));
