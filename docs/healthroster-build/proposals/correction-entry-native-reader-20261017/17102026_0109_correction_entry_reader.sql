@@ -1,14 +1,7 @@
 -- Finite Health proposal only. Not an installed repeatable or sealed ABI.
 -- Root installs only through the managed release and regenerated contract.
 -- No operation, review, event capability, lock, calculation or financial write.
-do $guard$
-begin
- if to_regprocedure('private.timesheet_correction_entry_subject_v1(uuid,uuid)') is not null
-  or to_regprocedure('private.timesheet_correction_entry_v1(uuid,uuid)') is not null
-  or to_regprocedure('public.timesheet_correction_entry_v1(jsonb)') is not null then
-  raise exception 'CORRECTION_ENTRY_ADDITIVE_SOURCE_CONFLICT';end if;
-end;
-$guard$;
+-- RERUNNABLE_FUNCTIONS_AND_ACL: separate one-time admission is not mounted here.
 create or replace function private.timesheet_correction_entry_subject_v1(
  p_timesheet_id uuid,p_actor_user_id uuid)
 returns jsonb language plpgsql stable security definer
@@ -25,8 +18,7 @@ begin
   raise exception 'TIMESHEET_CORRECTION_ENTRY_NOT_ALLOWED' using errcode='42501';
  end if;
  select t.* into requested from public.timesheets t where t.timesheet_id=p_timesheet_id;
- if not found or requested.archived_at_utc is not null
-  or requested.sheet_scope::text is distinct from 'WEEKLY' or requested.contract_id is null then
+ if not found or requested.sheet_scope::text is distinct from 'WEEKLY' or requested.contract_id is null then
   raise exception 'TIMESHEET_CORRECTION_ENTRY_NOT_ALLOWED' using errcode='42501';
  end if;
  select c.* into requested_contract from public.contracts c where c.id=requested.contract_id;
@@ -45,6 +37,10 @@ begin
   or (placement->>'placement_revision')::numeric>9223372036854775807 then
   raise exception 'TIMESHEET_CORRECTION_ENTRY_NOT_ALLOWED' using errcode='42501';
  end if;
+ -- Accepted native aliases keep original A/history B readable through C.
+ -- The final resolver refuses an arbitrary unaliased archived row itself.
+ if requested.archived_at_utc is not null and placement->'legacy_origin' is distinct from 'false'::jsonb then
+  raise exception 'TIMESHEET_CORRECTION_ENTRY_NOT_ALLOWED' using errcode='42501';end if;
  select c.* into current_contract from public.contracts c
   where c.id=(placement->>'current_contract_id')::uuid;
  if not found or current_contract.client_id is distinct from requested_contract.client_id

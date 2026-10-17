@@ -6,7 +6,7 @@ import { matchCorrectionEntry, handleCorrectionEntry } from './correction-entry.
 const correctionEntry = matchCorrectionEntry(req);
 if (correctionEntry) {
   let agencyId;
-  try { agencyId = bankingPayCorrectionTenantAuthority(env); }
+  try { agencyId = bankingPayCorrectionTenantAuthority(env,{required:true}); }
   catch { return withCORS(env, req, new Response(JSON.stringify({error:'CORRECTION_ENTRY_UNAVAILABLE'}), {
     status:503,headers:{'content-type':'application/json; charset=utf-8','cache-control':'no-store'}
   })); }

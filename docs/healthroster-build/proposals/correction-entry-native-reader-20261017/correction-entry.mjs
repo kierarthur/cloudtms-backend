@@ -1,5 +1,5 @@
 // Health contribution, intentionally not registered in the shared Worker root.
-const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const KEYS=['current_timesheet_id','disabled_reason','may_open_review','placement_revision','purpose','requested_timesheet_id','version'];
 const unavailable=()=>reply(503,'CORRECTION_ENTRY_UNAVAILABLE');
 function reply(status,error){return new Response(JSON.stringify({error}),{status,headers:{'content-type':'application/json; charset=utf-8','cache-control':'no-store'}});}
@@ -11,7 +11,7 @@ export function decodeCorrectionEntry(value,timesheetId){
  if(!value||typeof value!=='object'||Array.isArray(value)||Object.keys(value).sort().join('|')!==KEYS.join('|')
   ||value.version!=='TIMESHEET_CORRECTION_ENTRY_V1'||value.requested_timesheet_id!==timesheetId
   ||!UUID.test(timesheetId)||value.purpose!=='CONTRACT_CORRECTION'
-  ||typeof value.placement_revision!=='string'||!/^(0|[1-9][0-9]*)$/.test(value.placement_revision)
+  ||typeof value.placement_revision!=='string'||value.placement_revision.length>19||!/^(0|[1-9][0-9]*)$/.test(value.placement_revision)
   ||BigInt(value.placement_revision)>9223372036854775807n||value.may_open_review!==false
   ||!['REVIEW_UNAVAILABLE','CURRENT_ALLOCATION_PENDING'].includes(value.disabled_reason)
   ||(value.current_timesheet_id===null?value.disabled_reason!=='CURRENT_ALLOCATION_PENDING'

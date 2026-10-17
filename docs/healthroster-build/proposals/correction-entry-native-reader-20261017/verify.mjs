@@ -10,10 +10,13 @@ const sha=s=>createHash('sha256').update(s).digest('hex'),read=f=>fs.readFileSyn
 const guards=JSON.parse(read(path.join(here,'SOURCE_GUARDS.json')));
 for(const row of guards.files){assert.equal(sha(read(path.join(row.authority==='OFFICE'?office:integration,row.file))),row.canonicalSha256,row.file);}
 for(const row of guards.spans){const source=read(path.join(row.authority==='OFFICE'?office:integration,row.file));const start=source.indexOf(row.start),end=source.indexOf(row.end,start+row.start.length);assert(start>=0&&end>start,row.name+' source span');assert.equal(sha(source.slice(start,end)),row.canonicalSha256,row.name);}
+const config=read(path.join(integration,'wrangler.toml')),testVars=/\[env\.test\.vars\]\n([\s\S]*?)(?=\n\[|$)/.exec(config);assert(testVars,'actual TEST vars');
+const tenant=/^BANKING_PAY_CORRECTION_TENANT_ID_V1\s*=\s*("[^"]+")/m.exec(testVars[1]);assert(tenant,'actual TEST tenant');assert.equal(JSON.parse(tenant[1]),guards.configuredTenant);
 const registry=JSON.parse(read(path.join(integration,'docs/bpay-next/final-definer-closures.json')));
 for(const row of guards.finalOwners){const current=registry.chains.find(x=>x.signature===row.signature);assert(current,row.signature);assert.equal(current.finalRoot,row.finalRoot);assert.equal(current.finalPhysical,row.finalPhysical);}
 const sql=read(path.join(here,'17102026_0109_correction_entry_reader.sql')),parsed=scanManagedSql(sql);
-assert.equal(parsed.statements.length,9);assert.equal(parsed.meta.length,0);
+assert.equal(parsed.statements.length,8);assert.equal(parsed.meta.length,0);
+assert.equal(scanManagedSql(read(path.join(here,'17102026_0109_correction_entry_one_time_admission.sql'))).statements.length,1);
 const definitions=parsed.statements.map(s=>parsed.source.slice(s.start,s.end)).filter(s=>/^create or replace function/i.test(s));assert.equal(definitions.length,3);
 for(const source of definitions){assert(/stable security definer/.test(source));assert(/set search_path=pg_catalog,public,private,pg_temp/.test(source));const body=source.replace(/--[^\n]*/g,'');assert(!/\b(insert\s+into|delete\s+from|update\s+public\.|for\s+update|pg_advisory|set_config|execute\s+format)\b/i.test(body),'read-only body');}
 assert.equal(scanManagedSql(read(path.join(here,'17102026_0109_correction_entry_reverse.sql'))).statements.length,4);

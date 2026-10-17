@@ -118,5 +118,6 @@
       "workflow_id",
       "expense_component_id"
     ]
-  }
+  },
+  "configuredTenant": "8467e881-9691-4181-a738-f9834922d747"
 }

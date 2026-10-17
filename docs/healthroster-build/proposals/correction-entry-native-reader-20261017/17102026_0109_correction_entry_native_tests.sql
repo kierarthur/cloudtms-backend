@@ -14,19 +14,27 @@ create temporary table entry_cases on commit drop as
  as x(case_id text,category text,actor_user_id uuid,timesheet_id uuid,
  admitted boolean,current_timesheet_id uuid,placement_revision text,pending boolean);
 do $tests$
-declare c record; actual jsonb; replay jsonb; denied boolean; category text; signature text;
+declare c record; actual jsonb; replay jsonb; denied boolean; required_category text; signature text;
 begin
  if current_setting('server_version_num')::integer/10000<>17 then raise exception 'PG17_REQUIRED';end if;
- if (select count(*) from entry_cases)<>14 or (select count(distinct case_id) from entry_cases)<>14
+ if (select count(*) from entry_cases)<>16 or (select count(distinct case_id) from entry_cases)<>16
   or exists(select 1 from entry_cases where case_id is null or actor_user_id is null or timesheet_id is null
-   or admitted is null or pending is null) then raise exception 'EXACT_14_REVIEWED_CASES_REQUIRED';end if;
- foreach category in array array['ADMIN_ORDINARY','AUTHORISER_OUTSIDE_SOURCE','GOLDEN_KEY_LEGACY',
-  'AUTHORISER_EXPENSE_ONLY','MOVED_A_ALIAS_TO_B','NATIVE_ROTATION','CERTIFIED_PENDING',
+   or admitted is null or pending is null) then raise exception 'EXACT_16_REVIEWED_CASES_REQUIRED';end if;
+ foreach required_category in array array['ADMIN_ORDINARY','AUTHORISER_OUTSIDE_SOURCE','GOLDEN_KEY_LEGACY',
+  'AUTHORISER_EXPENSE_ONLY','MOVED_A_ALIAS_TO_B','MOVED_A_ALIAS_TO_C','HISTORY_B_ALIAS_TO_C','NATIVE_ROTATION','CERTIFIED_PENDING',
   'INACTIVE_ACTOR','ORDINARY_ACTOR','DAILY_SUBJECT','UNKNOWN_SUBJECT','ARCHIVED_SUBJECT',
   'CROSS_CANDIDATE_NATIVE_CONFLICT','MALFORMED_NATIVE_DATES'] loop
-  if (select count(*) from entry_cases e where e.category=category)<>1 then
-   raise exception 'MISSING_OR_DUPLICATED_CASE_CATEGORY: %',category;end if;
+  if (select count(*) from entry_cases e where e.category=required_category)<>1 then
+   raise exception 'MISSING_OR_DUPLICATED_CASE_CATEGORY: %',required_category;end if;
  end loop;
+ if exists(select 1 from entry_cases e where e.admitted is distinct from
+   (e.category in('ADMIN_ORDINARY','AUTHORISER_OUTSIDE_SOURCE','GOLDEN_KEY_LEGACY','AUTHORISER_EXPENSE_ONLY',
+    'MOVED_A_ALIAS_TO_B','MOVED_A_ALIAS_TO_C','HISTORY_B_ALIAS_TO_C','NATIVE_ROTATION','CERTIFIED_PENDING'))
+   or e.pending is distinct from (e.category='CERTIFIED_PENDING')) then raise exception 'INVALID_CASE_EXPECTATIONS';end if;
+ if exists(select 1 from entry_cases e left join public.timesheets t on t.timesheet_id=e.timesheet_id
+   where e.category in('MOVED_A_ALIAS_TO_B','MOVED_A_ALIAS_TO_C','HISTORY_B_ALIAS_TO_C')
+    and (t.archived_at_utc is null or e.current_timesheet_id is null or e.current_timesheet_id=e.timesheet_id)) then
+  raise exception 'REAL_ARCHIVED_MOVE_ALIAS_FIXTURES_REQUIRED';end if;
  for c in select * from entry_cases order by case_id loop
   denied:=false;actual:=null;
   begin
@@ -49,7 +57,7 @@ begin
   end if;
  end loop;
  -- Unknown browser keys are not ignored or echoed.
- select * into c from entry_cases where category='ADMIN_ORDINARY';
+ select e.* into c from entry_cases e where e.category='ADMIN_ORDINARY';
  denied:=false;
  begin
   perform public.timesheet_correction_entry_v1(jsonb_build_object('version','TIMESHEET_CORRECTION_ENTRY_REQUEST_V1',

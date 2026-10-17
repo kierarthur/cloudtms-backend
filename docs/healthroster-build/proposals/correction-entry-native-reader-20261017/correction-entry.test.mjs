@@ -66,6 +66,15 @@ test('certified pending is nullable; fabricated/current mismatches are rejected'
  for(const extra of [{current_timesheet_id:null},{disabled_reason:'CURRENT_ALLOCATION_PENDING'},
   {requested_timesheet_id:ACTOR},{current_timesheet_id:'bad'}])assert.throws(()=>decodeCorrectionEntry(result(extra),TS));
 });
+test('original A/history B may resolve to C; canonical native UUIDs have no version/variant restriction',async()=>{
+ const current='ffffffff-ffff-ffff-ffff-ffffffffffff',history='00000000-0000-0000-0000-000000000000';
+ for(const requested of [TS,history]){
+  const reply=result({requested_timesheet_id:requested,current_timesheet_id:current});
+  assert.equal(decodeCorrectionEntry(reply,requested).current_timesheet_id,current);
+  const r=await handleCorrectionEntry(new Request(`https://office.invalid/api/timesheets/${requested}/correction-entry`),deps({timesheetId:requested,rpc:async()=>reply}));
+  assert.equal(r.status,200);assert.equal((await r.json()).current_timesheet_id,current);
+ }
+});
 test('extra money/identity, Daily, false Ready and permissive future response cannot escape',async()=>{
  for(const extra of [{paid_amount:1},{client_id:AGENCY},{purpose:'DAILY_RATE_CORRECTION'},
   {may_open_review:true,disabled_reason:null},{disabled_reason:'private-id-secret'}, {version:'FUTURE'}]){
