@@ -1,0 +1,117 @@
+{
+  "version": "B2_REAL_COMMIT_RESEAL_SOURCE_FREEZE_V1",
+  "sourceOnly": true,
+  "actualMaterialization": "NOT_RUN",
+  "files": [
+    {
+      "file": "acl/accepted-phase-parent.mjs",
+      "bytes": 5129,
+      "sha256": "e77e1753e43039a9862e40dc4ba3bc487480356a20805991a036d852f77e97a2"
+    },
+    {
+      "file": "acl/b2-plus-accepted-acl-phase-parent.mjs",
+      "bytes": 5333,
+      "sha256": "a2326b3804d49f0077b3c2a047792a8f36bfb0ad83072bf1cdefb07a8bfd33bf"
+    },
+    {
+      "file": "acl/FULL_PARENT_FORWARD.json",
+      "bytes": 4948,
+      "sha256": "9ca70cdb230476c7cf9a5a2de12c3dad36797ada0311ee74e24b76f24537bfec"
+    },
+    {
+      "file": "ACL_COMPOSITION.json",
+      "bytes": 1529,
+      "sha256": "4027e40417473e89dbd6dcb55a12c49095bc472d54365736db54845575b6e9ce"
+    },
+    {
+      "file": "admit-public.mjs",
+      "bytes": 7900,
+      "sha256": "4f37c279e73fef5aa59b12b26079385f076b8266d161216ae54b1b60225b9f2d"
+    },
+    {
+      "file": "CAPTURE.json",
+      "bytes": 1607,
+      "sha256": "fce7f836780e0f997d8b5a28e0027a5392cc6ad3f1eb237a1a183fcfe4c5b9cf"
+    },
+    {
+      "file": "COMPOSER_FORWARD.json",
+      "bytes": 1153,
+      "sha256": "4f394a2d6f7a57d78a1a2cc7218cb20f7da3817e858e95e09c661a596691cf2a"
+    },
+    {
+      "file": "freeze.py",
+      "bytes": 576,
+      "sha256": "a9f1c2549500d5e510c53f36d100c9b5c6280638316344e49453ea26ffbc1b01"
+    },
+    {
+      "file": "git_values.py",
+      "bytes": 2957,
+      "sha256": "e72633056120d0bf560713e1efc1e5e632c956492c8ef6afbd5e2980958065e9"
+    },
+    {
+      "file": "parents/root/docs/healthroster-build/proposals/daily-five-stage-producer-hash-forward-20261017/compose.mjs",
+      "bytes": 8015,
+      "sha256": "6a22ef0bb4089d50325084ee96259b73637052f9e09808cad421febdfabf16cc"
+    },
+    {
+      "file": "parents/root/docs/healthroster-build/proposals/daily-five-stage-producer-hash-forward-20261017/MANIFEST.json",
+      "bytes": 1830,
+      "sha256": "70ca5e9fdd0c3f7f86b1285cf338e8d6936d88ad7c675cd1c6be461dfeafcbdb"
+    },
+    {
+      "file": "parents/root/docs/healthroster-build/proposals/daily-five-stage-producer-hash-forward-20261017/test.mjs",
+      "bytes": 10921,
+      "sha256": "1436d05fa5033be15180d2a1bb8cac70c060cc5ded43de57e83332918dcc55b2"
+    },
+    {
+      "file": "payload/root/docs/healthroster-build/proposals/daily-five-stage-producer-hash-forward-20261017/compose.mjs",
+      "bytes": 8336,
+      "sha256": "6566ad887bdfcd61f68819650954321adcca6eb110879500a309180aa8288cc7"
+    },
+    {
+      "file": "README.md",
+      "bytes": 8210,
+      "sha256": "7ff06144068eb00ff70bfcfc2e917d170ec949838e8aad66acd473265cc15b7b"
+    },
+    {
+      "file": "reseal.py",
+      "bytes": 12583,
+      "sha256": "f584e3ab761fa13832ed5a7b9d708378202d013ecb42577fc3b338b7ab20d139"
+    },
+    {
+      "file": "RESULTS.json",
+      "bytes": 962,
+      "sha256": "bee07131dd3bca7a4dc041dd987071467fe282892cc7024c83e9dbc8df73ec90"
+    },
+    {
+      "file": "RESULTS_NODE.tap",
+      "bytes": 8025,
+      "sha256": "ce410078c294db628e3b22c3a6116045251ab86e528aca7fbafa148aa2162c68"
+    },
+    {
+      "file": "RESULTS_PYTHON.txt",
+      "bytes": 2600,
+      "sha256": "ee4856e74ec7d0ea90a131727cd37de465e54cf1189a1fe3dc81d0db6dfe6d7e"
+    },
+    {
+      "file": "REVIEWED_POSTIMAGES.json",
+      "bytes": 8343,
+      "sha256": "67652eb29e6a5671513703b842d2d77efa7e209e08a80e7779d1383388d3edc9"
+    },
+    {
+      "file": "test.mjs",
+      "bytes": 5863,
+      "sha256": "acfe2fb4674e21db188fecc088b818973615f36ed2646185c474a0e4801177fe"
+    },
+    {
+      "file": "test_reseal.py",
+      "bytes": 7173,
+      "sha256": "3c415648d996c01583ce4c4a309a07fced8a3d823a8ae23fe5ead379db705675"
+    },
+    {
+      "file": "verify.py",
+      "bytes": 1842,
+      "sha256": "6e2ae61e750957206a94fb717a5c8817d34c76936d788031aa8b4cc35fb43487"
+    }
+  ]
+}

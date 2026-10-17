@@ -1,0 +1,23 @@
+test_acl_choice_must_match_actual_functional_commit (test_reseal.TestReseal.test_acl_choice_must_match_actual_functional_commit) ... ok
+test_all12_runtime_five_real_remaps_seven_exact_old_records (test_reseal.TestReseal.test_all12_runtime_five_real_remaps_seven_exact_old_records) ... ok
+test_complete_fourteen_metadata_owners_and_dag_whole_inverses (test_reseal.TestReseal.test_complete_fourteen_metadata_owners_and_dag_whole_inverses) ... ok
+test_current_head_move_refused (test_reseal.TestReseal.test_current_head_move_refused) ... ok
+test_downstream_refuses_functional_only_commit_without_resealed_manifest (test_reseal.TestReseal.test_downstream_refuses_functional_only_commit_without_resealed_manifest) ... ok
+test_final_admission_refuses_old_or_subset_manifest_even_if_committed (test_reseal.TestReseal.test_final_admission_refuses_old_or_subset_manifest_even_if_committed) ... ok
+test_final_admission_requires_all_fourteen_actual_metadata_commit_images (test_reseal.TestReseal.test_final_admission_requires_all_fourteen_actual_metadata_commit_images) ... ok
+test_final_config_cannot_use_earlier_functional_only_adapter_commit (test_reseal.TestReseal.test_final_config_cannot_use_earlier_functional_only_adapter_commit) ... ok
+test_holder_raw_unchanged (test_reseal.TestReseal.test_holder_raw_unchanged) ... ok
+test_index_only_drift_refused (test_reseal.TestReseal.test_index_only_drift_refused) ... ok
+test_missing_dependency_and_extra_argument_refused (test_reseal.TestReseal.test_missing_dependency_and_extra_argument_refused) ... ok
+test_missing_unknown_future_noncommit_are_not_real_values (test_reseal.TestReseal.test_missing_unknown_future_noncommit_are_not_real_values) ... ok
+test_no_closed_stage_or_arbitrary_acl_coercion (test_reseal.TestReseal.test_no_closed_stage_or_arbitrary_acl_coercion) ... ok
+test_optional_acl_exact_composition_propagates_all_hashes (test_reseal.TestReseal.test_optional_acl_exact_composition_propagates_all_hashes) ... ok
+test_original_historical_mismatch_refused (test_reseal.TestReseal.test_original_historical_mismatch_refused) ... ok
+test_parent_current_wrong_body_is_not_accepted_as_historical (test_reseal.TestReseal.test_parent_current_wrong_body_is_not_accepted_as_historical) ... ok
+test_two_new_modules_and_all153_coordinator_pins (test_reseal.TestReseal.test_two_new_modules_and_all153_coordinator_pins) ... ok
+test_unreviewed_metadata_change_refused (test_reseal.TestReseal.test_unreviewed_metadata_change_refused) ... ok
+
+----------------------------------------------------------------------
+Ran 18 tests in 0.186s
+
+OK

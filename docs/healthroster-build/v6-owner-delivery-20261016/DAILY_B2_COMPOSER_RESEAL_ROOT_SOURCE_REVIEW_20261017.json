@@ -1,0 +1,47 @@
+{
+  "version": "DAILY_B2_COMPOSER_RESEAL_ROOT_SOURCE_REVIEW_V1",
+  "recordedAt": "2026-10-17T17:15:57.502652+00:00",
+  "verdict": "ACCEPT_BOUNDED_SOURCE_ONLY",
+  "authorManifest": "48664620d82be753cd5bc48d6fdff323e4cd080fe72ffe7a37229395cbb7c77c",
+  "peerManifest": "1fd815aa633800e2097b0c21a99eef3178f2635e062dda9aeaf10e931e63065d",
+  "rootPythonTests": 18,
+  "rootNodeTests": 36,
+  "independentPythonTests": 7,
+  "independentNodeTests": 9,
+  "independentMetadataSubstitutionNegatives": 56,
+  "composer": {
+    "file": "docs/healthroster-build/proposals/daily-five-stage-producer-hash-forward-20261017/compose.mjs",
+    "bytes": 8336,
+    "sha256": "6566ad887bdfcd61f68819650954321adcca6eb110879500a309180aa8288cc7",
+    "beforeSha256": "6a22ef0bb4089d50325084ee96259b73637052f9e09808cad421febdfabf16cc",
+    "edits": [
+      {
+        "before": "import {createHash} from 'node:crypto';",
+        "after": "import {createHash} from 'node:crypto';\nimport {currentFiles} from 'file:///D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026/docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/current-read.mjs';",
+        "occurrences": 1
+      },
+      {
+        "before": "'_R10_",
+        "after": "'_B2_",
+        "occurrences": 7
+      },
+      {
+        "before": "const plan={version:'DAILY_GENUINE_ROOT_STAGE_BOOKKEEPER_PLAN_V1',stage,operatorSourceCommit:source,",
+        "after": "const plan={version:'DAILY_GENUINE_ROOT_STAGE_BOOKKEEPER_PLAN_V2',stage,currentReadEvidence:currentFiles(stage).evidence,currentConsumptionEvidence:currentFiles(stage).consumptionEvidence,operatorSourceCommit:source,",
+        "occurrences": 1
+      }
+    ]
+  },
+  "reviewedFunctionalImages": 19,
+  "metadataOwners": 14,
+  "aclComposed": false,
+  "realMetadataMaterialization": "NOT_RUN",
+  "realPublicSourceAdmission": "NOT_RUN",
+  "native": "NOT_RUN",
+  "partB": "NOT_RUN",
+  "frozenRawWhitespaceExceptions": [
+    "docs/healthroster-build/proposals/daily-b2-real-commit-reseal-source-20261017/parents/root/docs/healthroster-build/proposals/daily-five-stage-producer-hash-forward-20261017/compose.mjs:54: new blank line at EOF.",
+    "docs/healthroster-build/proposals/daily-b2-real-commit-reseal-source-20261017/payload/root/docs/healthroster-build/proposals/daily-five-stage-producer-hash-forward-20261017/compose.mjs:55: new blank line at EOF."
+  ],
+  "whitespaceDisposition": "Preserved complete captured parent/payload bytes and their frozen hashes. Active source diff has no whitespace error."
+}

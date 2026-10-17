@@ -1,0 +1,226 @@
+TAP version 13
+# Subtest: exact5 plans and5 original effects,14/9 fields, without after/prefix records
+ok 1 - exact5 plans and5 original effects,14/9 fields, without after/prefix records
+  ---
+  duration_ms: 3.9379
+  type: 'test'
+  ...
+# Subtest: original planned sequence uses genuineS0 thenfuture planned prefix paths without reads
+ok 2 - original planned sequence uses genuineS0 thenfuture planned prefix paths without reads
+  ---
+  duration_ms: 1.3198
+  type: 'test'
+  ...
+# Subtest: all effects retain S0 catalogue but bind each genuine selected business producer
+ok 3 - all effects retain S0 catalogue but bind each genuine selected business producer
+  ---
+  duration_ms: 0.8464
+  type: 'test'
+  ...
+# Subtest: oldsourceS0 cannot relabel newsource
+ok 4 - oldsourceS0 cannot relabel newsource
+  ---
+  duration_ms: 0.4673
+  type: 'test'
+  ...
+# Subtest: unreleased or unqualifiedS0 refused
+ok 5 - unreleased or unqualifiedS0 refused
+  ---
+  duration_ms: 0.5266
+  type: 'test'
+  ...
+# Subtest: actualS0 proof/effect source and raw envelope bindings retained
+ok 6 - actualS0 proof/effect source and raw envelope bindings retained
+  ---
+  duration_ms: 0.2779
+  type: 'test'
+  ...
+# Subtest: nonvacantS0 cannot supply cataloguebaseline
+ok 7 - nonvacantS0 cannot supply cataloguebaseline
+  ---
+  duration_ms: 0.2346
+  type: 'test'
+  ...
+# Subtest: S0 catalogue drift refused
+ok 8 - S0 catalogue drift refused
+  ---
+  duration_ms: 0.3231
+  type: 'test'
+  ...
+# Subtest: missing S4 decision fails full composition without producing partialrecords
+ok 9 - missing S4 decision fails full composition without producing partialrecords
+  ---
+  duration_ms: 1.009
+  type: 'test'
+  ...
+# Subtest: catalogue hashes alone cannot grant manualdecision
+ok 10 - catalogue hashes alone cannot grant manualdecision
+  ---
+  duration_ms: 0.3458
+  type: 'test'
+  ...
+# Subtest: manualreview must bindcurrent source and exact originalstage
+ok 11 - manualreview must bindcurrent source and exact originalstage
+  ---
+  duration_ms: 0.2552
+  type: 'test'
+  ...
+# Subtest: substantivereview/evidence absent refused
+ok 12 - substantivereview/evidence absent refused
+  ---
+  duration_ms: 0.6703
+  type: 'test'
+  ...
+# Subtest: empty underlying committed evidence refused
+ok 13 - empty underlying committed evidence refused
+  ---
+  duration_ms: 0.233
+  type: 'test'
+  ...
+# Subtest: selfevidence/privatejournal paths refused
+ok 14 - selfevidence/privatejournal paths refused
+  ---
+  duration_ms: 0.3373
+  type: 'test'
+  ...
+# Subtest: plans never prejudge actualafterdecision
+ok 15 - plans never prejudge actualafterdecision
+  ---
+  duration_ms: 0.5899
+  type: 'test'
+  ...
+# Subtest: only exact originalstage and realcommit shape admitted
+ok 16 - only exact originalstage and realcommit shape admitted
+  ---
+  duration_ms: 0.45
+  type: 'test'
+  ...
+# Subtest: missing or malformed manual producer hash refused
+ok 17 - missing or malformed manual producer hash refused
+  ---
+  duration_ms: 0.6939
+  type: 'test'
+  ...
+# Subtest: original S0 read/auth hash never automatically admits any business stage
+ok 18 - original S0 read/auth hash never automatically admits any business stage
+  ---
+  duration_ms: 0.7775
+  type: 'test'
+  ...
+# Subtest: wellformed wrong business producer hash refused
+ok 19 - wellformed wrong business producer hash refused
+  ---
+  duration_ms: 0.2415
+  type: 'test'
+  ...
+# Subtest: binding record must be included in committed source evidence
+ok 20 - binding record must be included in committed source evidence
+  ---
+  duration_ms: 0.2284
+  type: 'test'
+  ...
+# Subtest: different or duplicate published function rows cannot establish exact producer
+ok 21 - different or duplicate published function rows cannot establish exact producer
+  ---
+  duration_ms: 0.883
+  type: 'test'
+  ...
+# Subtest: hospital binding requires exact raw-equal published route hash
+ok 22 - hospital binding requires exact raw-equal published route hash
+  ---
+  duration_ms: 0.5212
+  type: 'test'
+  ...
+# Subtest: business V2 composition uses exact closed CURRENT references and fresh B2 namespace
+ok 23 - business V2 composition uses exact closed CURRENT references and fresh B2 namespace
+  ---
+  duration_ms: 1.3645
+  type: 'test'
+  ...
+# Subtest: obsolete V1 composer refuses under new core; no nominal business plan can be emitted
+ok 24 - obsolete V1 composer refuses under new core; no nominal business plan can be emitted
+  ---
+  duration_ms: 1.0191
+  type: 'test'
+  ...
+# Subtest: original S0 V1 plan remains valid without CURRENT; business-only composer cannot manufacture S0
+ok 25 - original S0 V1 plan remains valid without CURRENT; business-only composer cannot manufacture S0
+  ---
+  duration_ms: 8.5056
+  type: 'test'
+  ...
+# Subtest: docs/healthroster-build/proposals/daily-s1-after-clock-adapter-20261017/ actual complete packet predicate reads every manifest row plus raw MF
+ok 26 - docs/healthroster-build/proposals/daily-s1-after-clock-adapter-20261017/ actual complete packet predicate reads every manifest row plus raw MF
+  ---
+  duration_ms: 1.6321
+  type: 'test'
+  ...
+# Subtest: docs/healthroster-build/proposals/daily-s1-after-clock-adapter-20261017/ packet refusal missingHelper
+ok 27 - docs/healthroster-build/proposals/daily-s1-after-clock-adapter-20261017/ packet refusal missingHelper
+  ---
+  duration_ms: 1.07
+  type: 'test'
+  ...
+# Subtest: docs/healthroster-build/proposals/daily-s1-after-clock-adapter-20261017/ packet refusal index
+ok 28 - docs/healthroster-build/proposals/daily-s1-after-clock-adapter-20261017/ packet refusal index
+  ---
+  duration_ms: 1.001
+  type: 'test'
+  ...
+# Subtest: docs/healthroster-build/proposals/daily-s1-after-clock-adapter-20261017/ packet refusal configuredOldManifest
+ok 29 - docs/healthroster-build/proposals/daily-s1-after-clock-adapter-20261017/ packet refusal configuredOldManifest
+  ---
+  duration_ms: 0.9167
+  type: 'test'
+  ...
+# Subtest: docs/healthroster-build/proposals/daily-s1-after-clock-adapter-20261017/ packet refusal head
+ok 30 - docs/healthroster-build/proposals/daily-s1-after-clock-adapter-20261017/ packet refusal head
+  ---
+  duration_ms: 0.941
+  type: 'test'
+  ...
+# Subtest: docs/healthroster-build/proposals/daily-original-stages-root-effect-adapter-20261017/ actual complete packet predicate reads every manifest row plus raw MF
+ok 31 - docs/healthroster-build/proposals/daily-original-stages-root-effect-adapter-20261017/ actual complete packet predicate reads every manifest row plus raw MF
+  ---
+  duration_ms: 1.153
+  type: 'test'
+  ...
+# Subtest: docs/healthroster-build/proposals/daily-original-stages-root-effect-adapter-20261017/ packet refusal missingHelper
+ok 32 - docs/healthroster-build/proposals/daily-original-stages-root-effect-adapter-20261017/ packet refusal missingHelper
+  ---
+  duration_ms: 0.9329
+  type: 'test'
+  ...
+# Subtest: docs/healthroster-build/proposals/daily-original-stages-root-effect-adapter-20261017/ packet refusal index
+ok 33 - docs/healthroster-build/proposals/daily-original-stages-root-effect-adapter-20261017/ packet refusal index
+  ---
+  duration_ms: 0.9809
+  type: 'test'
+  ...
+# Subtest: docs/healthroster-build/proposals/daily-original-stages-root-effect-adapter-20261017/ packet refusal configuredOldManifest
+ok 34 - docs/healthroster-build/proposals/daily-original-stages-root-effect-adapter-20261017/ packet refusal configuredOldManifest
+  ---
+  duration_ms: 0.9275
+  type: 'test'
+  ...
+# Subtest: docs/healthroster-build/proposals/daily-original-stages-root-effect-adapter-20261017/ packet refusal head
+ok 35 - docs/healthroster-build/proposals/daily-original-stages-root-effect-adapter-20261017/ packet refusal head
+  ---
+  duration_ms: 1.0091
+  type: 'test'
+  ...
+# Subtest: public admission refuses incomplete/extra config before any actual source/Git access
+ok 36 - public admission refuses incomplete/extra config before any actual source/Git access
+  ---
+  duration_ms: 0.6142
+  type: 'test'
+  ...
+1..36
+# tests 36
+# suites 0
+# pass 36
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 178.3719

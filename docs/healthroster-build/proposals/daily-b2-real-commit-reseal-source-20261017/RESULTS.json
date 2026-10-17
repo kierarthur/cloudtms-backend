@@ -1,0 +1,32 @@
+{
+  "status": "SOURCE_ONLY_PASS",
+  "pythonSyntheticDagTests": 18,
+  "nodePureSourceTests": 36,
+  "originalComposerTestsRetained": 22,
+  "completeAdapterPacketPredicates": 2,
+  "originalB2SourceImagesUnchanged": 18,
+  "additionalComposerSourceImages": 1,
+  "metadataOwners": 14,
+  "originalRuntimeRecords": 12,
+  "remaps": 5,
+  "unchangedRecords": 7,
+  "holderRawUnchanged": true,
+  "sourceVerification": {
+    "status": "SOURCE_ONLY_PASS",
+    "completeB2Authority": "29fc5acee6a0dd454516c708edf0b473e0ca27afc8e91dffaee77ec3c4555af8",
+    "originalParents": 55,
+    "composerCaptures": 3,
+    "functionalImages": 19,
+    "metadataOwners": 14,
+    "originalRuntimeRows": 12,
+    "remaps": 5,
+    "unchangedRuntimeRows": 7,
+    "actualMaterialization": "NOT_RUN",
+    "actualPublicSourceAdmission": "NOT_RUN",
+    "native": "NOT_RUN"
+  },
+  "actualMaterialization": "NOT_RUN",
+  "actualPublicSourceAdmission": "NOT_RUN",
+  "native": "NOT_RUN",
+  "commit": null
+}

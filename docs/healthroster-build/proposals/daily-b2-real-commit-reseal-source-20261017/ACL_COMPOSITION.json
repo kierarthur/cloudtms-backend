@@ -1,0 +1,14 @@
+{
+  "file": "docs/healthroster-build/proposals/daily-health-s0-stage-coordinator-20261017/phase-parent.mjs",
+  "b2ParentSha256": "b0653a4e7f7e0700b5fffb0e557873dcc1f009d59f73e050600b8ab9e5224310",
+  "acceptedAclSha256": "e77e1753e43039a9862e40dc4ba3bc487480356a20805991a036d852f77e97a2",
+  "combinedBytes": 5333,
+  "combinedSha256": "a2326b3804d49f0077b3c2a047792a8f36bfb0ad83072bf1cdefb07a8bfd33bf",
+  "edits": [
+    {
+      "before": " execFileSync(aclShell,['-NoProfile','-NonInteractive','-File',path.join(here,'verify-owned.ps1'),'-OwnedPath',out],{windowsHide:true,stdio:'ignore',timeout:15000,env:aclChildEnvironment(aclShell)});\n execFileSync(aclShell,['-NoProfile','-NonInteractive','-File',path.join(here,'verify-owned.ps1'),'-OwnedPath',path.dirname((await import('../daily-health-genuine-staged-operator-20261017/contract.mjs')).PRIVATE_STATE)],{windowsHide:true,stdio:'ignore',timeout:15000,env:aclChildEnvironment(aclShell)});",
+      "after": " const quote=v=>\"'\"+v.replaceAll(\"'\",\"''\")+\"'\",verify=path.join(here,'verify-owned.ps1'),stateParent=path.dirname((await import('../daily-health-genuine-staged-operator-20261017/contract.mjs')).PRIVATE_STATE);\n const aclCommand=\"$ErrorActionPreference='Stop'; & \"+quote(verify)+' -OwnedPath '+quote(out)+'; & '+quote(verify)+' -OwnedPath '+quote(stateParent);\n execFileSync(aclShell,['-NoProfile','-NonInteractive','-Command',aclCommand],{windowsHide:true,stdio:'ignore',timeout:15000,env:aclChildEnvironment(aclShell)});"
+    }
+  ],
+  "sourceOnly": true
+}

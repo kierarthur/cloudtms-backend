@@ -1,0 +1,53 @@
+{
+  "verdict": "ACCEPT_BOUNDED_SOURCE_ONLY_NO_SCOPED_FINDING",
+  "sourceManifest": "48664620d82be753cd5bc48d6fdff323e4cd080fe72ffe7a37229395cbb7c77c",
+  "originalReplaysObservedThisTurn": {
+    "pythonTests": 18,
+    "nodeTests": 36,
+    "sourceVerifier": "PASS"
+  },
+  "independentPythonTests": 7,
+  "independentNodeTests": 9,
+  "metadataSubstitutionCases": 56,
+  "actualMaterialization": "NOT_RUN",
+  "actualPublicSourceAdmission": "NOT_RUN",
+  "native": "NOT_RUN",
+  "partB": "NOT_SIGNED_OFF",
+  "runs": [
+    {
+      "name": "independentPython7",
+      "bin": "C:/Users/KierArthur/AppData/Local/Programs/Python/Python312/python.exe",
+      "args": [
+        "-B",
+        "-m",
+        "unittest",
+        "-v",
+        "test_independent.py"
+      ],
+      "exitCode": 0,
+      "stdout": "",
+      "stderr": "test_actual_git_reader_commit_guard_rejects_noncommit_objects_and_bad_refs_without_git (test_independent.Independent.test_actual_git_reader_commit_guard_rejects_noncommit_objects_and_bad_refs_without_git) ... ok\r\ntest_actual_git_reader_preserves_ancestor_failure (test_independent.Independent.test_actual_git_reader_preserves_ancestor_failure) ... ok\r\ntest_all_fourteen_configured_commit_metadata_substitutions_refuse (test_independent.Independent.test_all_fourteen_configured_commit_metadata_substitutions_refuse) ... ok\r\ntest_all_fourteen_head_metadata_substitutions_refuse (test_independent.Independent.test_all_fourteen_head_metadata_substitutions_refuse) ... ok\r\ntest_all_fourteen_index_metadata_substitutions_refuse (test_independent.Independent.test_all_fourteen_index_metadata_substitutions_refuse) ... ok\r\ntest_all_fourteen_saved_metadata_substitutions_refuse (test_independent.Independent.test_all_fourteen_saved_metadata_substitutions_refuse) ... ok\r\ntest_functional_root_without_new_composer_cannot_start_recipe (test_independent.Independent.test_functional_root_without_new_composer_cannot_start_recipe) ... ok\r\n\r\n----------------------------------------------------------------------\r\nRan 7 tests in 1.426s\r\n\r\nOK\r\n"
+    },
+    {
+      "name": "independentNode9",
+      "bin": "C:\\Program Files\\nodejs\\node.exe",
+      "args": [
+        "--test",
+        "public-packets.test.mjs"
+      ],
+      "exitCode": 0,
+      "stdout": "✔ literal full OWN/REC predicate covers all actual declared files: daily-s1-after-clock-adapter-20261017/ (5.5162ms)\n✔ every complete OWN/REC manifest row and configured old MF refuses: daily-s1-after-clock-adapter-20261017/ (29.4128ms)\n✔ literal full OWN/REC predicate covers all actual declared files: daily-s1-actual-effect-recorder-20261017/ (2.8668ms)\n✔ every complete OWN/REC manifest row and configured old MF refuses: daily-s1-actual-effect-recorder-20261017/ (20.8102ms)\n✔ literal full OWN/REC predicate covers all actual declared files: daily-original-stages-root-effect-adapter-20261017/ (4.8489ms)\n✔ every complete OWN/REC manifest row and configured old MF refuses: daily-original-stages-root-effect-adapter-20261017/ (66.5589ms)\n✔ literal full OWN/REC predicate covers all actual declared files: daily-original-stages-after-response-clock-forward-20261017/ (4.4298ms)\n✔ every complete OWN/REC manifest row and configured old MF refuses: daily-original-stages-after-response-clock-forward-20261017/ (45.6766ms)\n✔ nearly complete public-admission configs refuse before physical/Git access (1.3769ms)\nℹ tests 9\nℹ suites 0\nℹ pass 9\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 309.8684\n",
+      "stderr": ""
+    },
+    {
+      "name": "independentSourceInverse",
+      "bin": "C:\\Program Files\\nodejs\\node.exe",
+      "args": [
+        "verify.mjs"
+      ],
+      "exitCode": 0,
+      "stdout": "{\"status\":\"BOUNDED_RESEAL_COMPOSER_SOURCE_PASS\",\"sourceFiles\":23,\"composerLiteralGroups\":3,\"composerReplacementOccurrences\":9,\"reviewedFunctionals\":19,\"optionalAclSelected\":false,\"actualMaterialization\":\"NOT_RUN\",\"actualPublicAdmission\":\"NOT_RUN\",\"native\":\"NOT_RUN\",\"partB\":\"NOT_SIGNED_OFF\"}\n",
+      "stderr": ""
+    }
+  ]
+}

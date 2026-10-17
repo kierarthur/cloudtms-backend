@@ -1,0 +1,31 @@
+{
+  "version": "DAILY_B2_REAL_COMMIT_RESEAL_COMPOSER_INDEPENDENT_PEER_V1",
+  "qualification": "ACCEPT_BOUNDED_SOURCE_ONLY",
+  "files": [
+    {
+      "file": "public-packets.test.mjs",
+      "bytes": 4717,
+      "sha256": "3df4e5be2715a42bdcb90197a1fafd05e945f45660d64dec5942c6700fc85602"
+    },
+    {
+      "file": "RESULTS.json",
+      "bytes": 4111,
+      "sha256": "1b3c3b02a5d6393508202a15a02ea087f732ccab67fcd0a3ed64931aad930458"
+    },
+    {
+      "file": "REVIEW.md",
+      "bytes": 3628,
+      "sha256": "3bd7fff6d14e14d9384073bd589e60dcfbd83b7f967f65d503d7ea980c76e734"
+    },
+    {
+      "file": "test_independent.py",
+      "bytes": 3786,
+      "sha256": "22b834951786d2a0fe3ca127e31a2904de66723c4ff8432622600f6875ec42bd"
+    },
+    {
+      "file": "verify.mjs",
+      "bytes": 2288,
+      "sha256": "69a2f59fd3e649734158b40fe84da652278ad76c8771fb125148d0289fe210f8"
+    }
+  ]
+}

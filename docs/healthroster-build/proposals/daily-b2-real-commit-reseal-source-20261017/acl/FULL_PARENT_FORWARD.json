@@ -1,0 +1,59 @@
+{
+  "version": "GENERIC_BOOKKEEPER_AND_PHASE_ACL_TRANSPORT_FORWARD_V1",
+  "targets": [
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+      "file": "docs/healthroster-build/proposals/daily-genuine-root-stage-bookkeeper-20261017.mjs",
+      "commit": "d521c12f203c41299074d2d989afab7ff8c577f8",
+      "reference": "reference/stage-bookkeeper.mjs",
+      "payload": "payload/stage-bookkeeper.mjs",
+      "beforeBytes": 11251,
+      "beforeSha256": "f1f77eb5222ddea37357f14fe6eb2b44ea1c0079fd6c5e42d3286d945dcd5e08",
+      "afterBytes": 11508,
+      "afterSha256": "7e90f2ccb4ef993891a09d616b8458dee0125a6c4414b38501714ae460d4a590",
+      "edits": [
+        {
+          "before": "const {reviewedImage}=await import(",
+          "after": "const {reviewedImage,blobImages}=await import("
+        },
+        {
+          "before": "const pins=JSON.parse(fs.readFileSync(here+'/PARENTS.json'));for(const row of pins.fixedRuntime){const b=fs.readFileSync(report+'/'+row.file);must(b.length===row.bytes&&sha(b)===row.sha256&&b.equals(git(report,'show',row.commit+':'+row.file)),'BOOKKEEPER_ORIGINAL_RUNTIME_OWNER_CHANGED');}",
+          "after": "const pins=JSON.parse(fs.readFileSync(here+'/PARENTS.json')),fixedImages=blobImages(report,pins.fixedRuntime.map(row=>({ref:row.commit,file:row.file})));for(const row of pins.fixedRuntime){const b=fs.readFileSync(report+'/'+row.file);must(b.length===row.bytes&&sha(b)===row.sha256&&b.equals(fixedImages.get(row.commit,row.file)),'BOOKKEEPER_ORIGINAL_RUNTIME_OWNER_CHANGED');}"
+        },
+        {
+          "before": "must([rootHead,'',helperCommit].every(ref=>helperBytes.equals(git(root,'show',ref+':'+helperRelative))),'BOOKKEEPER_EXACT_ROOT_HELPER_IMAGES_REQUIRED');",
+          "after": "const helperImages=blobImages(root,[rootHead,null,helperCommit].map(ref=>({ref,file:helperRelative})));\n must([rootHead,null,helperCommit].every(ref=>helperBytes.equals(helperImages.get(ref,helperRelative))),'BOOKKEEPER_EXACT_ROOT_HELPER_IMAGES_REQUIRED');"
+        },
+        {
+          "before": "const readPublic=file=>{publicPath(file);must(physical(root+'/'+file)===root+'/'+file,'BOOKKEEPER_PHYSICAL_PUBLIC_FILE_REQUIRED');const b=small(root+'/'+file,2e6);must([rootHead,''].every(ref=>b.equals(git(root,'show',ref+':'+file))),'BOOKKEEPER_COMMITTED_PUBLIC_EVIDENCE_REQUIRED');return b;};",
+          "after": "const readPublic=file=>{publicPath(file);must(physical(root+'/'+file)===root+'/'+file,'BOOKKEEPER_PHYSICAL_PUBLIC_FILE_REQUIRED');const b=small(root+'/'+file,2e6),images=blobImages(root,[rootHead,null].map(ref=>({ref,file})));must([rootHead,null].every(ref=>b.equals(images.get(ref,file))),'BOOKKEEPER_COMMITTED_PUBLIC_EVIDENCE_REQUIRED');return b;};"
+        }
+      ]
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+      "file": "docs/healthroster-build/proposals/daily-health-s0-stage-coordinator-20261017/phase-parent.mjs",
+      "commit": "6b5ebedecf95c8a1adfda5141bbf3eccf5294d23",
+      "reference": "reference/phase-parent.mjs",
+      "payload": "payload/phase-parent.mjs",
+      "beforeBytes": 5111,
+      "beforeSha256": "5d487a9ba1b6f5c742e17d3d2b06bbfc6bb0e2937ea23600694122a3f2ca2c8b",
+      "afterBytes": 5129,
+      "afterSha256": "e77e1753e43039a9862e40dc4ba3bc487480356a20805991a036d852f77e97a2",
+      "edits": [
+        {
+          "before": " execFileSync(aclShell,['-NoProfile','-NonInteractive','-File',path.join(here,'verify-owned.ps1'),'-OwnedPath',out],{windowsHide:true,stdio:'ignore',timeout:15000,env:aclChildEnvironment(aclShell)});\n execFileSync(aclShell,['-NoProfile','-NonInteractive','-File',path.join(here,'verify-owned.ps1'),'-OwnedPath',path.dirname((await import('../daily-health-genuine-staged-operator-20261017/contract.mjs')).PRIVATE_STATE)],{windowsHide:true,stdio:'ignore',timeout:15000,env:aclChildEnvironment(aclShell)});",
+          "after": " const quote=v=>\"'\"+v.replaceAll(\"'\",\"''\")+\"'\",verify=path.join(here,'verify-owned.ps1'),stateParent=path.dirname((await import('../daily-health-genuine-staged-operator-20261017/contract.mjs')).PRIVATE_STATE);\n const aclCommand=\"$ErrorActionPreference='Stop'; & \"+quote(verify)+' -OwnedPath '+quote(out)+'; & '+quote(verify)+' -OwnedPath '+quote(stateParent);\n execFileSync(aclShell,['-NoProfile','-NonInteractive','-Command',aclCommand],{windowsHide:true,stdio:'ignore',timeout:15000,env:aclChildEnvironment(aclShell)});"
+        }
+      ]
+    }
+  ],
+  "unchangedAclScript": {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/verify-owned.ps1",
+    "commit": "6b5ebedecf95c8a1adfda5141bbf3eccf5294d23",
+    "bytes": 1183,
+    "sha256": "523e18c92b3c81c9d2bea7420d7ec6a4594fc7c23b727b279a2fba4bc97dfc3f"
+  },
+  "nativeAuthPrivateActualExecution": false
+}

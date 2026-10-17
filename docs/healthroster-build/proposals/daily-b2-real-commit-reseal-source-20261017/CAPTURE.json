@@ -1,0 +1,32 @@
+{
+  "rootHead": "c03f108679ff4e429db157804411ec6d6758e658",
+  "files": [
+    {
+      "owner": "root",
+      "file": "docs/healthroster-build/proposals/daily-five-stage-producer-hash-forward-20261017/compose.mjs",
+      "commit": "c03f108679ff4e429db157804411ec6d6758e658",
+      "bytes": 8015,
+      "sha256": "6a22ef0bb4089d50325084ee96259b73637052f9e09808cad421febdfabf16cc"
+    },
+    {
+      "owner": "root",
+      "file": "docs/healthroster-build/proposals/daily-five-stage-producer-hash-forward-20261017/MANIFEST.json",
+      "commit": "c03f108679ff4e429db157804411ec6d6758e658",
+      "bytes": 1830,
+      "sha256": "70ca5e9fdd0c3f7f86b1285cf338e8d6936d88ad7c675cd1c6be461dfeafcbdb"
+    },
+    {
+      "owner": "root",
+      "file": "docs/healthroster-build/proposals/daily-five-stage-producer-hash-forward-20261017/test.mjs",
+      "commit": "c03f108679ff4e429db157804411ec6d6758e658",
+      "bytes": 10921,
+      "sha256": "1436d05fa5033be15180d2a1bb8cac70c060cc5ded43de57e83332918dcc55b2"
+    }
+  ],
+  "b2Path": "D:/Development/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/.codex-tmp/daily-genuine-b2-complete-inventory-forward-20261017",
+  "b2ManifestSha256": "29fc5acee6a0dd454516c708edf0b473e0ca27afc8e91dffaee77ec3c4555af8",
+  "actualMaterialization": "NOT_RUN",
+  "native": "NOT_RUN",
+  "originalB2Path": "D:/Development/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/.codex-tmp/daily-genuine-b2-current-read-source-20261017",
+  "originalB2ManifestSha256": "de17d867f5b1a0ca4c3da073c5f173974f185dbbf79f1c07d919c4f18fd178b8"
+}
