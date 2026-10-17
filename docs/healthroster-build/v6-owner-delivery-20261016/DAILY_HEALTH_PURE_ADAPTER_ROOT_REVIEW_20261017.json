@@ -1,0 +1,31 @@
+{
+  "version": "DAILY_HEALTH_PURE_ADAPTER_ROOT_SOURCE_REVIEW_V1",
+  "sourceCommit": "a20a074114ed84173a56cf34c39e97eb8777101b",
+  "predecessor": "b6d4dc6bdd1267bc871c92fb3e5210c2eea63a07",
+  "files": 22,
+  "fullPredecessorReversals": 20,
+  "rootPins": 45,
+  "programmeBytes": 8029,
+  "programmeSha256": "779aff554ca8bce78a7e21520a41574beba211503ab1c79d492eccb6b5ad8ab6",
+  "rootRepeatedTests": {
+    "adapter": 12,
+    "originalRestorationAndTurn": 44,
+    "pass": 56,
+    "fail": 0
+  },
+  "rootFinding": {
+    "code": "EXTRA_POOLED_PID_UNIQUENESS_BLOCKER",
+    "applied": true,
+    "source": "MCP fresh-client verification may reuse B; independently fresh C-after remains mandatory"
+  },
+  "canonicalQualifierAndWeakMapUnchanged": true,
+  "fullCanonicalCatalogueLedgerAndBothBackgroundMaps": true,
+  "realMarkerAndOriginalObservations": true,
+  "originalParentAbortAndFixtureAbsenceRules": true,
+  "backgroundJobsPaused": false,
+  "verdict": "ACCEPT_BOUNDED_PURE_COMPONENT_EXECUTION_SOURCE_ONLY",
+  "native": "NOT_RUN",
+  "restoration": "NOT_RUN",
+  "durableRelease": false,
+  "fullInstallRehearsal": false
+}
