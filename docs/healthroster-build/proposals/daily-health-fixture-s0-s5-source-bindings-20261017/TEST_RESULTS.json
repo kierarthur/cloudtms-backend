@@ -1,0 +1,8 @@
+{
+  "sourceTests": 5,
+  "pass": 5,
+  "stdout": "✔ actual auth harness is source-only TEST login with no bypass or saved-state/current-role inference (0.9616ms)\n✔ identity source rereads active user/session version while me projection cannot certify payment flags (0.458ms)\n✔ S5 binds current ID and genuine signature through actual native generic authorise dispatch (0.4288ms)\n✔ read-only proof is withheld for full-details and transitive lifecycle path (0.4484ms)\n✔ all selected source excerpts and saved harness bytes retain exact pins with explicit Git LF comparison (81.7806ms)\nℹ tests 5\nℹ suites 0\nℹ pass 5\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 180.9148\n",
+  "stderr": "",
+  "authCalls": 0,
+  "nativeCalls": 0
+}

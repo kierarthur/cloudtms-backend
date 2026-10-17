@@ -1,0 +1,69 @@
+  let body = {};
+  try {
+    body = await parseJSONBody(req);
+  } catch {
+    return withCORS(env, req, badRequest('Invalid JSON'));
+  }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) body = {};
+  const duplicateExpenseConfirmed = body.duplicate_expense_confirmation === true
+    || body.duplicateExpenseConfirmation === true;
+  const authoriseRpcFunctionName = duplicateExpenseConfirmed
+    ? 'timesheet_authorise_reviewed_atomic'
+    : 'timesheet_authorise_generic_atomic';
+
+  const requestedTimesheetId = trimStr(timesheetId);
+  if (!requestedTimesheetId) return withCORS(env, req, badRequest('timesheet_id is required'));
+
+  const expectedTimesheetId = firstString(
+    body.expected_timesheet_id,
+    body.expectedTimesheetId,
+    body.current_timesheet_id,
+    body.currentTimesheetId,
+    requestedTimesheetId
+  );
+  if (!expectedTimesheetId) return withCORS(env, req, badRequest('expected_timesheet_id is required'));
+
+  const expectedRowSignature = firstString(
+    body.expected_row_signature,
+    body.expectedRowSignature,
+    body.backend_row_signature,
+    body.backendRowSignature,
+    body.mutation_row_signature,
+    body.mutationRowSignature,
+    body.row_signature,
+    body.rowSignature
+  );
+
+  lifecycleSignatureLog('request_received', {
+    expected_timesheet_id: expectedTimesheetId || null,
+    expected_row_signature_present: !!expectedRowSignature,
+    request_signature: lifecycleSignatureDiagSignature({
+      expected_row_signature: firstString(body.expected_row_signature, body.expectedRowSignature) || null,
+      backend_row_signature: firstString(body.backend_row_signature, body.backendRowSignature) || null,
+      mutation_row_signature: firstString(body.mutation_row_signature, body.mutationRowSignature) || null,
+      row_signature: firstString(body.row_signature, body.rowSignature) || null
+    }),
+    request_signature_fields: {
+      expected_row_signature: Object.prototype.hasOwnProperty.call(body, 'expected_row_signature'),
+      expectedRowSignature: Object.prototype.hasOwnProperty.call(body, 'expectedRowSignature'),
+      backend_row_signature: Object.prototype.hasOwnProperty.call(body, 'backend_row_signature'),
+      backendRowSignature: Object.prototype.hasOwnProperty.call(body, 'backendRowSignature'),
+      mutation_row_signature: Object.prototype.hasOwnProperty.call(body, 'mutation_row_signature'),
+      mutationRowSignature: Object.prototype.hasOwnProperty.call(body, 'mutationRowSignature'),
+      row_signature: Object.prototype.hasOwnProperty.call(body, 'row_signature'),
+      rowSignature: Object.prototype.hasOwnProperty.call(body, 'rowSignature')
+    }
+  });
+
+  const guard = await guardCurrentTimesheetWrite(env, req, requestedTimesheetId, expectedTimesheetId);
+  if (!guard.ok) {
+    lifecycleSignatureLog('guard_failed', {
+      expected_timesheet_id: expectedTimesheetId || null,
+      expected_row_signature: expectedRowSignature || null
+    });
+    return guard.res;
+  }
+
+  const currentTimesheetId = firstString(guard.resolved?.current_timesheet_id, expectedTimesheetId);
+  const sourcePayPermission = await weeklySourceScopedLifecycleActor(env, req, currentTimesheetId, user);
+  if (!sourcePayPermission.ok) return sourcePayPermission.response;
