@@ -1,0 +1,83 @@
+-- HELD SOURCE TEMPLATE. Never installed with an unbound owner block.
+create or replace function private.daily_rate_correction_result_v1(p_operation_id uuid,p_actor_user_id uuid)
+returns jsonb language plpgsql volatile security definer
+set search_path=pg_catalog,public,private,pg_temp
+as $function$
+declare basis jsonb; o private.timesheet_contract_move_operations%rowtype; result jsonb; placement_revision text; reader_before jsonb; retained_binding jsonb; retained_before jsonb;
+ financial jsonb; financial_visible boolean; bank_next_actions jsonb; bank_links jsonb;
+begin
+ basis:=private.daily_rate_correction_health_result_basis_v1(p_operation_id,p_actor_user_id);
+ select to_jsonb(u) into reader_before from public.tms_users u where u.id=p_actor_user_id and u.is_active;
+ if reader_before is null then raise exception 'CORRECTION_RESULT_NOT_VISIBLE' using errcode='42501';end if;
+ select x.* into strict o from private.timesheet_contract_move_operations x where x.id=p_operation_id;
+ -- Verify immutable accepted association by exact indexed native IDs. Old
+ -- receipts need no added scalar and the accepted revision need not be current.
+ -- No history scan, receipt rewrite or Admin-only mutation context is used.
+ if basis->>'state' in('COMPLETE','SUPERSEDED') then
+ select jsonb_build_object('accepted_revision_id',v.id,'accepted_revision_no',v.revision_no::text,
+  'accepted_financial_id',v.financial_snapshot_id,'work_id',w.id,'current_revision_id',w.current_revision_id,
+  'current_revision_no',w.current_revision_no::text,'physical_timesheet_id',v.physical_timesheet_id,
+  'physical_timesheet_version',v.physical_timesheet_version::text,'approved_at_utc',v.approved_at_utc,
+  'sealed_at_utc',v.sealed_at_utc) into strict retained_binding
+ from private.timesheet_contract_move_members m
+ join private.bpay_next_work_revision v on v.id=(o.placement_receipt_json->>'revision_id')::uuid
+  and v.financial_snapshot_id=m.to_financial_id and v.physical_timesheet_id=m.to_timesheet_id
+  and v.physical_timesheet_version=m.to_version
+ join private.bpay_next_work w on w.id=v.work_id and w.id=(o.placement_receipt_json->>'work_id')::uuid
+ where m.operation_id=o.id and m.from_timesheet_id=o.from_timesheet_id
+  and w.original_timesheet_id=o.from_timesheet_id and w.booking_id=m.original_booking_id
+  and w.candidate_id=o.candidate_id and w.contract_id is null and w.origin_kind='DAILY' and w.work_kind='ORDINARY'
+  and v.source_kind='ORDINARY' and v.revision_no>0 and v.approved_at_utc is not null and v.sealed_at_utc is not null;
+  retained_before:=retained_binding;
+ end if;
+ @@BANK_RESULT@@
+ -- These are source-local bindings from the actual independent current reader,
+ -- not inputs to a new service ABI. No Admin/creator/full-visibility default.
+ financial:=private.daily_rate_correction_health_financial_projection_assert_v1(financial,financial_visible);
+ if jsonb_typeof(bank_next_actions) is distinct from 'array' or jsonb_typeof(bank_links) is distinct from 'array' then
+  raise exception 'DAILY_RATE_BANK_RESULT_UNBOUND' using errcode='55000';end if;
+ perform private.daily_rate_correction_health_actions_assert_v1(bank_next_actions||bank_links);
+ if basis->>'state' in('COMPLETE','SUPERSEDED') then
+ select jsonb_build_object('accepted_revision_id',v.id,'accepted_revision_no',v.revision_no::text,
+  'accepted_financial_id',v.financial_snapshot_id,'work_id',w.id,'current_revision_id',w.current_revision_id,
+  'current_revision_no',w.current_revision_no::text,'physical_timesheet_id',v.physical_timesheet_id,
+  'physical_timesheet_version',v.physical_timesheet_version::text,'approved_at_utc',v.approved_at_utc,
+  'sealed_at_utc',v.sealed_at_utc) into strict retained_binding
+ from private.timesheet_contract_move_members m
+ join private.bpay_next_work_revision v on v.id=(o.placement_receipt_json->>'revision_id')::uuid
+  and v.financial_snapshot_id=m.to_financial_id and v.physical_timesheet_id=m.to_timesheet_id
+  and v.physical_timesheet_version=m.to_version
+ join private.bpay_next_work w on w.id=v.work_id and w.id=(o.placement_receipt_json->>'work_id')::uuid
+ where m.operation_id=o.id and m.from_timesheet_id=o.from_timesheet_id
+  and w.original_timesheet_id=o.from_timesheet_id and w.booking_id=m.original_booking_id
+  and w.candidate_id=o.candidate_id and w.contract_id is null and w.origin_kind='DAILY' and w.work_kind='ORDINARY'
+  and v.source_kind='ORDINARY' and v.revision_no>0 and v.approved_at_utc is not null and v.sealed_at_utc is not null;
+  if retained_binding is distinct from retained_before then
+   raise exception 'REVIEW_STALE' using errcode='40001';end if;
+  -- The genuine current-versus-retained reader/call contract is unprovided.
+  -- An accepted ordinal, same physical ID or current pointer alone does not
+  -- establish the permitted current five-field Placement/receipt association.
+  -- Do not substitute accepted history, a billing counter or zero for it.
+  raise exception 'DAILY_RATE_CURRENT_PLACEMENT_READ_UNPROVIDED' using errcode='55000';
+ else placement_revision:='0';end if;
+ -- Actual0955 already supplies current role-safe billing state/summary. Neither
+ -- the accepted receipt nor a terminal child job is substituted for that read.
+ result:=jsonb_build_object('version','DAILY_RATE_CORRECTION_V1','purpose','DAILY_RATE_CORRECTION','operation_id',o.id,
+  'state',basis->'state','state_revision',basis->'state_revision',
+  'placement',jsonb_build_object('status',case when basis->>'state' in('COMPLETE','SUPERSEDED') then 'COMMITTED' else 'NOT_COMMITTED' end,
+    'original_timesheet_id',basis->'physical_timesheet_id','current_timesheet_id',basis->'physical_timesheet_id',
+    'placement_revision',placement_revision,
+    'receipt_id',basis->'placement_receipt_id'),
+  'financial',financial,'billing',basis->'billing','next_actions',bank_next_actions,'links',bank_links);
+ if not exists(select 1 from public.tms_users u where u.id=p_actor_user_id and u.is_active) then
+  raise exception 'CORRECTION_RESULT_NOT_VISIBLE' using errcode='42501';end if;
+ if private.daily_rate_correction_health_result_basis_v1(p_operation_id,p_actor_user_id) is distinct from basis
+  or (select to_jsonb(x) from private.timesheet_contract_move_operations x where x.id=p_operation_id) is distinct from to_jsonb(o)
+  or (select to_jsonb(u) from public.tms_users u where u.id=p_actor_user_id and u.is_active) is distinct from reader_before then
+  raise exception 'REVIEW_STALE' using errcode='40001';end if;
+ return private.daily_rate_correction_public_assert_v1(result,'RESULT');
+ -- No raw private receipt, cut, snapshot, valuation, capability or saved creator
+ -- projection crosses this public boundary. Actual Bank visibility owns IDs.
+end;
+$function$;
+revoke all on function private.daily_rate_correction_result_v1(uuid,uuid) from public,anon,authenticated,service_role;

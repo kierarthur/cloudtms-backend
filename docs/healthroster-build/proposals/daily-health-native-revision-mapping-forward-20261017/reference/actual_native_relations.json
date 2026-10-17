@@ -1,0 +1,986 @@
+[
+  {
+    "acl": [
+      {
+        "grantee": "postgres",
+        "grantable": false,
+        "privilege": "DELETE"
+      },
+      {
+        "grantee": "postgres",
+        "grantable": false,
+        "privilege": "INSERT"
+      },
+      {
+        "grantee": "postgres",
+        "grantable": false,
+        "privilege": "MAINTAIN"
+      },
+      {
+        "grantee": "postgres",
+        "grantable": false,
+        "privilege": "REFERENCES"
+      },
+      {
+        "grantee": "postgres",
+        "grantable": false,
+        "privilege": "SELECT"
+      },
+      {
+        "grantee": "postgres",
+        "grantable": false,
+        "privilege": "TRIGGER"
+      },
+      {
+        "grantee": "postgres",
+        "grantable": false,
+        "privilege": "TRUNCATE"
+      },
+      {
+        "grantee": "postgres",
+        "grantable": false,
+        "privilege": "UPDATE"
+      }
+    ],
+    "rls": false,
+    "kind": "r",
+    "name": "bpay_next_work",
+    "owner": "postgres",
+    "schema": "private",
+    "columns": [
+      {
+        "name": "applied_revision_id",
+        "type": "uuid",
+        "default": null,
+        "identity": "",
+        "not_null": false,
+        "generated": ""
+      },
+      {
+        "name": "approval_state",
+        "type": "text",
+        "default": "'PENDING'::text",
+        "identity": "",
+        "not_null": true,
+        "generated": ""
+      },
+      {
+        "name": "booking_id",
+        "type": "text",
+        "default": null,
+        "identity": "",
+        "not_null": true,
+        "generated": ""
+      },
+      {
+        "name": "candidate_id",
+        "type": "uuid",
+        "default": null,
+        "identity": "",
+        "not_null": true,
+        "generated": ""
+      },
+      {
+        "name": "contract_id",
+        "type": "uuid",
+        "default": null,
+        "identity": "",
+        "not_null": false,
+        "generated": ""
+      },
+      {
+        "name": "created_at_utc",
+        "type": "timestamp with time zone",
+        "default": "transaction_timestamp()",
+        "identity": "",
+        "not_null": true,
+        "generated": ""
+      },
+      {
+        "name": "current_revision_id",
+        "type": "uuid",
+        "default": null,
+        "identity": "",
+        "not_null": false,
+        "generated": ""
+      },
+      {
+        "name": "current_revision_no",
+        "type": "bigint",
+        "default": "0",
+        "identity": "",
+        "not_null": true,
+        "generated": ""
+      },
+      {
+        "name": "id",
+        "type": "uuid",
+        "default": "gen_random_uuid()",
+        "identity": "",
+        "not_null": true,
+        "generated": ""
+      },
+      {
+        "name": "origin_kind",
+        "type": "text",
+        "default": "'CONTRACT'::text",
+        "identity": "",
+        "not_null": true,
+        "generated": ""
+      },
+      {
+        "name": "origin_work_date",
+        "type": "date",
+        "default": null,
+        "identity": "",
+        "not_null": false,
+        "generated": ""
+      },
+      {
+        "name": "original_timesheet_id",
+        "type": "uuid",
+        "default": null,
+        "identity": "",
+        "not_null": true,
+        "generated": ""
+      },
+      {
+        "name": "pay_hold",
+        "type": "boolean",
+        "default": "false",
+        "identity": "",
+        "not_null": true,
+        "generated": ""
+      },
+      {
+        "name": "pay_hold_changed_at_utc",
+        "type": "timestamp with time zone",
+        "default": null,
+        "identity": "",
+        "not_null": false,
+        "generated": ""
+      },
+      {
+        "name": "pay_hold_control_version",
+        "type": "bigint",
+        "default": "0",
+        "identity": "",
+        "not_null": true,
+        "generated": ""
+      },
+      {
+        "name": "pay_hold_financial_id",
+        "type": "uuid",
+        "default": null,
+        "identity": "",
+        "not_null": false,
+        "generated": ""
+      },
+      {
+        "name": "pay_hold_physical_timesheet_id",
+        "type": "uuid",
+        "default": null,
+        "identity": "",
+        "not_null": false,
+        "generated": ""
+      },
+      {
+        "name": "pay_hold_reason",
+        "type": "text",
+        "default": null,
+        "identity": "",
+        "not_null": false,
+        "generated": ""
+      },
+      {
+        "name": "updated_at_utc",
+        "type": "timestamp with time zone",
+        "default": "transaction_timestamp()",
+        "identity": "",
+        "not_null": true,
+        "generated": ""
+      },
+      {
+        "name": "week_ending_date",
+        "type": "date",
+        "default": null,
+        "identity": "",
+        "not_null": true,
+        "generated": ""
+      },
+      {
+        "name": "work_kind",
+        "type": "text",
+        "default": null,
+        "identity": "",
+        "not_null": true,
+        "generated": ""
+      }
+    ],
+    "indexes": [
+      {
+        "name": "bpay_next_work_booking_id_key",
+        "definition": "CREATE UNIQUE INDEX bpay_next_work_booking_id_key ON private.bpay_next_work USING btree (booking_id)"
+      },
+      {
+        "name": "bpay_next_work_candidate_week_idx",
+        "definition": "CREATE INDEX bpay_next_work_candidate_week_idx ON private.bpay_next_work USING btree (candidate_id, week_ending_date, id)"
+      },
+      {
+        "name": "bpay_next_work_id_candidate_id_key",
+        "definition": "CREATE UNIQUE INDEX bpay_next_work_id_candidate_id_key ON private.bpay_next_work USING btree (id, candidate_id)"
+      },
+      {
+        "name": "bpay_next_work_id_original_timesheet_id_key",
+        "definition": "CREATE UNIQUE INDEX bpay_next_work_id_original_timesheet_id_key ON private.bpay_next_work USING btree (id, original_timesheet_id)"
+      },
+      {
+        "name": "bpay_next_work_original_timesheet_id_key",
+        "definition": "CREATE UNIQUE INDEX bpay_next_work_original_timesheet_id_key ON private.bpay_next_work USING btree (original_timesheet_id)"
+      },
+      {
+        "name": "bpay_next_work_pending_idx",
+        "definition": "CREATE INDEX bpay_next_work_pending_idx ON private.bpay_next_work USING btree (candidate_id, id) WHERE (approval_state = 'PENDING'::text)"
+      },
+      {
+        "name": "bpay_next_work_pkey",
+        "definition": "CREATE UNIQUE INDEX bpay_next_work_pkey ON private.bpay_next_work USING btree (id)"
+      },
+      {
+        "name": "bpay_next_work_unapplied_idx",
+        "definition": "CREATE INDEX bpay_next_work_unapplied_idx ON private.bpay_next_work USING btree (candidate_id, id) WHERE (current_revision_id IS DISTINCT FROM applied_revision_id)"
+      },
+      {
+        "name": "bpay_next_workbench_seed_work_idx",
+        "definition": "CREATE INDEX bpay_next_workbench_seed_work_idx ON private.bpay_next_work USING btree (id) WHERE ((approval_state = ANY (ARRAY['APPROVED'::text, 'WITHDRAWN'::text])) AND ((current_revision_id IS NOT NULL) OR (applied_revision_id IS NOT NULL)))"
+      }
+    ],
+    "options": [],
+    "force_rls": false,
+    "constraints": [
+      {
+        "name": "bpay_next_work_applied_revision_fk",
+        "type": "f",
+        "deferred": false,
+        "validated": true,
+        "deferrable": true,
+        "definition": "FOREIGN KEY (id, applied_revision_id) REFERENCES private.bpay_next_work_revision(work_id, id) ON DELETE RESTRICT DEFERRABLE"
+      },
+      {
+        "name": "bpay_next_work_approval_state_check",
+        "type": "c",
+        "deferred": false,
+        "validated": true,
+        "deferrable": false,
+        "definition": "CHECK (approval_state = ANY (ARRAY['PENDING'::text, 'APPROVED'::text, 'WITHDRAWN'::text]))"
+      },
+      {
+        "name": "bpay_next_work_booking_id_check",
+        "type": "c",
+        "deferred": false,
+        "validated": true,
+        "deferrable": false,
+        "definition": "CHECK (char_length(booking_id) >= 1 AND char_length(booking_id) <= 200)"
+      },
+      {
+        "name": "bpay_next_work_booking_id_key",
+        "type": "u",
+        "deferred": false,
+        "validated": true,
+        "deferrable": false,
+        "definition": "UNIQUE (booking_id)"
+      },
+      {
+        "name": "bpay_next_work_candidate_id_fkey",
+        "type": "f",
+        "deferred": false,
+        "validated": true,
+        "deferrable": false,
+        "definition": "FOREIGN KEY (candidate_id) REFERENCES candidates(id) ON DELETE RESTRICT"
+      },
+      {
+        "name": "bpay_next_work_check",
+        "type": "c",
+        "deferred": false,
+        "validated": true,
+        "deferrable": false,
+        "definition": "CHECK ((approval_state = 'APPROVED'::text) = (current_revision_id IS NOT NULL))"
+      },
+      {
+        "name": "bpay_next_work_contract_id_fkey",
+        "type": "f",
+        "deferred": false,
+        "validated": true,
+        "deferrable": false,
+        "definition": "FOREIGN KEY (contract_id) REFERENCES contracts(id) ON DELETE RESTRICT"
+      },
+      {
+        "name": "bpay_next_work_current_revision_fk",
+        "type": "f",
+        "deferred": false,
+        "validated": true,
+        "deferrable": true,
+        "definition": "FOREIGN KEY (id, current_revision_id) REFERENCES private.bpay_next_work_revision(work_id, id) ON DELETE RESTRICT DEFERRABLE"
+      },
+      {
+        "name": "bpay_next_work_current_revision_no_check",
+        "type": "c",
+        "deferred": false,
+        "validated": true,
+        "deferrable": false,
+        "definition": "CHECK (current_revision_no >= 0)"
+      },
+      {
+        "name": "bpay_next_work_id_candidate_id_key",
+        "type": "u",
+        "deferred": false,
+        "validated": true,
+        "deferrable": false,
+        "definition": "UNIQUE (id, candidate_id)"
+      },
+      {
+        "name": "bpay_next_work_id_original_timesheet_id_key",
+        "type": "u",
+        "deferred": false,
+        "validated": true,
+        "deferrable": false,
+        "definition": "UNIQUE (id, original_timesheet_id)"
+      },
+      {
+        "name": "bpay_next_work_origin_identity_check",
+        "type": "c",
+        "deferred": false,
+        "validated": true,
+        "deferrable": false,
+        "definition": "CHECK (origin_kind = 'CONTRACT'::text AND contract_id IS NOT NULL AND origin_work_date IS NULL OR origin_kind = 'DAILY'::text AND contract_id IS NULL AND work_kind = 'ORDINARY'::text AND origin_work_date IS NOT NULL)"
+      },
+      {
+        "name": "bpay_next_work_original_timesheet_id_fkey",
+        "type": "f",
+        "deferred": false,
+        "validated": true,
+        "deferrable": false,
+        "definition": "FOREIGN KEY (original_timesheet_id) REFERENCES timesheets(timesheet_id) ON DELETE RESTRICT"
+      },
+      {
+        "name": "bpay_next_work_original_timesheet_id_key",
+        "type": "u",
+        "deferred": false,
+        "validated": true,
+        "deferrable": false,
+        "definition": "UNIQUE (original_timesheet_id)"
+      },
+      {
+        "name": "bpay_next_work_pay_hold_control_version_check",
+        "type": "c",
+        "deferred": false,
+        "validated": true,
+        "deferrable": false,
+        "definition": "CHECK (pay_hold_control_version >= 0)"
+      },
+      {
+        "name": "bpay_next_work_pkey",
+        "type": "p",
+        "deferred": false,
+        "validated": true,
+        "deferrable": false,
+        "definition": "PRIMARY KEY (id)"
+      },
+      {
+        "name": "bpay_next_work_work_kind_check",
+        "type": "c",
+        "deferred": false,
+        "validated": true,
+        "deferrable": false,
+        "definition": "CHECK (work_kind = ANY (ARRAY['ORDINARY'::text, 'SOURCE'::text, 'EXPENSE'::text, 'ADJUSTMENT'::text]))"
+      }
+    ],
+    "view_definition_sha256": null
+  },
+  {
+    "acl": [
+      {
+        "grantee": "postgres",
+        "grantable": false,
+        "privilege": "DELETE"
+      },
+      {
+        "grantee": "postgres",
+        "grantable": false,
+        "privilege": "INSERT"
+      },
+      {
+        "grantee": "postgres",
+        "grantable": false,
+        "privilege": "MAINTAIN"
+      },
+      {
+        "grantee": "postgres",
+        "grantable": false,
+        "privilege": "REFERENCES"
+      },
+      {
+        "grantee": "postgres",
+        "grantable": false,
+        "privilege": "SELECT"
+      },
+      {
+        "grantee": "postgres",
+        "grantable": false,
+        "privilege": "TRIGGER"
+      },
+      {
+        "grantee": "postgres",
+        "grantable": false,
+        "privilege": "TRUNCATE"
+      },
+      {
+        "grantee": "postgres",
+        "grantable": false,
+        "privilege": "UPDATE"
+      }
+    ],
+    "rls": false,
+    "kind": "r",
+    "name": "bpay_next_work_revision",
+    "owner": "postgres",
+    "schema": "private",
+    "columns": [
+      {
+        "name": "approved_at_utc",
+        "type": "timestamp with time zone",
+        "default": null,
+        "identity": "",
+        "not_null": false,
+        "generated": ""
+      },
+      {
+        "name": "approved_source_ex_vat",
+        "type": "numeric(18,2)",
+        "default": null,
+        "identity": "",
+        "not_null": true,
+        "generated": ""
+      },
+      {
+        "name": "band_label",
+        "type": "text",
+        "default": null,
+        "identity": "",
+        "not_null": false,
+        "generated": ""
+      },
+      {
+        "name": "candidate_display_name",
+        "type": "text",
+        "default": null,
+        "identity": "",
+        "not_null": true,
+        "generated": ""
+      },
+      {
+        "name": "candidate_reference",
+        "type": "text",
+        "default": null,
+        "identity": "",
+        "not_null": false,
+        "generated": ""
+      },
+      {
+        "name": "certified_zero",
+        "type": "boolean",
+        "default": "false",
+        "identity": "",
+        "not_null": true,
+        "generated": ""
+      },
+      {
+        "name": "client_display_name",
+        "type": "text",
+        "default": null,
+        "identity": "",
+        "not_null": true,
+        "generated": ""
+      },
+      {
+        "name": "created_at_utc",
+        "type": "timestamp with time zone",
+        "default": "transaction_timestamp()",
+        "identity": "",
+        "not_null": true,
+        "generated": ""
+      },
+      {
+        "name": "currency",
+        "type": "text",
+        "default": "'GBP'::text",
+        "identity": "",
+        "not_null": true,
+        "generated": ""
+      },
+      {
+        "name": "daily_approval_evidence_json",
+        "type": "jsonb",
+        "default": null,
+        "identity": "",
+        "not_null": false,
+        "generated": ""
+      },
+      {
+        "name": "detail_kind",
+        "type": "text",
+        "default": null,
+        "identity": "",
+        "not_null": true,
+        "generated": ""
+      },
+      {
+        "name": "expected_line_count",
+        "type": "integer",
+        "default": null,
+        "identity": "",
+        "not_null": true,
+        "generated": ""
+      },
+      {
+        "name": "expected_rate_schedule_count",
+        "type": "integer",
+        "default": "0",
+        "identity": "",
+        "not_null": true,
+        "generated": ""
+      },
+      {
+        "name": "financial_snapshot_id",
+        "type": "uuid",
+        "default": null,
+        "identity": "",
+        "not_null": false,
+        "generated": ""
+      },
+      {
+        "name": "id",
+        "type": "uuid",
+        "default": "gen_random_uuid()",
+        "identity": "",
+        "not_null": true,
+        "generated": ""
+      },
+      {
+        "name": "job_title",
+        "type": "text",
+        "default": null,
+        "identity": "",
+        "not_null": false,
+        "generated": ""
+      },
+      {
+        "name": "payment_treatment_approval_revision_id",
+        "type": "uuid",
+        "default": null,
+        "identity": "",
+        "not_null": false,
+        "generated": ""
+      },
+      {
+        "name": "physical_timesheet_id",
+        "type": "uuid",
+        "default": null,
+        "identity": "",
+        "not_null": true,
+        "generated": ""
+      },
+      {
+        "name": "physical_timesheet_version",
+        "type": "integer",
+        "default": null,
+        "identity": "",
+        "not_null": true,
+        "generated": ""
+      },
+      {
+        "name": "revision_no",
+        "type": "bigint",
+        "default": null,
+        "identity": "",
+        "not_null": true,
+        "generated": ""
+      },
+      {
+        "name": "sealed_at_utc",
+        "type": "timestamp with time zone",
+        "default": null,
+        "identity": "",
+        "not_null": false,
+        "generated": ""
+      },
+      {
+        "name": "source_event_id",
+        "type": "uuid",
+        "default": null,
+        "identity": "",
+        "not_null": false,
+        "generated": ""
+      },
+      {
+        "name": "source_head_id",
+        "type": "uuid",
+        "default": null,
+        "identity": "",
+        "not_null": false,
+        "generated": ""
+      },
+      {
+        "name": "source_inventory_digest",
+        "type": "bytea",
+        "default": null,
+        "identity": "",
+        "not_null": false,
+        "generated": ""
+      },
+      {
+        "name": "source_kind",
+        "type": "text",
+        "default": null,
+        "identity": "",
+        "not_null": true,
+        "generated": ""
+      },
+      {
+        "name": "source_pay_channel",
+        "type": "text",
+        "default": null,
+        "identity": "",
+        "not_null": true,
+        "generated": ""
+      },
+      {
+        "name": "source_rate_authority_kind",
+        "type": "text",
+        "default": null,
+        "identity": "",
+        "not_null": false,
+        "generated": ""
+      },
+      {
+        "name": "source_rate_default_id",
+        "type": "uuid",
+        "default": null,
+        "identity": "",
+        "not_null": false,
+        "generated": ""
+      },
+      {
+        "name": "source_rate_override_id",
+        "type": "uuid",
+        "default": null,
+        "identity": "",
+        "not_null": false,
+        "generated": ""
+      },
+      {
+        "name": "source_umbrella_id",
+        "type": "uuid",
+        "default": null,
+        "identity": "",
+        "not_null": false,
+        "generated": ""
+      },
+      {
+        "name": "timesheet_reference",
+        "type": "text",
+        "default": null,
+        "identity": "",
+        "not_null": false,
+        "generated": ""
+      },
+      {
+        "name": "valuation_policy_id",
+        "type": "uuid",
+        "default": "private.bpay_next_current_valuation_policy_id_v1()",
+        "identity": "",
+        "not_null": true,
+        "generated": ""
+      },
+      {
+        "name": "week_ending_date",
+        "type": "date",
+        "default": null,
+        "identity": "",
+        "not_null": true,
+        "generated": ""
+      },
+      {
+        "name": "work_id",
+        "type": "uuid",
+        "default": null,
+        "identity": "",
+        "not_null": true,
+        "generated": ""
+      }
+    ],
+    "indexes": [
+      {
+        "name": "bpay_next_revision_work_idx",
+        "definition": "CREATE INDEX bpay_next_revision_work_idx ON private.bpay_next_work_revision USING btree (work_id, revision_no, id)"
+      },
+      {
+        "name": "bpay_next_snooze_revision_candidate_idx",
+        "definition": "CREATE INDEX bpay_next_snooze_revision_candidate_idx ON private.bpay_next_work_revision USING btree (\"left\"(lower(candidate_display_name), 512) COLLATE \"C\", work_id, id)"
+      },
+      {
+        "name": "bpay_next_snooze_revision_week_idx",
+        "definition": "CREATE INDEX bpay_next_snooze_revision_week_idx ON private.bpay_next_work_revision USING btree (week_ending_date, work_id, id)"
+      },
+      {
+        "name": "bpay_next_work_revision_pkey",
+        "definition": "CREATE UNIQUE INDEX bpay_next_work_revision_pkey ON private.bpay_next_work_revision USING btree (id)"
+      },
+      {
+        "name": "bpay_next_work_revision_snooze_physical_idx",
+        "definition": "CREATE INDEX bpay_next_work_revision_snooze_physical_idx ON private.bpay_next_work_revision USING btree (physical_timesheet_id, physical_timesheet_version, work_id, id) WHERE (sealed_at_utc IS NOT NULL)"
+      },
+      {
+        "name": "bpay_next_work_revision_source_event_id_key",
+        "definition": "CREATE UNIQUE INDEX bpay_next_work_revision_source_event_id_key ON private.bpay_next_work_revision USING btree (source_event_id)"
+      },
+      {
+        "name": "bpay_next_work_revision_work_id_id_key",
+        "definition": "CREATE UNIQUE INDEX bpay_next_work_revision_work_id_id_key ON private.bpay_next_work_revision USING btree (work_id, id)"
+      },
+      {
+        "name": "bpay_next_work_revision_work_id_revision_no_key",
+        "definition": "CREATE UNIQUE INDEX bpay_next_work_revision_work_id_revision_no_key ON private.bpay_next_work_revision USING btree (work_id, revision_no)"
+      }
+    ],
+    "options": [],
+    "force_rls": false,
+    "constraints": [
+      {
+        "name": "bpay_next_revision_daily_evidence_shape_check",
+        "type": "c",
+        "deferred": false,
+        "validated": true,
+        "deferrable": false,
+        "definition": "CHECK (daily_approval_evidence_json IS NULL OR jsonb_typeof(daily_approval_evidence_json) = 'object'::text)"
+      },
+      {
+        "name": "bpay_next_revision_source_inventory_digest_check",
+        "type": "c",
+        "deferred": false,
+        "validated": true,
+        "deferrable": false,
+        "definition": "CHECK (source_inventory_digest IS NULL OR octet_length(source_inventory_digest) = 32 AND (source_kind = ANY (ARRAY['SOURCE'::text, 'PROTECTED'::text])) AND source_event_id IS NOT NULL AND (source_kind <> 'PROTECTED'::text OR source_head_id IS NOT NULL))"
+      },
+      {
+        "name": "bpay_next_treatment_approval_distinct_check",
+        "type": "c",
+        "deferred": false,
+        "validated": true,
+        "deferrable": false,
+        "definition": "CHECK (payment_treatment_approval_revision_id IS NULL OR payment_treatment_approval_revision_id <> id AND source_event_id IS NULL)"
+      },
+      {
+        "name": "bpay_next_treatment_approval_revision_fk",
+        "type": "f",
+        "deferred": false,
+        "validated": true,
+        "deferrable": false,
+        "definition": "FOREIGN KEY (work_id, payment_treatment_approval_revision_id) REFERENCES private.bpay_next_work_revision(work_id, id) ON DELETE RESTRICT"
+      },
+      {
+        "name": "bpay_next_work_revision_candidate_display_name_check",
+        "type": "c",
+        "deferred": false,
+        "validated": true,
+        "deferrable": false,
+        "definition": "CHECK (octet_length(candidate_display_name) <= 8192)"
+      },
+      {
+        "name": "bpay_next_work_revision_check",
+        "type": "c",
+        "deferred": false,
+        "validated": true,
+        "deferrable": false,
+        "definition": "CHECK ((approved_at_utc IS NULL) = (sealed_at_utc IS NULL))"
+      },
+      {
+        "name": "bpay_next_work_revision_check1",
+        "type": "c",
+        "deferred": false,
+        "validated": true,
+        "deferrable": false,
+        "definition": "CHECK (expected_line_count <> 0 OR certified_zero)"
+      },
+      {
+        "name": "bpay_next_work_revision_check2",
+        "type": "c",
+        "deferred": false,
+        "validated": true,
+        "deferrable": false,
+        "definition": "CHECK (NOT certified_zero OR approved_source_ex_vat = 0::numeric)"
+      },
+      {
+        "name": "bpay_next_work_revision_client_display_name_check",
+        "type": "c",
+        "deferred": false,
+        "validated": true,
+        "deferrable": false,
+        "definition": "CHECK (octet_length(client_display_name) <= 8192)"
+      },
+      {
+        "name": "bpay_next_work_revision_currency_check",
+        "type": "c",
+        "deferred": false,
+        "validated": true,
+        "deferrable": false,
+        "definition": "CHECK (currency = 'GBP'::text)"
+      },
+      {
+        "name": "bpay_next_work_revision_detail_kind_check",
+        "type": "c",
+        "deferred": false,
+        "validated": true,
+        "deferrable": false,
+        "definition": "CHECK (detail_kind = ANY (ARRAY['SHIFT'::text, 'AGGREGATE'::text, 'FIXED'::text]))"
+      },
+      {
+        "name": "bpay_next_work_revision_expected_line_count_check",
+        "type": "c",
+        "deferred": false,
+        "validated": true,
+        "deferrable": false,
+        "definition": "CHECK (expected_line_count >= 0)"
+      },
+      {
+        "name": "bpay_next_work_revision_expected_rate_schedule_count_check",
+        "type": "c",
+        "deferred": false,
+        "validated": true,
+        "deferrable": false,
+        "definition": "CHECK (expected_rate_schedule_count >= 0)"
+      },
+      {
+        "name": "bpay_next_work_revision_financial_snapshot_id_fkey",
+        "type": "f",
+        "deferred": false,
+        "validated": true,
+        "deferrable": false,
+        "definition": "FOREIGN KEY (financial_snapshot_id) REFERENCES timesheets_financials(id) ON DELETE RESTRICT"
+      },
+      {
+        "name": "bpay_next_work_revision_job_title_check",
+        "type": "c",
+        "deferred": false,
+        "validated": true,
+        "deferrable": false,
+        "definition": "CHECK (job_title IS NULL OR octet_length(job_title) <= 8192)"
+      },
+      {
+        "name": "bpay_next_work_revision_physical_timesheet_id_fkey",
+        "type": "f",
+        "deferred": false,
+        "validated": true,
+        "deferrable": false,
+        "definition": "FOREIGN KEY (physical_timesheet_id) REFERENCES timesheets(timesheet_id) ON DELETE RESTRICT"
+      },
+      {
+        "name": "bpay_next_work_revision_physical_timesheet_version_check",
+        "type": "c",
+        "deferred": false,
+        "validated": true,
+        "deferrable": false,
+        "definition": "CHECK (physical_timesheet_version > 0)"
+      },
+      {
+        "name": "bpay_next_work_revision_pkey",
+        "type": "p",
+        "deferred": false,
+        "validated": true,
+        "deferrable": false,
+        "definition": "PRIMARY KEY (id)"
+      },
+      {
+        "name": "bpay_next_work_revision_revision_no_check",
+        "type": "c",
+        "deferred": false,
+        "validated": true,
+        "deferrable": false,
+        "definition": "CHECK (revision_no > 0)"
+      },
+      {
+        "name": "bpay_next_work_revision_source_event_id_key",
+        "type": "u",
+        "deferred": false,
+        "validated": true,
+        "deferrable": false,
+        "definition": "UNIQUE (source_event_id)"
+      },
+      {
+        "name": "bpay_next_work_revision_source_kind_check",
+        "type": "c",
+        "deferred": false,
+        "validated": true,
+        "deferrable": false,
+        "definition": "CHECK (source_kind = ANY (ARRAY['ORDINARY'::text, 'SOURCE'::text, 'PROTECTED'::text, 'EXPENSE'::text, 'ADJUSTMENT'::text]))"
+      },
+      {
+        "name": "bpay_next_work_revision_source_pay_channel_check",
+        "type": "c",
+        "deferred": false,
+        "validated": true,
+        "deferrable": false,
+        "definition": "CHECK (source_pay_channel = ANY (ARRAY['PAYE'::text, 'UMBRELLA'::text]))"
+      },
+      {
+        "name": "bpay_next_work_revision_source_rate_authority_kind_check",
+        "type": "c",
+        "deferred": false,
+        "validated": true,
+        "deferrable": false,
+        "definition": "CHECK (source_rate_authority_kind IS NULL OR char_length(source_rate_authority_kind) >= 1 AND char_length(source_rate_authority_kind) <= 128)"
+      },
+      {
+        "name": "bpay_next_work_revision_source_umbrella_id_fkey",
+        "type": "f",
+        "deferred": false,
+        "validated": true,
+        "deferrable": false,
+        "definition": "FOREIGN KEY (source_umbrella_id) REFERENCES umbrellas(id) ON DELETE RESTRICT"
+      },
+      {
+        "name": "bpay_next_work_revision_valuation_policy_id_fkey",
+        "type": "f",
+        "deferred": false,
+        "validated": true,
+        "deferrable": false,
+        "definition": "FOREIGN KEY (valuation_policy_id) REFERENCES private.bpay_next_valuation_policy(id) ON DELETE RESTRICT"
+      },
+      {
+        "name": "bpay_next_work_revision_work_id_fkey",
+        "type": "f",
+        "deferred": false,
+        "validated": true,
+        "deferrable": false,
+        "definition": "FOREIGN KEY (work_id) REFERENCES private.bpay_next_work(id) ON DELETE RESTRICT"
+      },
+      {
+        "name": "bpay_next_work_revision_work_id_id_key",
+        "type": "u",
+        "deferred": false,
+        "validated": true,
+        "deferrable": false,
+        "definition": "UNIQUE (work_id, id)"
+      },
+      {
+        "name": "bpay_next_work_revision_work_id_revision_no_key",
+        "type": "u",
+        "deferred": false,
+        "validated": true,
+        "deferrable": false,
+        "definition": "UNIQUE (work_id, revision_no)"
+      }
+    ],
+    "view_definition_sha256": null
+  }
+]

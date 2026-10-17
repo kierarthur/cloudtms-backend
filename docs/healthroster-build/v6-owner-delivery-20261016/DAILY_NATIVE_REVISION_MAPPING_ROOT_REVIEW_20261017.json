@@ -1,0 +1,33 @@
+{
+  "version": "ROOT_DAILY_NATIVE_REVISION_MAPPING_SOURCE_REVIEW_V1",
+  "authorCommit": "39d4e2d23e4865c74d775bab6a0c825879b36b39",
+  "authorManifestSha256": "7369ad76c56be6fadb807cd3df03d8b234cbe0aacc286347aee2102e65f52d5e",
+  "authorGitExactFiles": 28,
+  "independentPeerCommit": "b51abd4076fa6a7517d31156b747a6888c42e167",
+  "peerManifestSha256": "8e8b0014394add594eb42d7c8ee869ce7bf7e4c090d734e1529765a42df97249",
+  "peerGitExactFiles": 40,
+  "peerVerdict": "ACCEPT_BOUNDED_SOURCE_CORRECTION",
+  "rootIndependentSourceTests": 7,
+  "rootIndependentActualSelectGuardASTCases": 24,
+  "wholeParentBodiesReversed": 2,
+  "literalHunks": 7,
+  "helperGrammar": {
+    "PostgreSQL": 17,
+    "statements": 2,
+    "PLpgSQLBodies": 1,
+    "substitutions": 0
+  },
+  "ResultGrammar": "NOT_PARSED_UNPROVIDED_BANK_SLOT",
+  "rootVerdict": "ACCEPT_INDEPENDENT_HEALTH_SOURCE_CORRECTIONS_ONLY",
+  "technicalFixesApplied": 1,
+  "technicalFixesRejected": 0,
+  "ownerBusinessDecisionRequired": false,
+  "currentPlacementProjection": "EXPLICIT_DEPENDENCY_REFUSAL_UNIMPLEMENTED",
+  "unprovidedGenuineBankJoins": 3,
+  "runtimeTargets": 0,
+  "native": "NOT_RUN",
+  "repositoryRelationMetadataIsHostedCatalogueProof": false,
+  "originalReceiptHistoryChanged": false,
+  "originalSchema92Changed": false,
+  "sourceGateRepeated": "NOT_REQUIRED_NO_RUNTIME_MOUNT"
+}

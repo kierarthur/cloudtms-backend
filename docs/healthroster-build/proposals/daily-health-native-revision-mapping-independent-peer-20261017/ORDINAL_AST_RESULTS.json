@@ -1,0 +1,110 @@
+{
+  "sourceSha256": "90b49c5606b136e95bda3f2d2623a022085ed506df221e2a1201e4a5bab3a61d",
+  "grammarStatements": 2,
+  "plpgsqlBodies": 1,
+  "actualSelectAstStrict": true,
+  "publisherBeforeOrdinalBeforeReceipt": true,
+  "controlledAstCases": [
+    {
+      "case": "canonical_native_int63_1",
+      "status": "ACCEPTED_SOURCE_ASSOCIATION",
+      "ordinal": "1"
+    },
+    {
+      "case": "canonical_native_int63_9007199254740993",
+      "status": "ACCEPTED_SOURCE_ASSOCIATION",
+      "ordinal": "9007199254740993"
+    },
+    {
+      "case": "canonical_native_int63_9223372036854775807",
+      "status": "ACCEPTED_SOURCE_ASSOCIATION",
+      "ordinal": "9223372036854775807"
+    },
+    {
+      "case": "wrong_v_id",
+      "status": "STRICT_CARDINALITY_REFUSAL"
+    },
+    {
+      "case": "wrong_w_id",
+      "status": "STRICT_CARDINALITY_REFUSAL"
+    },
+    {
+      "case": "wrong_v_financial_snapshot_id",
+      "status": "STRICT_CARDINALITY_REFUSAL"
+    },
+    {
+      "case": "wrong_w_current_revision_id",
+      "status": "STRICT_CARDINALITY_REFUSAL"
+    },
+    {
+      "case": "wrong_w_current_revision_no",
+      "status": "STRICT_CARDINALITY_REFUSAL"
+    },
+    {
+      "case": "wrong_v_physical_timesheet_id",
+      "status": "STRICT_CARDINALITY_REFUSAL"
+    },
+    {
+      "case": "wrong_v_physical_timesheet_version",
+      "status": "STRICT_CARDINALITY_REFUSAL"
+    },
+    {
+      "case": "wrong_w_original_timesheet_id",
+      "status": "STRICT_CARDINALITY_REFUSAL"
+    },
+    {
+      "case": "wrong_w_booking_id",
+      "status": "STRICT_CARDINALITY_REFUSAL"
+    },
+    {
+      "case": "wrong_w_candidate_id",
+      "status": "STRICT_CARDINALITY_REFUSAL"
+    },
+    {
+      "case": "wrong_w_contract_id",
+      "status": "STRICT_CARDINALITY_REFUSAL"
+    },
+    {
+      "case": "wrong_w_origin_kind",
+      "status": "STRICT_CARDINALITY_REFUSAL"
+    },
+    {
+      "case": "wrong_w_work_kind",
+      "status": "STRICT_CARDINALITY_REFUSAL"
+    },
+    {
+      "case": "wrong_w_approval_state",
+      "status": "STRICT_CARDINALITY_REFUSAL"
+    },
+    {
+      "case": "wrong_v_source_kind",
+      "status": "STRICT_CARDINALITY_REFUSAL"
+    },
+    {
+      "case": "wrong_v_approved_at_utc",
+      "status": "STRICT_CARDINALITY_REFUSAL"
+    },
+    {
+      "case": "wrong_v_sealed_at_utc",
+      "status": "STRICT_CARDINALITY_REFUSAL"
+    },
+    {
+      "case": "missing",
+      "status": "STRICT_CARDINALITY_REFUSAL"
+    },
+    {
+      "case": "ambiguous",
+      "status": "STRICT_CARDINALITY_REFUSAL"
+    },
+    {
+      "case": "nonpositive_0",
+      "status": "ORDINAL_GUARD_REFUSAL"
+    },
+    {
+      "case": "nonpositive_-1",
+      "status": "ORDINAL_GUARD_REFUSAL"
+    }
+  ],
+  "native": "NOT_RUN",
+  "limit": "Controlled rows evaluate the actual Health join/guard AST; no Bank implementation or native publication is proved."
+}

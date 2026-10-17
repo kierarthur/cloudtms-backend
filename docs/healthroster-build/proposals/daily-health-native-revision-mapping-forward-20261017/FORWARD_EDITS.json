@@ -1,0 +1,63 @@
+{
+  "version": "DAILY_HEALTH_NATIVE_REVISION_MAPPING_EDITS_V1",
+  "completeSourceParent": "4b1067c859f921855989eb7f147636cebf9286c3",
+  "rootSourceParent": "bb6252f46597cf15a6450adfb2af27c1e615fb3d",
+  "independentTechnicalPeer": "3dcee2696454c64f99d158a261d0ba5db44f12fa",
+  "edits": [
+    {
+      "file": "health/10_revision_apply.sqlinc",
+      "completeParent": "reference/parent/health/10_revision_apply.sqlinc",
+      "parentCommit": "4b1067c859f921855989eb7f147636cebf9286c3",
+      "parentPath": "docs/healthroster-build/proposals/daily-health-composer-current0910-forward-20261017/health/10_revision_apply.sqlinc",
+      "beforeSha256": "58cb6c60005c2e731cd4fe31b26c62aa70a2b4a10bf051ff1ef5e69783a28adf",
+      "afterSha256": "90b49c5606b136e95bda3f2d2623a022085ed506df221e2a1201e4a5bab3a61d",
+      "hunks": [
+        {
+          "before": "as $function$\ndeclare basis jsonb;",
+          "after": "as $function$\n<<native_apply>>\ndeclare basis jsonb;"
+        },
+        {
+          "before": " command uuid; work_id uuid; revision_id uuid; now_utc timestamptz;",
+          "after": " command uuid; work_id uuid; revision_id uuid; accepted_revision_no bigint; now_utc timestamptz;"
+        },
+        {
+          "before": " receipt:=jsonb_build_object('version','DAILY_RATE_REVISION_RECEIPT_V1'",
+          "after": " -- Read the actual published revision ordinal after publication. Both IDs and\n -- the new approved financial row are independently bound; no preview+1,\n -- operation billing counter or added publisher return field is authority.\n select v.revision_no into strict accepted_revision_no\n from private.bpay_next_work_revision v join private.bpay_next_work w on w.id=v.work_id\n where v.id=native_apply.revision_id and w.id=native_apply.work_id and w.current_revision_id=v.id\n  and w.current_revision_no=v.revision_no and v.financial_snapshot_id=native_apply.financial\n  and v.physical_timesheet_id=o.from_timesheet_id and v.physical_timesheet_version=m.from_version\n  and w.original_timesheet_id=o.from_timesheet_id and w.booking_id=m.original_booking_id\n  and w.candidate_id=o.candidate_id and w.contract_id is null and w.origin_kind='DAILY'\n  and w.work_kind='ORDINARY' and w.approval_state='APPROVED'\n  and v.source_kind='ORDINARY' and v.approved_at_utc is not null and v.sealed_at_utc is not null;\n if accepted_revision_no is null or accepted_revision_no<=0 then\n  raise exception 'DAILY_RATE_ACCEPTED_REVISION_ORDINAL_UNBOUND' using errcode='23514';end if;\n receipt:=jsonb_build_object('version','DAILY_RATE_REVISION_RECEIPT_V1'"
+        },
+        {
+          "before": "'placement_revision',o.billing_revision::text",
+          "after": "'placement_revision',accepted_revision_no::text"
+        }
+      ],
+      "fullRawReverse": true
+    },
+    {
+      "file": "templates/03_result.sql.tmpl",
+      "completeParent": "reference/parent/templates/03_result.sql.tmpl",
+      "parentCommit": "4b1067c859f921855989eb7f147636cebf9286c3",
+      "parentPath": "docs/healthroster-build/proposals/daily-health-composer-current0910-forward-20261017/templates/03_result.sql.tmpl",
+      "beforeSha256": "325f48bdc55048c42392105d055bc8fe2dcd138f4d4b9ec6a1d1e77c7f42dc1b",
+      "afterSha256": "81e786d99c75a14b0896ffe53d4e9d3b71de15c2c91f3ef94ada5a33eae95768",
+      "hunks": [
+        {
+          "before": " result jsonb; placement_revision text; reader_before jsonb;",
+          "after": " result jsonb; placement_revision text; reader_before jsonb; retained_binding jsonb; retained_before jsonb;"
+        },
+        {
+          "before": " @@BANK_RESULT@@",
+          "after": " -- Verify immutable accepted association by exact indexed native IDs. Old\n -- receipts need no added scalar and the accepted revision need not be current.\n -- No history scan, receipt rewrite or Admin-only mutation context is used.\n if basis->>'state' in('COMPLETE','SUPERSEDED') then\n select jsonb_build_object('accepted_revision_id',v.id,'accepted_revision_no',v.revision_no::text,\n  'accepted_financial_id',v.financial_snapshot_id,'work_id',w.id,'current_revision_id',w.current_revision_id,\n  'current_revision_no',w.current_revision_no::text,'physical_timesheet_id',v.physical_timesheet_id,\n  'physical_timesheet_version',v.physical_timesheet_version::text,'approved_at_utc',v.approved_at_utc,\n  'sealed_at_utc',v.sealed_at_utc) into strict retained_binding\n from private.timesheet_contract_move_members m\n join private.bpay_next_work_revision v on v.id=(o.placement_receipt_json->>'revision_id')::uuid\n  and v.financial_snapshot_id=m.to_financial_id and v.physical_timesheet_id=m.to_timesheet_id\n  and v.physical_timesheet_version=m.to_version\n join private.bpay_next_work w on w.id=v.work_id and w.id=(o.placement_receipt_json->>'work_id')::uuid\n where m.operation_id=o.id and m.from_timesheet_id=o.from_timesheet_id\n  and w.original_timesheet_id=o.from_timesheet_id and w.booking_id=m.original_booking_id\n  and w.candidate_id=o.candidate_id and w.contract_id is null and w.origin_kind='DAILY' and w.work_kind='ORDINARY'\n  and v.source_kind='ORDINARY' and v.revision_no>0 and v.approved_at_utc is not null and v.sealed_at_utc is not null;\n  retained_before:=retained_binding;\n end if;\n @@BANK_RESULT@@"
+        },
+        {
+          "before": " if basis->>'state' in('COMPLETE','SUPERSEDED') then\n  placement_revision:=o.placement_receipt_json->>'placement_revision';\n  if placement_revision is null or placement_revision !~ '^[1-9][0-9]*$' or length(placement_revision)>19\n   or placement_revision is distinct from o.billing_revision::text then\n   raise exception 'DAILY_RATE_NATIVE_PLACEMENT_REVISION_UNBOUND' using errcode='23514';end if;\n else placement_revision:='0';end if;",
+          "after": " if basis->>'state' in('COMPLETE','SUPERSEDED') then\n select jsonb_build_object('accepted_revision_id',v.id,'accepted_revision_no',v.revision_no::text,\n  'accepted_financial_id',v.financial_snapshot_id,'work_id',w.id,'current_revision_id',w.current_revision_id,\n  'current_revision_no',w.current_revision_no::text,'physical_timesheet_id',v.physical_timesheet_id,\n  'physical_timesheet_version',v.physical_timesheet_version::text,'approved_at_utc',v.approved_at_utc,\n  'sealed_at_utc',v.sealed_at_utc) into strict retained_binding\n from private.timesheet_contract_move_members m\n join private.bpay_next_work_revision v on v.id=(o.placement_receipt_json->>'revision_id')::uuid\n  and v.financial_snapshot_id=m.to_financial_id and v.physical_timesheet_id=m.to_timesheet_id\n  and v.physical_timesheet_version=m.to_version\n join private.bpay_next_work w on w.id=v.work_id and w.id=(o.placement_receipt_json->>'work_id')::uuid\n where m.operation_id=o.id and m.from_timesheet_id=o.from_timesheet_id\n  and w.original_timesheet_id=o.from_timesheet_id and w.booking_id=m.original_booking_id\n  and w.candidate_id=o.candidate_id and w.contract_id is null and w.origin_kind='DAILY' and w.work_kind='ORDINARY'\n  and v.source_kind='ORDINARY' and v.revision_no>0 and v.approved_at_utc is not null and v.sealed_at_utc is not null;\n  if retained_binding is distinct from retained_before then\n   raise exception 'REVIEW_STALE' using errcode='40001';end if;\n  -- The genuine current-versus-retained reader/call contract is unprovided.\n  -- An accepted ordinal, same physical ID or current pointer alone does not\n  -- establish the permitted current five-field Placement/receipt association.\n  -- Do not substitute accepted history, a billing counter or zero for it.\n  raise exception 'DAILY_RATE_CURRENT_PLACEMENT_READ_UNPROVIDED' using errcode='55000';\n else placement_revision:='0';end if;"
+        }
+      ],
+      "fullRawReverse": true
+    }
+  ],
+  "healthBodiesChanged": 2,
+  "originalSixHelperBodiesChanged": 0,
+  "publicShapeChanges": 0,
+  "bankingBodyReads": 0,
+  "native": "NOT_RUN"
+}

@@ -1,0 +1,17 @@
+{
+  "postgresqlGrammar": [
+    17,
+    7
+  ],
+  "parser": "v7.20",
+  "completeRevisionHelper": {
+    "statements": 2,
+    "plpgsqlBodies": 1,
+    "grammar": "PASS",
+    "nativeBodyCompilation": "NOT_PROVED"
+  },
+  "ResultTemplate": "NOT_PARSED_UNPROVIDED_BANK_SLOT_AND_CURRENT_PLACEMENT_MAPPING",
+  "substitutions": [],
+  "dbConnections": 0,
+  "native": "NOT_RUN"
+}

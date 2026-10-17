@@ -1,0 +1,28 @@
+{
+  "frozenFiles": 28,
+  "wholeParentReversals": 2,
+  "finiteHunks": 7,
+  "sourceTests": 7,
+  "currentNativeRelationMetadataEqual": true,
+  "rootContractSha256": "da0e0870442c151534c04d108757a0d76a812879aafae71f01486c7077ce674a",
+  "gateSha256": "0ea663b95c457f4f06b403aa4928f42a0993dfecafdc495a6fa1915713d931f8",
+  "rawCensus": [
+    {
+      "file": "health/10_revision_apply.sqlinc",
+      "sha256": "90b49c5606b136e95bda3f2d2623a022085ed506df221e2a1201e4a5bab3a61d",
+      "rawPoints": []
+    },
+    {
+      "file": "templates/03_result.sql.tmpl",
+      "sha256": "81e786d99c75a14b0896ffe53d4e9d3b71de15c2c91f3ef94ada5a33eae95768",
+      "rawPoints": []
+    }
+  ],
+  "joinedF23": "NOT_PROVED",
+  "ResultTemplateGrammar": "NOT_PARSED_UNPROVIDED_BANK_SLOT",
+  "sourceFindingCount": 0,
+  "native": "NOT_RUN",
+  "rootWrites": 0,
+  "OfficeWrites": 0,
+  "bankBodyReads": 0
+}

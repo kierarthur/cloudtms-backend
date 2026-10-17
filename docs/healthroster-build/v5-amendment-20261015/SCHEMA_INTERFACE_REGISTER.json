@@ -7350,5 +7350,17 @@
     "freshMarkerAndNameAbsence": true,
     "fullCanonicalRestoration": "NOT_RUN",
     "ownTurnUnlockedAndClosed": true
+  },
+  "daily_native_revision_mapping_source_correction_20261017": {
+    "authorCommit": "39d4e2d23e4865c74d775bab6a0c825879b36b39",
+    "peerCommit": "b51abd4076fa6a7517d31156b747a6888c42e167",
+    "verdict": "ACCEPT_INDEPENDENT_HEALTH_SOURCE_CORRECTIONS_ONLY",
+    "evidence": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_NATIVE_REVISION_MAPPING_ROOT_REVIEW_20261017.json",
+    "technicalFixesApplied": 1,
+    "technicalFixesRejected": 0,
+    "ownerBusinessDecisionRequired": false,
+    "currentResultMapping": "UNIMPLEMENTED_GENUINE_READER_REQUIRED",
+    "runtimeMounted": false,
+    "native": "NOT_RUN"
   }
 }

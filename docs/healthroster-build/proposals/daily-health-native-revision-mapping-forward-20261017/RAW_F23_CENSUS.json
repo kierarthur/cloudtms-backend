@@ -1,0 +1,27 @@
+{
+  "gate": {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+    "commit": "bb6252f46597cf15a6450adfb2af27c1e615fb3d",
+    "file": "scripts/bpay-next-source-gates.mjs",
+    "sha256": "0ea663b95c457f4f06b403aa4928f42a0993dfecafdc495a6fa1915713d931f8",
+    "savedEqualsCommit": true
+  },
+  "files": [
+    {
+      "file": "health/10_revision_apply.sqlinc",
+      "sha256": "90b49c5606b136e95bda3f2d2623a022085ed506df221e2a1201e4a5bab3a61d",
+      "bytes": 9309,
+      "rawHazards": []
+    },
+    {
+      "file": "templates/03_result.sql.tmpl",
+      "sha256": "81e786d99c75a14b0896ffe53d4e9d3b71de15c2c91f3ef94ada5a33eae95768",
+      "bytes": 6815,
+      "rawHazards": []
+    }
+  ],
+  "totalRawHazards": 0,
+  "allowancesAdded": 0,
+  "joinedModuleAdmission": "NOT_PROVED",
+  "native": "NOT_RUN"
+}

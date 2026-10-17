@@ -1,0 +1,14 @@
+{
+  "sourceTests": 7,
+  "pass": 7,
+  "fail": 0,
+  "structuralCountermodel": "SOURCE_ONLY_NOT_NATIVE_OR_FINANCIAL_ORACLE",
+  "stdout": "✔ both complete parent bodies reverse literally to immutable4b1067 Git bytes (82.6111ms)\n✔ fresh ordinal comes from exact post-publisher native revision, independently joined to current Work and new financial (0.2614ms)\n✔ actual catalogue columns prove native integer ordinals and UUID point association types (0.5198ms)\n✔ retained exact accepted association is repeated around genuine Bank join without requiring historical currentness/scalar (0.2511ms)\n✔ old billing counterexample and large canonical native ordinals are structural regressions, not native money oracles (0.1772ms)\n✔ old immutable receipt compatibility is read-only and never relabels accepted ordinal as current (0.159ms)\n✔ missing current-reader mapping stays an explicit dependency and no runtime/public/Bank ABI is emitted (0.544ms)\nℹ tests 7\nℹ suites 0\nℹ pass 7\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 190.4307\n",
+  "stderr": "",
+  "emit": {
+    "exitCode": 2,
+    "stdoutBytes": 0,
+    "error": "DAILY_REVISION_MAPPING_CURRENT_READER_AND_BANK_JOINS_UNPROVIDED"
+  },
+  "native": "NOT_RUN"
+}
