@@ -1,0 +1,26 @@
+{
+  "actualI2LoaderLocation": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\docs\\healthroster-build\\proposals\\source-current-read-health-successor-20261017\\loader.mjs",
+  "actualI2LoaderSha256": "15f694b262108bd0b57dc8ea2aec1d0b762f65b4a11a19227504132a98d3dd85",
+  "exactSelfModuleOnly": true,
+  "noBroadDocsExemption": true,
+  "rootWrites": 0,
+  "testOnlyOneUrlBootstrap": "portability-bootstrap.mjs",
+  "results": [
+    {
+      "vector": "ORIGINAL",
+      "expectedRefusal": "EXACT_EVIDENCE_SELF_MODULE_MISROUTED_TO_OLD_GIT_PARENT",
+      "status": 1,
+      "reproduced": true
+    },
+    {
+      "vector": "FORWARD",
+      "tests": 224,
+      "passed": 224,
+      "failed": 0,
+      "status": 0
+    }
+  ],
+  "native": "NOT_RUN",
+  "API": "NOT_RUN",
+  "dbConnections": 0
+}

@@ -1,0 +1,5 @@
+\set ON_ERROR_STOP on
+begin;
+\ir 17102026_0741_weekly_source_complete_classification/01_complete_current_classification.sqlinc
+\ir 17102026_0741_weekly_source_complete_classification/99_exact_acl.sqlinc
+commit;

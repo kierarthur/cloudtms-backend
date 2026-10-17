@@ -1,0 +1,13 @@
+create or replace function private.timesheet_contract_move_reason_v1(p_note text,p_purpose text default 'CONTRACT_CORRECTION')
+returns text language plpgsql immutable security definer set search_path='pg_catalog','pg_temp'
+as $function$
+declare note text; prefix text;
+begin
+ if p_purpose is null or p_purpose not in('CONTRACT_CORRECTION','DAILY_RATE_CORRECTION') then raise exception 'CORRECTION_PURPOSE_INVALID' using errcode='22023';end if;
+ -- ECMAScript TrimString whitespace, matching the shared Worker decoder exactly.
+ note:=btrim(coalesce(p_note,''),U&'\0009\000a\000b\000c\000d\0020\00a0\1680\2000\2001\2002\2003\2004\2005\2006\2007\2008\2009\200a\2028\2029\202f\205f\3000\feff');
+ if char_length(note)>1969 then raise exception 'CORRECTION_REASON_TOO_LONG' using errcode='22023';end if;
+ prefix:=case p_purpose when 'CONTRACT_CORRECTION' then 'Correcting the Contract' else 'Applying updated rates' end;
+ return prefix||case when note='' then '' else ' — '||note end;
+end;
+$function$;

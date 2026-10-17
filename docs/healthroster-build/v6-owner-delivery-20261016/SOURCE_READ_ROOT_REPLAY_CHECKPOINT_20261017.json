@@ -1,0 +1,32 @@
+{
+  "version": "SOURCE_READ_ROOT_REPLAY_CHECKPOINT_V1",
+  "reviewedCommit": "083f144b3fa1658fc9296c9fd7f8bd4afcd20f6f",
+  "frozenFiles": 78,
+  "runtimeMounted": false,
+  "rootNewComposedTests": 51,
+  "rootWholeSourceChecks": 19,
+  "rootEqualFrozenResultWritesSuppressed": 2,
+  "rootOldRegressionReplay": {
+    "status": "HOLD_BEFORE_TESTS",
+    "code": "TEST_LOADER_RELOADS_OWN_UNCOMMITTED_PRELOAD_FROM_OLDER_BASELINE",
+    "requestedBaseline": "af933e3e611a0b83d361a185bfda269cb6543bc8",
+    "unexpectedHistoricalPath": "docs/healthroster-build/proposals/source-current-read-health-successor-20261017/loader.mjs",
+    "author224ReceiptPreserved": true,
+    "root224PassClaimed": false
+  },
+  "peerFinding": {
+    "issue": "Same original request must carry identical immutable receipt in internal9; family-scope root is stable; distinct SOURCE_ROW resumed bindings remain independent.",
+    "forward": "AUTHOR_IN_PROGRESS_ORIGINAL083F_PRESERVED"
+  },
+  "native": "NOT_RUN",
+  "API": "NOT_RUN",
+  "catalogue": "NOT_RUN",
+  "F23": "INDEPENDENT_REVIEW_IN_PROGRESS",
+  "securityGapCorrection": "SEPARATE3F01_61REMAINING_PRIVATE48_SERVICE13_NOT_MOUNTED",
+  "ownerDecisionsAdded": 0,
+  "temporaryCleanup": {
+    "directory": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\.codex-tmp\\source-read-regressions-EiOwNZ",
+    "removedNonrecursivelyAfterEmptyProof": true,
+    "deletionRefused": false
+  }
+}

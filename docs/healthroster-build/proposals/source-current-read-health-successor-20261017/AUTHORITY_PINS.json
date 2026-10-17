@@ -1,0 +1,535 @@
+{
+  "version": "HEALTH_SOURCE_CURRENT_READ_AUTHORITY_V1",
+  "approvedContent": "afaf162e59b2e7901ef0dbc3f484ce51c741f0971557f80fdc877bb8b9ecaa88",
+  "finalReview": {
+    "path": "D:/Development/Legacy-Work/C-tmp/healthroster-handover/HealthRoster_Builder_Pack_16102026/NHSP_AUTHORISATION_AUDIT_15102026_HANDOFF_V6/FINAL_REVIEW_RECORD.md",
+    "sha256": "f294c37445b6736d88421e3c83c050d73ec4774f53cac1e796c702ea9787f668",
+    "matchingRelease": true
+  },
+  "pins": [
+    {
+      "source": "D:/Development/Legacy-Work/C-tmp/healthroster-handover/HealthRoster_Builder_Pack_16102026/NHSP_AUTHORISATION_AUDIT_15102026_HANDOFF_V6/Health_CODE_AUDIT.md",
+      "bytes": 252094,
+      "sha256": "36ddfdb380e221d2bcda4738b4607f45df43ce3d70d1199ec5690750fa49de05"
+    },
+    {
+      "source": "D:/Development/Legacy-Work/C-tmp/healthroster-handover/HealthRoster_Builder_Pack_16102026/NHSP_AUTHORISATION_AUDIT_15102026_HANDOFF_V6/HEALTHROSTER_BUILDER_INSTRUCTIONS.md",
+      "bytes": 39920,
+      "sha256": "3058fef487c8761170c09fa593a884a0f962bfc2af503dd27da464368f4b3350"
+    },
+    {
+      "source": "D:/Development/Legacy-Work/C-tmp/healthroster-handover/HealthRoster_Builder_Pack_16102026/NHSP_AUTHORISATION_AUDIT_15102026_HANDOFF_V6/SOURCE_NATIVE_ACCEPTANCE_CONTRACT.md",
+      "bytes": 70328,
+      "sha256": "274d2e7d40cb22796df12e397affff3f8e852dbd74db2c0aee4675a21a201cc0"
+    },
+    {
+      "source": "D:/Development/Legacy-Work/C-tmp/healthroster-handover/HealthRoster_Builder_Pack_16102026/NHSP_AUTHORISATION_AUDIT_15102026_HANDOFF_V6/OWNERSHIP.md",
+      "bytes": 20040,
+      "sha256": "928794146dc8d89d0f72409214fbcf052971d7591470e819f9855ea2a418b9a5"
+    },
+    {
+      "source": "D:/Development/Legacy-Work/C-tmp/healthroster-handover/HealthRoster_Builder_Pack_16102026/NHSP_AUTHORISATION_AUDIT_15102026_HANDOFF_V6/OWNERSHIP_REGISTER.json",
+      "bytes": 19933058,
+      "sha256": "24cfd780d53e83213240b46aa9c25f93b73d48978b38d732eaadb8db49445774"
+    }
+  ],
+  "clause": {
+    "firstLine": 384,
+    "lastLine": 409,
+    "text": "#### 6.3.6 Exact composed native result, read/retry and future route discrimination\n\n[SOURCE_NATIVE_ACCEPTANCE_CONTRACT.md](SOURCE_NATIVE_ACCEPTANCE_CONTRACT.md) is the normative shared protocol for all exact `SourceNativeComposedResultV1`, `NextComposedControlV1`, `LocalComposedControlV1`, `LocalEntitlementRefV1`, `SourceNativePreparedActionV1`, normal public NEXT14/LOCAL11/bank7/application17 schemas, typed refusal and atomic Source run-birth schemas. Implement its literal keys/types/nullability, not an alternative Health DTO. Health owns preparation/stub/native application/adoption/bridge, actual native wrappers and Worker handling; Banking owns private begin/stage/canonical publication/native_status/origin_state. Existing browser request/action union/role-redacted receipt is unchanged. Full saved facts and exact actor authority stay server-private.\n\nSource-composed non-NULL native impl returns only the command-free private `SourceNativeComposedResultV1` validated by a NEW strict internal validator; it never passes an unpublished control result to ordinary nextReceipt/localReceipt. NEXT retains genuine approval/generation/control/staged Work/revision in adoption; it does NOT insert into unchanged normal NEXT receipt with command_id NOT NULL UNIQUE. Local retains its actual publication_request_id receipt/result and true TSFIN or tagged COMMITTED_HEAD/PENDING_BUNDLE; pending-freeze may prove control WITHDRAWN while money/head remains pending. `NOT_APPLIED_DEPENDENCY` has no applied native receipt; actual whole member subtransaction rolled back. No fake command/receipt, blanket NULL-command receipt, guessed head or second native negative is permitted.\n\nThe hash layers are distinct and mandatory. Adoption `native_result_json` is the OUTER closed SourceNativeComposedResultV1, and adoption `native_result_sha256 = private.weekly_source_sha256_jsonb_v1('SOURCE_NATIVE_COMPOSED_RESULT_V1',native_result_json)`. INNER `LocalComposedControlV1.native_result_sha256` hashes the actual original NativeLocalResult through `private.weekly_source_sha256_jsonb_v1('WEEKLY_PROTECTED_LOCAL_RESULT_V1',original_native_local_result_json)`, preserving the existing native domain. Hash the actual stored native Local body with original idempotent_replay=false, never the public replay projection with true. Bytea values remain exactly32bytes and public digest strings hex64. The original immutable COMPLETE_LOCAL_PROTECTED_DECISION step.bounded_owner_response_json equals that INNER original Local result, and its native owner_response_hash/after_state_fingerprint compare to the INNER native hash, never the outer composed JSON/hash. `LocalComposedControlV1.local_receipt_sha256` hashes the WHOLE original saved Local receipt row with `private.weekly_source_sha256_jsonb_v1('SOURCE_NATIVE_LOCAL_RECEIPT_ROW_V1',to_jsonb(original_local_receipt_row))`. For a genuine deferred release, reconstruct this original same-identity row ONLY by restoring state=PENDING_FREEZE and result_json to the exact original pending step body; every other field must remain equal. The current Local result/hash and release proof are separately derived; neither outer hash nor immutable original receipt is overwritten. Exact hash helper is actual saved private classifier owner15092026_1534_00:28. These domains/objects apply equally to registration, adoption verification, current read/replay and final application digest.\n\nNEW Banking owner-only STABLE read `private.bpay_next_source_decision_native_status_v1(p_family_id uuid,p_run_id uuid,p_actor_user_id uuid) returns jsonb` first resolves retained preparation/run ownership, including RUN_PREPARED/STALE with no application, then exact adoption→application→request/review/cut→canonical publication/member/adoption. SQL NULL means genuinely not Source-owned only. Exact COMMITTED application and sealed genuine canonical command/complete member manifest returns `{kind:'NATIVE_STATUS',status:NativeStatusV1}` with existing public shape. Other Source-owned states return `{kind:'SOURCE_RESULT_REQUIRED',decision_id,request_id,reason:'NOT_APPLIED_DEPENDENCY'|'APPLICATION_INCOMPLETE'|'NATIVE_RESULT_UNKNOWN'}` after current role checks. An unfinished/expired stub must never look ordinary. ADOPTED_EXISTING uses its original normal receipt/command; Source relation proves reuse, not republishing. Conflicting normal/new Source-created provenance refuses.\n\nModify actual public weekly_exceptional_pay_next_publication_status_v1 after original service/actor/run checks and BEFORE normal receipt/routing fallback. Exact NATIVE_STATUS returns existing four-key status; SQL NULL continues ordinary native path; SOURCE_RESULT_REQUIRED raises SQLSTATE P0001, message SOURCE_PAY_DECISION_RESULT_REQUIRED, closed JSON DETAIL from shared contract. Normal publish_next checks this before ensure/stage/command and returns genuine completed projection or the same typed refusal. Normal stage_c1_request refuses Source-owned run; normal complete_local returns actual saved NativeLocalResult only with proved status, otherwise same refusal. Non-NULL composition branches require the exact same-transaction application and private result. Returning NEXT published=false/receipt=NULL for Source-owned dependency would trigger standalone publication in current Worker and is forbidden. Genuine Local pending-freeze keeps saved Local result/banking_receipt=NULL/published=false, never fallback. Ordinary NULL-preparation paths/closed validators and real native permissions remain unchanged.\n\nNEW owner-only `private.bpay_next_source_decision_origin_state_v1(p_command_id uuid,p_publication_member_no integer) returns jsonb` projects the shared exact existing17-key application shape from actual Source publication component/member/Work/revision/head and Candidate job/barrier, replacing only the old POSITION_APPLY one-Work join. Native source/qualification predicates remain. No old private.bpay_next_publication command-ID PK or member_no=1 assumption represents several Work members. APPLIED requires exact target revision plus actual Candidate atomic projection barrier DONE; queued/failed/retrying/blocked does not mean applied. UNAVAILABLE/INCOMPATIBLE/current newer revision remain explicit and never republish. Native public NEXT14 projection uses the genuine canonical command ID/agency_sequence only after COMMITTED/sealed links; Local11 uses real saved result and tagged local proof, bank7 only for genuine COMPLETE authorised mapped head. This reports publication/current financial application independently from paid cash/control withdrawal.\n\nWorker protected-action-orchestrator.mjs `rpc` (:145), status/fallback (:534–558), NEXT validator (:392–405), Local/bank/application validators (:444–506) must use the exact shared insertion/error boundary. Actual index.js sbRpc (:165309–165324; recording wrapper :165414–165430) throws `{json,body,status,fn}`; do not test error.code alone. Only matching expected function plus error.json.code=P0001, exact SQL message, and closed parsed details becomes WeeklyProtectedActionError status409/retryable:false with existing READ_RESULT/SOURCE_PAY_DECISION action and server-generated actual decision/request URL. Caption Check saved result. Malformed/cross-function details stay integrity failures. Stop before native calculation/retry/publish; no new browser/action-union kind or normal silent fallback.\n\nExtend actual `private.bpay_next_protected_owner_route_v1(uuid)` (includes/05102026_0659) with a narrow current-generation Source-adoption/canonical-publication provenance arm before its old receipt/POSITION_APPLY conflict. Reuse the same read-only provenance qualifier, not an actor-bound reader with a fake/stored actor. For exact family.current_generation_id require one consistent APPLIED_IN_THIS_TRANSACTION lineage: real COMPLETE run/fingerprint, matching approval/family/Candidate/Contract/week, actual PROTECTED staged Work/revision with immutable family/run/original approval/ContractA/root/week/evidence verified separately from certified current WorkB/currentB booking/Contract, native target_domain NEXT_V1/PUBLISHED result/source fingerprint, accepted application/cut/request/quote, sealed Source command/native Candidate membership/full component manifest and bridge. Substitute only adoption+canonical publication for old receipt/one-Work POSITION_APPLY proof. ADOPTED_EXISTING uses the ordinary original receipt proof. Preserve incompatible C1/local/common-head negatives; multiple/conflicting tuples refuse, never latest. Old Work.contract_id=family.contract_id and Work.booking_id=family.root_family_booking_id equalities apply only to the normal unmoved arm. The Source-created moved arm proves currentB through exact accepted placement certificate/cut/adoption and actual native stage/capture target, without rewriting originalA family/approval identity. A later accepted move resolves latest genuine accepted placement through the same resolver, never mutates the old adoption or pins all future reads to a superseded B. The same certificate governs actual NEXT stage/capture and Local bounded writer. Return existing NEXT|SOURCE_LOCAL text only, no actor permission or writes. Actual later prepare/context/status/routing/factual selectors and WITHDRAW/REPLACE/SET_DELTA/reconciliation/authorisation consumers must retain genuine current authority and function after a composed generation. Existing certified moved-placement resolver remains separately available under normal native authority; only Source command adoption/suppression requires non-NULL locked EXCLUDE preparation.\n\nThe original adoption/cut/native result snapshot stays immutable when genuine deferred Local pending release later advances the saved receipt/run/family. Exact actual callback `private.weekly_source_local_protected_pending_released_v1()` (04102026_1257 repeatable :476–549) verifies real pending row→released publication receipt/digest/member-root at495–500, updates generation/family and Local result at527–536 and run.after_state_fingerprint at542; it is not a forever-equality copy of the old receipt hash. Current Source adapter reuses actual `private.weekly_source_local_saved_status_v1` (05102026_0624 :419–452) original completion-step/pending_bundle_verified/released_receipt proof: same actual pending bundle, family/run/generation, bundle/revision, root/member set, released_receipt_id/digest, real heads and request/result fingerprint. Only that exact native successor chain may derive current COMPLETE/LIVE; arbitrary changed receipt/run/head rejects. Preserve immutable initial PENDING_BUNDLE adoption and original request receipt, derive current state separately. Later movement still uses originalA evidence plus current certified placement, never retargets the original bundle or historical holds.\n\nThe real head capture/admission consumer `private.bpay_next_source_receipt_publish_v1()` (06102026_1301 :9–89, AFTER INSERT publication-receipt trigger :96–101) normally calls stage_source_current(:42–44), source_binding_lockset(:59), publish_source_staged_pair(:60–61), and component_bind(:73–76), emitting standalone POSITION_APPLY. Add an exact Source-owned pending-release arm BEFORE those writes: preserve genuine native head/publication-receipt/deferred-release proof and current accepted worker-pay disposition, then reuse an already genuine exact canonical association OR expose existing Source READ_RESULT→fresh-reviewed RESUME_FINANCIAL for required financial qualification. It must not standalone stage/publish/bind excluded pay, revive denied future pay, append to old immutable cut, produce a second negative/Case, or automatically replace accepted review/cut. Normal receipt arm remains unchanged. Canonical continuation is once-only through the existing reviewed acceptance application and complete component bridge; native head release alone is not Office confirmation or cash payment. Exact shared contract owns the release proof/continuation schema, no alternative public endpoint.\n\nThe shared contract's exact before-stage native receipt hook and SINGLE_ROOT proof is binding: immediate composition proves retained PREPARED stub, PREVALIDATED same-TX application and actual Local PREPARING receipt before adoption exists; later release proves retained COMMITTED original application/pending chain. Prove the ENTIRE one-root/head/physical-booking/component vector under accepted current placement; a mixed/two-root/incomplete masquerade integrity-refuses before staging, never skips an unrelated root. Canonical Source owner calls actual stage_source_current once, seals new Source publication/member proof, then existing `private.bpay_next_source_component_bind_v1(receipt_id,component_id)` gets the narrow Source-owned publication/adoption/cut-component proof arm while preserving original binding lockset/canonical component identity. It cannot return REGISTERED before that real canonical proof or fabricate an old POSITION_APPLY publication. Only after binder, selected issue/contact retirement, Source invoice equality and saved final receipt may application become COMMITTED. Full exact proof and native current projections remain single-owned by SOURCE_NATIVE_ACCEPTANCE_CONTRACT.md.\n\nAll public new service wrappers authenticate actual injected actor/deployment and current scopes; all nested readers/tables are owner-only/revoked as §6.3.5. Shared exact FKs/20-key run projection and composite component mapping must be implemented together. Existing HRV5-NP-12/13 test birth crash/expiry/retention, native validators/read/error/future lifecycle and all strict independent witnesses; every native/application result is REQUIRED_NOT_RUN in this pack.\n"
+  },
+  "ownershipB051": {
+    "recordId": "B051",
+    "recordKind": "BANKING_EXISTING_MAP_ROW",
+    "status": "UNAPPROVED_DRAFT_NOT_FOR_BUILDERS",
+    "dataOrdinal": 51,
+    "csvLineIncludingHeader": 52,
+    "exactObject": "Office pending/result integration",
+    "currentLabel": "Office pending/result integration",
+    "originalIds": "CM-17;CM-19;EX-20;DR-19",
+    "parentId": "V5-BANK-051",
+    "componentAuthor": "EXCLUSIVE_NAMED_CHILD_SCOPES",
+    "componentBodyEditAllowed": true,
+    "parentOrPhysicalIntegrationWriter": "SEE_EXACT_COMPONENT_PARENT_SCOPE",
+    "scopeParts": [
+      {
+        "childScope": "BANK_FINANCIAL_PENDING_RESULT",
+        "soleImplementationAuthor": "Banking",
+        "mutatingTarget": "js/bpay-next-office.js current pending/result integration",
+        "requirement": "Preserve exact current financial pending action, immutable saved request/result recovery, real native targets, existing frozen detail and Execution/DR-19/EX-20 state. No new financial status store.",
+        "consumer": "Health common modal caller",
+        "existingReturnItem": "F-16-D01; CM-17; CM-19; EX-20; DR-19",
+        "kind": "IMPLEMENTATION",
+        "definition_patch_author": "Banking"
+      },
+      {
+        "childScope": "HEALTH_PHYSICAL_HOST_RESULT",
+        "soleImplementationAuthor": "Health",
+        "mutatingTarget": "shared Timesheet current-placement/result caller and native Source wrapper",
+        "requirement": "Integrate physical/current record/result navigation once; physical complete is distinct from queued/applied/paid. Consume Banking supplied pending/result projection without editing its independent Office module.",
+        "consumer": "Banking CM-17",
+        "existingReturnItem": "CM-17; F-16-D01; Health host checkpoint",
+        "kind": "PRODUCER_DEPENDENCY",
+        "definition_patch_author": "Health"
+      }
+    ],
+    "fullRequirement": "Exact existing object/parent scope remains; supersede old Move stage/automaticissue/DailyContract/unusedbucket/reasonessay clauses with current exact contract: Actual Contract B is canonical PAY/ordinary CHARGE authority, unchanged worked/signature facts, A retained history. One real CM02–10 pair/flat original binding gives difference only, no fake booking/Source HEAD. Source invoice/report/member/amount/document unchanged. Complete known preflight before Ready, locked stale rollback, actual placement+exclusive billing obligation+durable native draft registration atomic; real committed placement may have financial REGISTERED asynchronous. Issued ordinary/equal automatically prepares exact original credit DRAFTS+one partitioned dedicated B replacement DRAFTS, closed CONTRACT_MOVE/DRAFT_ONLY; no autoissue/email/second Generate/PDF physical wait. Deliberate correction-group Issue requires actual credits before replacement FINALISE at both phase transitions and final eligible update. Compatible qualifying current native editable unpaid Draft (never-issued or verified Office-Unissue) edit/incompatible selected relocation retains hold; noInvoice creates none/future hold retained. Repeated correction retains issued credits, updates unissued replacement, exact native child recovery. ALL Daily NO Contract; Health More Apply updated rates uses Client CHARGE/Candidate PAY override else Client PAY on SAME physical Daily/Work, new approved immutable financial revision, old paid/frozen history retained. Every pay-affecting producer uses existing sealed POSITION_APPLY/outbox/enrollment/runtime once; ordinary authorised NEW INSERT already publishes, no duplicate/auth-toggle/newqueue. Current live CM command/dispatch joins already commissioned-unimplemented; Daily original DY02/04/05/06/10 require explicit correction child overlay preserving baseline flags. MOVE_STAGE_CONTRACT§§1–16 and DAILY_RATE_CORRECTION_CONTRACT§§1–5. FINAL_REVIEW_CANDIDATE_NATIVE_NOT_RUN.",
+    "historicalImplementation": "REQUIRED_V5",
+    "historicalInstalled": "NOT_ESTABLISHED",
+    "historicalNativeTest": "NOT_RUN",
+    "existingReturnReferences": {
+      "returnCheckpoint": "F-16-D01 at next suitable existing boundary and final dependency sweep",
+      "existingExactDeliverables": [
+        "F-16-D01"
+      ],
+      "existingCards": [
+        "CM-17",
+        "CM-19",
+        "EX-20",
+        "DR-19"
+      ],
+      "existingOrderCheckpoint": "Original CM-17/F-16/S1 bounded UI preparation; exact placement pending owner review"
+    },
+    "acceptance": {
+      "deliveredLabels": [
+        "FIN-PEND"
+      ],
+      "exactExistingCaseIds": [
+        "FIN-PEND-01",
+        "FIN-PEND-02",
+        "FIN-PEND-03",
+        "FIN-PEND-04",
+        "FIN-PEND-05"
+      ],
+      "aliasResolutions": [],
+      "unresolvedLabels": [],
+      "status": "NOT_RUN",
+      "normativeComposition": null
+    },
+    "historicalRecordBeforeCurrentCensus": {
+      "recordId": "B051",
+      "recordKind": "BANKING_EXISTING_MAP_ROW",
+      "status": "UNAPPROVED_DRAFT_NOT_FOR_BUILDERS",
+      "dataOrdinal": 51,
+      "csvLineIncludingHeader": 52,
+      "exactObject": "Office pending/result integration",
+      "currentLabel": "Office pending/result integration",
+      "originalIds": "CM-17;CM-19;EX-20;DR-19",
+      "parentId": "V5-BANK-051",
+      "componentAuthor": "EXCLUSIVE_NAMED_CHILD_SCOPES",
+      "componentBodyEditAllowed": true,
+      "parentOrPhysicalIntegrationWriter": "SEE_EXACT_COMPONENT_PARENT_SCOPE",
+      "scopeParts": [
+        {
+          "childScope": "BANK_FINANCIAL_PENDING_RESULT",
+          "soleImplementationAuthor": "Banking",
+          "mutatingTarget": "js/bpay-next-office.js current pending/result integration",
+          "requirement": "Preserve exact current financial pending action, immutable saved request/result recovery, real native targets, existing frozen detail and Execution/DR-19/EX-20 state. No new financial status store.",
+          "consumer": "Health common modal caller",
+          "existingReturnItem": "F-16-D01; CM-17; CM-19; EX-20; DR-19",
+          "kind": "IMPLEMENTATION",
+          "definition_patch_author": "Banking"
+        },
+        {
+          "childScope": "HEALTH_PHYSICAL_HOST_RESULT",
+          "soleImplementationAuthor": "Health",
+          "mutatingTarget": "shared Timesheet current-placement/result caller and native Source wrapper",
+          "requirement": "Integrate physical/current record/result navigation once; physical complete is distinct from queued/applied/paid. Consume Banking supplied pending/result projection without editing its independent Office module.",
+          "consumer": "Banking CM-17",
+          "existingReturnItem": "CM-17; F-16-D01; Health host checkpoint",
+          "kind": "PRODUCER_DEPENDENCY",
+          "definition_patch_author": "Health"
+        }
+      ],
+      "fullRequirement": "Expose exact current pending action and retained same-key request; original frozen detail unchanged",
+      "historicalImplementation": "REQUIRED_V5",
+      "historicalInstalled": "NOT_ESTABLISHED",
+      "historicalNativeTest": "NOT_RUN",
+      "existingReturnReferences": {
+        "returnCheckpoint": "F-16-D01 at next suitable existing boundary and final dependency sweep",
+        "existingExactDeliverables": [
+          "F-16-D01"
+        ],
+        "existingCards": [
+          "CM-17",
+          "CM-19",
+          "EX-20",
+          "DR-19"
+        ],
+        "existingOrderCheckpoint": "Original CM-17/F-16/S1 bounded UI preparation; exact placement pending owner review"
+      },
+      "acceptance": {
+        "deliveredLabels": [
+          "FIN-PEND"
+        ],
+        "exactExistingCaseIds": [
+          "FIN-PEND-01",
+          "FIN-PEND-02",
+          "FIN-PEND-03",
+          "FIN-PEND-04",
+          "FIN-PEND-05"
+        ],
+        "aliasResolutions": [],
+        "unresolvedLabels": [],
+        "status": "NOT_RUN",
+        "normativeComposition": null
+      }
+    },
+    "historicalRecordedFullRequirement": "Expose exact current pending action and retained same-key request; original frozen detail unchanged",
+    "currentSavedMapRowSha256": "f9cc07bedd7d7dbac860c2eb68f63e28af890bca447957d471e2472aee3d0050",
+    "ownershipRoles": {
+      "parentId": "V5-BANK-051",
+      "scopeParts": [
+        {
+          "childScope": "BANK_FINANCIAL_PENDING_RESULT",
+          "soleImplementationAuthor": "Banking",
+          "mutatingTarget": "js/bpay-next-office.js current pending/result integration",
+          "requirement": "Exact existing object/parent scope remains; supersede old Move stage/automaticissue/DailyContract/unusedbucket/reasonessay clauses with current exact contract: Actual Contract B is canonical PAY/ordinary CHARGE authority, unchanged worked/signature facts, A retained history. One real CM02–10 pair/flat original binding gives difference only, no fake booking/Source HEAD. Source invoice/report/member/amount/document unchanged. Complete known preflight before Ready, locked stale rollback, actual placement+exclusive billing obligation+durable native draft registration atomic; real committed placement may have financial REGISTERED asynchronous. Issued ordinary/equal automatically prepares exact original credit DRAFTS+one partitioned dedicated B replacement DRAFTS, closed CONTRACT_MOVE/DRAFT_ONLY; no autoissue/email/second Generate/PDF physical wait. Deliberate correction-group Issue requires actual credits before replacement FINALISE at both phase transitions and final eligible update. Compatible qualifying current native editable unpaid Draft (never-issued or verified Office-Unissue) edit/incompatible selected relocation retains hold; noInvoice creates none/future hold retained. Repeated correction retains issued credits, updates unissued replacement, exact native child recovery. ALL Daily NO Contract; Health More Apply updated rates uses Client CHARGE/Candidate PAY override else Client PAY on SAME physical Daily/Work, new approved immutable financial revision, old paid/frozen history retained. Every pay-affecting producer uses existing sealed POSITION_APPLY/outbox/enrollment/runtime once; ordinary authorised NEW INSERT already publishes, no duplicate/auth-toggle/newqueue. Current live CM command/dispatch joins already commissioned-unimplemented; Daily original DY02/04/05/06/10 require explicit correction child overlay preserving baseline flags. MOVE_STAGE_CONTRACT§§1–16 and DAILY_RATE_CORRECTION_CONTRACT§§1–5. FINAL_REVIEW_CANDIDATE_NATIVE_NOT_RUN.",
+          "consumer": "Health common modal caller",
+          "existingReturnItem": "F-16-D01; CM-17; CM-19; EX-20; DR-19",
+          "kind": "IMPLEMENTATION",
+          "definition_patch_author": "Banking",
+          "exact_target_declaration_source": {
+            "proposal_sha256": "8982a9124848956518496a0ebd2d890aed6d1a1fa10c6ecf75a8d608a57c90d4",
+            "selector": "B051:BANK_FINANCIAL_PENDING_RESULT",
+            "reference": "MOVE_STAGE_CONTRACT §9.1 Exact retained ABI; Health_CODE_AUDIT §7.8 exact target closure",
+            "canonical_author_completed": true
+          },
+          "census_claims": [
+            {
+              "target_key": "module:office:js/bpay-next-office.js",
+              "role": "DEFINITION",
+              "author": "BANKING",
+              "reference": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\bpay-next-build-frontend-20261009\\js\\bpay-next-office.js:1; BANKING_CHANGE_MAP.csv:52",
+              "evidence_refs": [
+                "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\bpay-next-build-frontend-20261009\\js\\bpay-next-office.js:1",
+                "BANKING_CHANGE_MAP.csv:52"
+              ]
+            },
+            {
+              "target_key": "js:office:js/bpay-next-office.js#CloudTMSBpayNextOffice",
+              "role": "DEFINITION",
+              "author": "BANKING",
+              "reference": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\bpay-next-build-frontend-20261009\\js\\bpay-next-office.js:9",
+              "evidence_refs": [
+                "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\bpay-next-build-frontend-20261009\\js\\bpay-next-office.js:9"
+              ]
+            },
+            {
+              "target_key": "js:office:js/bpay-next-office.js#CloudTMSBpayNextOffice.open",
+              "role": "DEFINITION",
+              "author": "BANKING",
+              "reference": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\bpay-next-build-frontend-20261009\\js\\bpay-next-office.js:9; Health_CODE_AUDIT.md:346",
+              "evidence_refs": [
+                "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\bpay-next-build-frontend-20261009\\js\\bpay-next-office.js:9",
+                "Health_CODE_AUDIT.md:346"
+              ]
+            }
+          ],
+          "exact_targets": [
+            "module:office:js/bpay-next-office.js",
+            "js:office:js/bpay-next-office.js#CloudTMSBpayNextOffice",
+            "js:office:js/bpay-next-office.js#CloudTMSBpayNextOffice.open"
+          ]
+        },
+        {
+          "childScope": "HEALTH_PHYSICAL_HOST_RESULT",
+          "soleImplementationAuthor": "Health",
+          "mutatingTarget": "shared Timesheet current-placement/result caller and native Source wrapper",
+          "requirement": "Exact existing object/parent scope remains; supersede old Move stage/automaticissue/DailyContract/unusedbucket/reasonessay clauses with current exact contract: Actual Contract B is canonical PAY/ordinary CHARGE authority, unchanged worked/signature facts, A retained history. One real CM02–10 pair/flat original binding gives difference only, no fake booking/Source HEAD. Source invoice/report/member/amount/document unchanged. Complete known preflight before Ready, locked stale rollback, actual placement+exclusive billing obligation+durable native draft registration atomic; real committed placement may have financial REGISTERED asynchronous. Issued ordinary/equal automatically prepares exact original credit DRAFTS+one partitioned dedicated B replacement DRAFTS, closed CONTRACT_MOVE/DRAFT_ONLY; no autoissue/email/second Generate/PDF physical wait. Deliberate correction-group Issue requires actual credits before replacement FINALISE at both phase transitions and final eligible update. Compatible qualifying current native editable unpaid Draft (never-issued or verified Office-Unissue) edit/incompatible selected relocation retains hold; noInvoice creates none/future hold retained. Repeated correction retains issued credits, updates unissued replacement, exact native child recovery. ALL Daily NO Contract; Health More Apply updated rates uses Client CHARGE/Candidate PAY override else Client PAY on SAME physical Daily/Work, new approved immutable financial revision, old paid/frozen history retained. Every pay-affecting producer uses existing sealed POSITION_APPLY/outbox/enrollment/runtime once; ordinary authorised NEW INSERT already publishes, no duplicate/auth-toggle/newqueue. Current live CM command/dispatch joins already commissioned-unimplemented; Daily original DY02/04/05/06/10 require explicit correction child overlay preserving baseline flags. MOVE_STAGE_CONTRACT§§1–16 and DAILY_RATE_CORRECTION_CONTRACT§§1–5. FINAL_REVIEW_CANDIDATE_NATIVE_NOT_RUN.",
+          "consumer": "Banking CM-17",
+          "existingReturnItem": "CM-17; F-16-D01; Health host checkpoint",
+          "kind": "PRODUCER_DEPENDENCY",
+          "definition_patch_author": "Health",
+          "exact_target_declaration_source": {
+            "proposal_sha256": "8982a9124848956518496a0ebd2d890aed6d1a1fa10c6ecf75a8d608a57c90d4",
+            "selector": "B051:HEALTH_PHYSICAL_HOST_RESULT",
+            "reference": "MOVE_STAGE_CONTRACT §9.1 Exact retained ABI; Health_CODE_AUDIT §7.8 exact target closure",
+            "canonical_author_completed": true
+          },
+          "census_claims": [
+            {
+              "target_key": "js:office:js/main.js#openTimesheet",
+              "role": "DEFINITION",
+              "author": "HEALTH",
+              "reference": "WORKING_PREPARATION/MODULE_AND_CLOSURE_TARGETS.json#/cm17/hostIntegration/census_claims",
+              "evidence_refs": [
+                "WORKING_PREPARATION/MODULE_AND_CLOSURE_TARGETS.json#/cm17/hostIntegration/census_claims"
+              ]
+            },
+            {
+              "target_key": "js:office:js/main.js#renderTimesheetOverviewTab",
+              "role": "DEFINITION",
+              "author": "HEALTH",
+              "reference": "WORKING_PREPARATION/MODULE_AND_CLOSURE_TARGETS.json#/cm17/hostIntegration/census_claims",
+              "evidence_refs": [
+                "WORKING_PREPARATION/MODULE_AND_CLOSURE_TARGETS.json#/cm17/hostIntegration/census_claims"
+              ]
+            },
+            {
+              "target_key": "js:office:js/main.js#renderTimesheetFinanceTab",
+              "role": "DEFINITION",
+              "author": "HEALTH",
+              "reference": "WORKING_PREPARATION/MODULE_AND_CLOSURE_TARGETS.json#/cm17/hostIntegration/census_claims",
+              "evidence_refs": [
+                "WORKING_PREPARATION/MODULE_AND_CLOSURE_TARGETS.json#/cm17/hostIntegration/census_claims"
+              ]
+            },
+            {
+              "target_key": "js:office:js/main.js#openTimesheetContractMoveReview",
+              "role": "DEFINITION",
+              "author": "HEALTH",
+              "reference": "WORKING_PREPARATION/MODULE_AND_CLOSURE_TARGETS.json#/cm17/hostIntegration/census_claims",
+              "evidence_refs": [
+                "WORKING_PREPARATION/MODULE_AND_CLOSURE_TARGETS.json#/cm17/hostIntegration/census_claims"
+              ]
+            },
+            {
+              "target_key": "host-hunk:office:js/main.js#openTimesheet::contractMoveMore",
+              "role": "INTEGRATION",
+              "author": "HEALTH",
+              "reference": "WORKING_PREPARATION/MODULE_AND_CLOSURE_TARGETS.json#/cm17/hostIntegration/census_claims",
+              "evidence_refs": [
+                "WORKING_PREPARATION/MODULE_AND_CLOSURE_TARGETS.json#/cm17/hostIntegration/census_claims"
+              ]
+            },
+            {
+              "target_key": "host-hunk:office:js/main.js#showModal::timesheetMoveClose",
+              "role": "INTEGRATION",
+              "author": "HEALTH",
+              "reference": "WORKING_PREPARATION/MODULE_AND_CLOSURE_TARGETS.json#/cm17/hostIntegration/census_claims",
+              "evidence_refs": [
+                "WORKING_PREPARATION/MODULE_AND_CLOSURE_TARGETS.json#/cm17/hostIntegration/census_claims"
+              ]
+            },
+            {
+              "target_key": "host-hunk:office:js/main.js#closeModal::timesheetMoveClose",
+              "role": "INTEGRATION",
+              "author": "HEALTH",
+              "reference": "WORKING_PREPARATION/MODULE_AND_CLOSURE_TARGETS.json#/cm17/hostIntegration/census_claims",
+              "evidence_refs": [
+                "WORKING_PREPARATION/MODULE_AND_CLOSURE_TARGETS.json#/cm17/hostIntegration/census_claims"
+              ]
+            },
+            {
+              "target_key": "sql-function:private.timesheet_contract_move_read_v1(uuid,uuid)",
+              "author": "HEALTH",
+              "role": "DEFINITION",
+              "reference": "MOVE_STAGE_CONTRACT §9.1 Exact retained ABI; Health_CODE_AUDIT §7.8 exact target closure"
+            },
+            {
+              "target_key": "sql-function:public.weekly_exceptional_pay_action_context_v1(jsonb)",
+              "author": "HEALTH",
+              "role": "DEFINITION",
+              "reference": "MOVE_STAGE_CONTRACT §9.1 Exact retained ABI; Health_CODE_AUDIT §7.8 exact target closure"
+            },
+            {
+              "target_key": "sql-function:public.weekly_exceptional_pay_prepare_action_v1(jsonb)",
+              "author": "HEALTH",
+              "role": "DEFINITION",
+              "reference": "MOVE_STAGE_CONTRACT §9.1 Exact retained ABI; Health_CODE_AUDIT §7.8 exact target closure"
+            },
+            {
+              "target_key": "sql-function:public.weekly_source_pay_decision_unprotect_run_prepare_v1(jsonb)",
+              "author": "HEALTH",
+              "role": "DEFINITION",
+              "reference": "MOVE_STAGE_CONTRACT §9.1 Exact retained ABI; Health_CODE_AUDIT §7.8 exact target closure"
+            },
+            {
+              "target_key": "contract:SourceNativeComposedResultV1",
+              "author": "HEALTH",
+              "role": "DEFINITION",
+              "reference": "MOVE_STAGE_CONTRACT §9.1 Exact retained ABI; Health_CODE_AUDIT §7.8 exact target closure"
+            }
+          ],
+          "exact_targets": [
+            "js:office:js/main.js#openTimesheet",
+            "js:office:js/main.js#renderTimesheetOverviewTab",
+            "js:office:js/main.js#renderTimesheetFinanceTab",
+            "js:office:js/main.js#openTimesheetContractMoveReview",
+            "host-hunk:office:js/main.js#openTimesheet::contractMoveMore",
+            "host-hunk:office:js/main.js#showModal::timesheetMoveClose",
+            "host-hunk:office:js/main.js#closeModal::timesheetMoveClose",
+            "sql-function:private.timesheet_contract_move_read_v1(uuid,uuid)",
+            "sql-function:public.weekly_exceptional_pay_action_context_v1(jsonb)",
+            "sql-function:public.weekly_exceptional_pay_prepare_action_v1(jsonb)",
+            "sql-function:public.weekly_source_pay_decision_unprotect_run_prepare_v1(jsonb)",
+            "contract:SourceNativeComposedResultV1"
+          ]
+        }
+      ],
+      "returnCheckpoint": "F-16-D01 at next suitable existing boundary and final dependency sweep",
+      "draftStatus": "UNAPPROVED_DRAFT_NOT_FOR_BUILDERS",
+      "existingOrderCheckpoint": "Original CM-17/F-16/S1 producer implementation/consumer return checkpoint; exact placement/copy and limited Payment Summary scope are specified by current Banking §7/R2 and authorised by matching final same-candidate delivery.",
+      "bankingRecordWriter": "Banking builder, after final handover approval; no write performed here",
+      "publicationRecord": "Health PUBLISHED_HELPERS/PROGRESS/SCHEMA_INTERFACE_REGISTER for Health producers; Banking BUILD_LOG/final-definer-closures/current records for Banking producers",
+      "integrationWriterQualification": "Health only for the agreed shared fetch/main.js parent or genuinely shared generated target; otherwise named component writer.",
+      "finalModuleNamingOrSelectedClosureOwner": "ROOT_PREPARATION_NOT_BUILDER_REDISCOVERY",
+      "move_stage_contract": "MOVE_STAGE_CONTRACT.md §§3–15",
+      "active_move_required_change": "Preserve independent Source/Banking pending/result and immutable same-key/frozen Execution detail. Fresh Contract correction atomically commits actual current placement, exclusive billing obligation and durable native registration; financial REGISTERED/PROCESSING may continue asynchronously under the exact native CM contract. Native DRAFT_ONLY credit/replacement preparation is separate from later normal deliberate Invoice Issue. Committed current B is immediately visible; missing known prerequisites block Confirm and locked drift rolls back before acceptance. No fresh-Move ACTION_REQUIRED/Continue-move repair wizard, hidden destination or joint PDF/all-APPLIED physical gate is introduced. Genuine pre-existing Source/historical financial continuations retain their exact original discriminator/request/children, and real native payment-preparation/capture APPLIED barriers remain intact. §§7/9/11.",
+      "contract_correction_v3": {
+        "version": "CONTRACT_CORRECTION_V3_DAILY_RATE_CORRECTION_V1",
+        "status": "FINAL_REVIEW_CANDIDATE_NATIVE_NOT_RUN",
+        "contract": "MOVE_STAGE_CONTRACT.md",
+        "daily_contract": "WORKING_PREPARATION/DAILY_RATE_CORRECTION_CONTRACT.md",
+        "policy": "Actual Contract B is canonical PAY/ordinary CHARGE authority, unchanged worked/signature facts, A retained history. One real CM02–10 pair/flat original binding gives difference only, no fake booking/Source HEAD. Source invoice/report/member/amount/document unchanged. Complete known preflight before Ready, locked stale rollback, actual placement+exclusive billing obligation+durable native draft registration atomic; real committed placement may have financial REGISTERED asynchronous. Issued ordinary/equal automatically prepares exact original credit DRAFTS+one partitioned dedicated B replacement DRAFTS, closed CONTRACT_MOVE/DRAFT_ONLY; no autoissue/email/second Generate/PDF physical wait. Deliberate correction-group Issue requires actual credits before replacement FINALISE at both phase transitions and final eligible update. Compatible qualifying current native editable unpaid Draft (never-issued or verified Office-Unissue) edit/incompatible selected relocation retains hold; noInvoice creates none/future hold retained. Repeated correction retains issued credits, updates unissued replacement, exact native child recovery. ALL Daily NO Contract; Health More Apply updated rates uses Client CHARGE/Candidate PAY override else Client PAY on SAME physical Daily/Work, new approved immutable financial revision, old paid/frozen history retained. Every pay-affecting producer uses existing sealed POSITION_APPLY/outbox/enrollment/runtime once; ordinary authorised NEW INSERT already publishes, no duplicate/auth-toggle/newqueue. Current live CM command/dispatch joins already commissioned-unimplemented; Daily original DY02/04/05/06/10 require explicit correction child overlay preserving baseline flags. MOVE_STAGE_CONTRACT§§1–16 and DAILY_RATE_CORRECTION_CONTRACT§§1–5. FINAL_REVIEW_CANDIDATE_NATIVE_NOT_RUN.",
+        "stage_proposal": "HISTORICAL_NOT_ACTIVE",
+        "native": "REQUIRED_NOT_RUN",
+        "owner_addendum": "ALL_Daily_noContract_samePhysical+allPayAffecting_nativeWorkbenchPublication; ClientCHARGE_CandidatePAYoverride_elseClientPAY"
+      }
+    },
+    "currentClaims": [
+      {
+        "selector": "B051:BANK_FINANCIAL_PENDING_RESULT",
+        "target_key": "module:office:js/bpay-next-office.js",
+        "role": "DEFINITION",
+        "author": "BANKING",
+        "reference": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\bpay-next-build-frontend-20261009\\js\\bpay-next-office.js:1; BANKING_CHANGE_MAP.csv:52"
+      },
+      {
+        "selector": "B051:BANK_FINANCIAL_PENDING_RESULT",
+        "target_key": "js:office:js/bpay-next-office.js#CloudTMSBpayNextOffice",
+        "role": "DEFINITION",
+        "author": "BANKING",
+        "reference": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\bpay-next-build-frontend-20261009\\js\\bpay-next-office.js:9"
+      },
+      {
+        "selector": "B051:BANK_FINANCIAL_PENDING_RESULT",
+        "target_key": "js:office:js/bpay-next-office.js#CloudTMSBpayNextOffice.open",
+        "role": "DEFINITION",
+        "author": "BANKING",
+        "reference": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\bpay-next-build-frontend-20261009\\js\\bpay-next-office.js:9; Health_CODE_AUDIT.md:346"
+      },
+      {
+        "selector": "B051:HEALTH_PHYSICAL_HOST_RESULT",
+        "target_key": "js:office:js/main.js#openTimesheet",
+        "role": "DEFINITION",
+        "author": "HEALTH",
+        "reference": "WORKING_PREPARATION/MODULE_AND_CLOSURE_TARGETS.json#/cm17/hostIntegration/census_claims"
+      },
+      {
+        "selector": "B051:HEALTH_PHYSICAL_HOST_RESULT",
+        "target_key": "js:office:js/main.js#renderTimesheetOverviewTab",
+        "role": "DEFINITION",
+        "author": "HEALTH",
+        "reference": "WORKING_PREPARATION/MODULE_AND_CLOSURE_TARGETS.json#/cm17/hostIntegration/census_claims"
+      },
+      {
+        "selector": "B051:HEALTH_PHYSICAL_HOST_RESULT",
+        "target_key": "js:office:js/main.js#renderTimesheetFinanceTab",
+        "role": "DEFINITION",
+        "author": "HEALTH",
+        "reference": "WORKING_PREPARATION/MODULE_AND_CLOSURE_TARGETS.json#/cm17/hostIntegration/census_claims"
+      },
+      {
+        "selector": "B051:HEALTH_PHYSICAL_HOST_RESULT",
+        "target_key": "js:office:js/main.js#openTimesheetContractMoveReview",
+        "role": "DEFINITION",
+        "author": "HEALTH",
+        "reference": "WORKING_PREPARATION/MODULE_AND_CLOSURE_TARGETS.json#/cm17/hostIntegration/census_claims"
+      },
+      {
+        "selector": "B051:HEALTH_PHYSICAL_HOST_RESULT",
+        "target_key": "host-hunk:office:js/main.js#openTimesheet::contractMoveMore",
+        "role": "INTEGRATION",
+        "author": "HEALTH",
+        "reference": "WORKING_PREPARATION/MODULE_AND_CLOSURE_TARGETS.json#/cm17/hostIntegration/census_claims"
+      },
+      {
+        "selector": "B051:HEALTH_PHYSICAL_HOST_RESULT",
+        "target_key": "host-hunk:office:js/main.js#showModal::timesheetMoveClose",
+        "role": "INTEGRATION",
+        "author": "HEALTH",
+        "reference": "WORKING_PREPARATION/MODULE_AND_CLOSURE_TARGETS.json#/cm17/hostIntegration/census_claims"
+      },
+      {
+        "selector": "B051:HEALTH_PHYSICAL_HOST_RESULT",
+        "target_key": "host-hunk:office:js/main.js#closeModal::timesheetMoveClose",
+        "role": "INTEGRATION",
+        "author": "HEALTH",
+        "reference": "WORKING_PREPARATION/MODULE_AND_CLOSURE_TARGETS.json#/cm17/hostIntegration/census_claims"
+      },
+      {
+        "selector": "B051:HEALTH_PHYSICAL_HOST_RESULT",
+        "target_key": "sql-function:private.timesheet_contract_move_read_v1(uuid,uuid)",
+        "role": "DEFINITION",
+        "author": "HEALTH",
+        "reference": "MOVE_STAGE_CONTRACT §9.1 Exact retained ABI; Health_CODE_AUDIT §7.8 exact target closure"
+      },
+      {
+        "selector": "B051:HEALTH_PHYSICAL_HOST_RESULT",
+        "target_key": "sql-function:public.weekly_exceptional_pay_action_context_v1(jsonb)",
+        "role": "DEFINITION",
+        "author": "HEALTH",
+        "reference": "MOVE_STAGE_CONTRACT §9.1 Exact retained ABI; Health_CODE_AUDIT §7.8 exact target closure"
+      },
+      {
+        "selector": "B051:HEALTH_PHYSICAL_HOST_RESULT",
+        "target_key": "sql-function:public.weekly_exceptional_pay_prepare_action_v1(jsonb)",
+        "role": "DEFINITION",
+        "author": "HEALTH",
+        "reference": "MOVE_STAGE_CONTRACT §9.1 Exact retained ABI; Health_CODE_AUDIT §7.8 exact target closure"
+      },
+      {
+        "selector": "B051:HEALTH_PHYSICAL_HOST_RESULT",
+        "target_key": "sql-function:public.weekly_source_pay_decision_unprotect_run_prepare_v1(jsonb)",
+        "role": "DEFINITION",
+        "author": "HEALTH",
+        "reference": "MOVE_STAGE_CONTRACT §9.1 Exact retained ABI; Health_CODE_AUDIT §7.8 exact target closure"
+      },
+      {
+        "selector": "B051:HEALTH_PHYSICAL_HOST_RESULT",
+        "target_key": "contract:SourceNativeComposedResultV1",
+        "role": "DEFINITION",
+        "author": "HEALTH",
+        "reference": "MOVE_STAGE_CONTRACT §9.1 Exact retained ABI; Health_CODE_AUDIT §7.8 exact target closure"
+      }
+    ],
+    "targetResolution": "EXACT_DECLARED",
+    "currentMapStatusFields": {
+      "implementation": "REQUIRED_V5",
+      "installed": "NOT_ESTABLISHED",
+      "native_test": "NOT_RUN",
+      "classification": "MODIFY",
+      "sha256": "0306d30cb6cddd23770d72959baadeea83126c9aceedea6c8a84dde2fca299dc"
+    },
+    "ready": false,
+    "nativeAcceptance": "NOT_RUN"
+  },
+  "exactExistingBrowserReadKeys": [
+    "version",
+    "action",
+    "decision_id",
+    "request_id"
+  ],
+  "exactExistingServiceReadKeys": [
+    "version",
+    "action",
+    "decision_id",
+    "request_id",
+    "actor_user_id",
+    "preview_assembly_ref",
+    "unprotect_preparations"
+  ],
+  "preservedAcceptedReceiptKeys": 15,
+  "preservedInternalSourceReadKeys": 9,
+  "missingProducerSlot": {
+    "state": "GENUINE_EXACT_PUBLISHED_CONTRACT_REQUIRED",
+    "owner": "Banking financial child; Health public wrapper/consumer",
+    "unpublished": [
+      "Closed public Source current-result outer schema",
+      "Exact current-financial child signature and closed result union/correlations"
+    ],
+    "forbidden": [
+      "Invented helper or field",
+      "Opaque native JSON promotion",
+      "Accepted receipt expansion",
+      "Alternative financial truth"
+    ]
+  },
+  "native": "NOT_RUN",
+  "API": "NOT_RUN",
+  "dbConnections": 0,
+  "rootEdits": 0,
+  "BankBodyReads": 0
+}

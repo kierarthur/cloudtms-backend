@@ -1,0 +1,31 @@
+create or replace function private.timesheet_contract_move_operation_guard_v1()
+returns trigger language plpgsql security definer set search_path='pg_catalog','public','private','pg_temp'
+as $function$
+begin
+ if tg_op='DELETE' then raise exception 'CONTRACT_MOVE_OPERATION_IMMUTABLE' using errcode='55000'; end if;
+ if tg_op='INSERT' then
+  if new.state<>'REVIEWED' or new.state_revision<>1 or new.accept_request_id is not null then
+   raise exception 'CONTRACT_MOVE_INITIAL_STATE_INVALID' using errcode='23514';
+  end if;
+ elsif old.state<>'REVIEWED' then
+  if new.state<>'SUPERSEDED' or old.state<>'COMPLETE' or new.state_revision<>old.state_revision+1
+   or (to_jsonb(new)-array['state','state_revision']) is distinct from (to_jsonb(old)-array['state','state_revision']) then
+   raise exception 'CONTRACT_MOVE_ACCEPT_RECEIPT_IMMUTABLE' using errcode='55000';
+  end if;
+ elsif new.state_revision<>old.state_revision+1
+  or (to_jsonb(new)-array['state','state_revision','accept_request_id','accept_request_hash','to_timesheet_id',
+   'after_invoice_hash','financial_state','reason','completed_at_utc','financial_command_id','current_financial_cut_id',
+   'receipt_json','accepted_review_id','accepted_review_digest','billing_revision','unchanged_work_sha256','expected_scope_hash','before_pay_cut_hash','before_invoice_hash','invoice_authority','invoice_move_policy',
+   'placement_receipt_json','accepted_valuation_json','preparation_operation_id'])
+  is distinct from (to_jsonb(old)-array['state','state_revision','accept_request_id','accept_request_hash','to_timesheet_id',
+   'after_invoice_hash','financial_state','reason','completed_at_utc','financial_command_id','current_financial_cut_id',
+   'receipt_json','accepted_review_id','accepted_review_digest','billing_revision','unchanged_work_sha256','expected_scope_hash','before_pay_cut_hash','before_invoice_hash','invoice_authority','invoice_move_policy',
+   'placement_receipt_json','accepted_valuation_json','preparation_operation_id']) then
+  raise exception 'CONTRACT_MOVE_OPERATION_CAS_REQUIRED' using errcode='40001';
+ end if;
+ if not private.weekly_source_pay_actor_allowed_v1(new.created_by_user_id) then
+  raise exception 'CONTRACT_MOVE_ACTOR_NOT_ALLOWED' using errcode='42501';
+ end if;
+ return new;
+end;
+$function$;

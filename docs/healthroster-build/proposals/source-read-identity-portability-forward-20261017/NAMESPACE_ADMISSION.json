@@ -1,0 +1,20 @@
+{
+  "parent": "84738fe4057d9d693ccd723eb1835106f1091f57",
+  "newReadCommit": "083f144b3fa1658fc9296c9fd7f8bd4afcd20f6f",
+  "missingEarlierGuardAcknowledged": true,
+  "guard": "supabase/migrations/17102026_0749_source_current_read_private_admission.sql",
+  "sha256": "7cbb76d9b28d83349b0713186a5bdaca9613865bceca0294230d37bb4c7cb2a2",
+  "exactNames": [
+    "private.weekly_source_pay_decision_native_status_child_v1(jsonb,uuid,uuid,uuid,uuid)",
+    "private.weekly_source_pay_decision_read_access_v1(uuid,uuid,uuid)"
+  ],
+  "rejectsAnyExistingOverloadForOnlyTheseTwoNames": true,
+  "oneTimeOnly": true,
+  "rootSourceCurrentContractProof": "NOT_NATIVE_PROOF",
+  "managedApplyOrder": {
+    "path": "scripts/cloudtms-managed-release.mjs",
+    "sha256": "f56267cb889d24da4a605cc7795dba45b65ba1c7a208e885dd1c2b9fe2d2a7a8",
+    "literal": "const migrationUnits=pending.migrations.map(item=>compileManagedUnit(item,'migration',options));\n    const phases=readerReleasePhases(pending.repeatables,current.repeatables);\n    const ordinaryUnits=phases.ordinary.map(item=>compileManagedUnit(item,'repeatable',options));\n    // Preflight the exact pair too, before either definition is written.\n    for(const item of phases.readers)compileManagedUnit(item,'repeatable',options);\n    if(!admitted){await execute(`begin;${managedAdmissionSql(context)}commit;`);admitted=true;}\n    for(const unit of migrationUnits)await applyUnit(unit);\n    // Preserve the original independent, rollback-contained catalogue rehearsal.\n    await preapply(pending.repeatables.map(item=>item.path));\n    for(const unit of ordinaryUnits)await applyUnit(unit);\n    if(phases.readers.length){\n      await reset(); await prepareManagedSourceReaders(execute); await reset();\n      const activation=readerActivationSql(phases.readers,\n        file=>readManagedClosure(file,root,[],mapSource).source,\n        item=>`${assertWriterSql}\\n${repeatableLedgerSql(item,context)}`);\n      await execute(assertWriterSql+'\\n'+activation+'\\n'+assertWriterSql);\n    }\n    await reset();\n    // Re-read every receipt before setting the all-completed marker.\n    const remaining=pendingInventory(current,JSON.parse(await execute(ledgerReadSql)));\n    if(remaining.migrations.length||remaining.repeatables.length)throw Error('MANAGED_INSTALLATION_RECEIPTS_INCOMPLETE');\n    await execute(`begin;${assertWriterSql}update private.cloudtms_database_releases\n      set evidence_json=evidence_json||${json({definitions_complete:true})} where release_id=${literal(context.releaseId)}; commit;\n  "
+  },
+  "native": "NOT_RUN"
+}

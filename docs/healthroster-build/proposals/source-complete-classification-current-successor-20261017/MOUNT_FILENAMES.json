@@ -1,0 +1,7 @@
+{
+  "repeatable": "supabase/repeatable/17102026_0741_weekly_source_complete_classification_v1.sql",
+  "verification": "supabase/verification/17102026_0741_source_complete_security.sql",
+  "createdAtUtc": "2026-10-17T06:41:08.345Z",
+  "scaffoldSha256": "c844dfa8e900c705fd387a5210542028224a012749015aa458991f730b688c6b",
+  "command": "node scripts/cloudtms-db-release.mjs new --kind=repeatable --name=weekly_source_complete_classification_v1"
+}

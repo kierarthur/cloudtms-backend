@@ -1,0 +1,13 @@
+{
+  "parent": "84738fe4057d9d693ccd723eb1835106f1091f57",
+  "cliSha256": "ba0fd695d90ca14a5af38e8a0d2f735338d87530ad94dfe961a3d4987c2da976",
+  "actualWriter": "function writeMigrationLock() {\n  const current = inventory();\n  const lockPath = path.join(repoRoot, 'supabase', 'release', 'migration-lock.json');\n  if (fs.existsSync(lockPath)) {\n    const existing = readJson('supabase/release/migration-lock.json');\n    const actualByPath = new Map(current.migrations.map(item => [item.path, item.sha256]));\n    for (const locked of existing.migrations) {\n      if (!actualByPath.has(locked.path)) throw new Error(`Locked migration missing: ${locked.path}`);\n      if (actualByPath.get(locked.path) !== locked.sha256) throw new Error(`Refusing to relock changed migration: ${locked.path}`);\n    }\n  }\n  writeJson('supabase/release/migration-lock.json', {\n    formatVersion: 1,\n    policy: 'All one-time migration bytes are immutable after publication.',\n    migrations: current.migrations,\n  });\n  console.log(`Locked ${current.migrations.length} migrations.`);\n}",
+  "inputSha256": "655bbb55095a64a586fc448e1e654fd843564b55ca584f9f79967cb5c1a8eb14",
+  "outputSha256": "6b0b4a3d518a3d80a2dff6ab9a17dfe347efb6c073574c4cf5014581ada2f250",
+  "added": {
+    "path": "supabase/migrations/17102026_0749_source_current_read_private_admission.sql",
+    "sha256": "7cbb76d9b28d83349b0713186a5bdaca9613865bceca0294230d37bb4c7cb2a2"
+  },
+  "all425LockedRowsPreserved": true,
+  "fullReverse": "Remove exact added row and serialise original object; no other row/value may change."
+}

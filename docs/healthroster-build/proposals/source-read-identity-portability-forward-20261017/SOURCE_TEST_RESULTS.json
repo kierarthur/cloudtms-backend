@@ -1,0 +1,16 @@
+{
+  "passed": 7,
+  "failed": 0,
+  "checks": [
+    "whole-parent-raw-reverse:broker/src/weekly-source/source-pay-decision-contract.mjs",
+    "whole-parent-raw-reverse:loader.mjs",
+    "loader-exemption-exact-self-module-only-all-body-fences-preserved",
+    "exact426-lock-one-added-row-and-whole-current-reverse",
+    "one-time-two-name-no-function-definition-or-repeatable-footprint",
+    "actual-source-release-order-guard-before-repeatable-phase",
+    "root-portability-reproduction-and-positive224-recorded"
+  ],
+  "rootWrites": 0,
+  "dbConnections": 0,
+  "native": "NOT_RUN"
+}

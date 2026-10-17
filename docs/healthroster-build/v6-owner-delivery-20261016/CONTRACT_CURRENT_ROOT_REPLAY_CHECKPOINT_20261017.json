@@ -1,0 +1,28 @@
+{
+  "version": "CONTRACT_CURRENT_ROOT_REPLAY_CHECKPOINT_V1",
+  "reviewedCommit": "2d1c81cf5a6939b8ab05d4b3d8db398037c13ed4",
+  "manifestSha256": "b62c3ec3f98f1f6f323555fec09e87f680736aee1aaa4b17ea92c5885550218d",
+  "capturedGitExactFiles": 43,
+  "sourceAssembly": "HELD_UNPROVIDED_GENUINE_OWNER_JOINS",
+  "rootOfflineReplay": "PASS",
+  "frozenEqualWritesSuppressed": [
+    "ASSEMBLY_STATE.json",
+    "AST_PROJECTION_VECTORS.json",
+    "OFFLINE_RESULTS.json"
+  ],
+  "sevenFunctionGrammar": "PASS",
+  "assignmentASTVectors": 16,
+  "protocolChecks": {
+    "assertions": 109,
+    "source": "ACTUAL_UNCHANGED_ROOT_V3_DECODER",
+    "projectionASTFixtures": 16,
+    "nativeAuthorityProved": false
+  },
+  "existingContractTestExit": 0,
+  "independentPeer": "IN_PROGRESS_LOCK_ORDER_FINDING_UNRESOLVED",
+  "runtimeMounted": false,
+  "native": "NOT_RUN",
+  "API": "NOT_RUN",
+  "install2": "NOT_INSTALLED",
+  "sourceLimit": "Exact immediate business FKs on pre-Bank operation/member enrollment require a reviewed choreography successor; no concurrency-safe claim for this template. Missing genuine Bank joins remain unprovided; emission refuses."
+}

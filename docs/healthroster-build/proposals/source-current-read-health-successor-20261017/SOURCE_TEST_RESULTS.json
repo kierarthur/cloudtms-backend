@@ -1,0 +1,29 @@
+{
+  "passed": 19,
+  "failed": 0,
+  "checks": [
+    "complete-raw-reversal:native/03_complete_native_gate.sqlinc",
+    "complete-raw-reversal:native/04_complete_internal_source_read.sqlinc",
+    "complete-raw-reversal:native/05_complete_internal_service_read.sqlinc",
+    "complete-raw-reversal:native/06_complete_public_source_accept_read.sqlinc",
+    "complete-raw-reversal:broker/src/weekly-source/source-pay-decision-worker.mjs",
+    "complete-raw-reversal:broker/src/weekly-source/source-pay-decision-http.mjs",
+    "complete-raw-reversal:broker/src/weekly-source/source-pay-decision-contract.mjs",
+    "complete-raw-reversal:broker/src/weekly-source/routes.js",
+    "complete-raw-reversal:broker/src/index.js",
+    "complete-raw-reversal:native/98_complete_current_classification.sqlinc",
+    "new-consumers-pure-read-with-no-financial-valuation-or-mutation",
+    "saved-native-request-and-original-actor-not-inferred-from-labels",
+    "exact-native-status-tagged-outer-keys-and-bounded-string-casts",
+    "local-control-publication-application-and-current-barrier-remain-distinct",
+    "public-read-arm-calls-exact-request-access-without-accept-effects",
+    "current-cut-current-request-selected-by-real-pointer-not-latest",
+    "no-fabricated-public-success-schema-or-opaque-financial-promotion",
+    "classifier-six-current-owners-preserved-with-exact-six-routine-literals-only",
+    "twelve-registry-forwards-complete-raw-inverse"
+  ],
+  "sourceOnly": true,
+  "native": "NOT_RUN",
+  "API": "NOT_RUN",
+  "dbConnections": 0
+}

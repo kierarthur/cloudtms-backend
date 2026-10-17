@@ -1,0 +1,60 @@
+{
+  "authority": "MOVE_STAGE_CONTRACT sections2,4,8,8.1,9; currentV3PresentationContract/sharedActionContract; actual final1003/0955/0713 owners",
+  "publicPreviewRequestRequired": [
+    "version",
+    "request_id",
+    "timesheet_id",
+    "to_contract_id"
+  ],
+  "optionalDetails": "reason; ECMAScript trim; at most1969 Unicode code points; exact existing normalized reason hash",
+  "serverOnlyActor": "actor_user_id injected by actual future CM16; public browser request rejects it",
+  "previewKeys": [
+    "version",
+    "operation_id",
+    "review_id",
+    "review_digest",
+    "state_revision",
+    "ready_to_confirm",
+    "current_timesheet_id",
+    "to_contract_id",
+    "summary",
+    "known_blockers",
+    "confirm",
+    "links"
+  ],
+  "resultKeys": [
+    "version",
+    "purpose",
+    "operation_id",
+    "state",
+    "state_revision",
+    "placement",
+    "financial",
+    "billing",
+    "next_actions",
+    "links"
+  ],
+  "bigint": "Canonical strings end to end, up to9223372036854775807; no Number coercion",
+  "Ready": "Real current Bank readiness and0955 preflight, immutable normalized request/review/CAS/current scope, zero blockers; no advisory/symbol default",
+  "currentPlacement": "Actual final1003 certified flat pointer; preserve genuine rotation/allocation/native pending; no historical snapshot/newest or recursive move history",
+  "pendingBoundary": "Only exact native same-operation pending proof. Old requested operation with another current operation pending refuses unavailable. No new pending certificate or frontend flag.",
+  "readPermission": "Current active Office; independent from immutable creator/mutation permission; real Bank financial visibility and actual0955 current Admin invoice visibility",
+  "journal": "Original request/review/accepted receipt never rewritten; public request cache filled once after real current projection. Fresh Accept can read its genuine accepted operation before that cache is filled.",
+  "nativeOwnerAssembly": "All four composition slots UNPROVIDED; no new callable Bank ABI; runtime emission deliberately refuses",
+  "currentOwnerEdits": 0,
+  "newDefinitions": [
+    "public.timesheet_contract_move_preview_v1(jsonb)",
+    "private.timesheet_contract_move_read_v1(uuid,uuid)",
+    "private.timesheet_contract_move_preview_replay_v1(jsonb)",
+    "private.timesheet_contract_move_preview_read_v1(uuid,uuid)",
+    "private.timesheet_contract_move_invoice_effect_v1(jsonb,uuid)",
+    "private.timesheet_contract_move_actions_assert_v1(jsonb)",
+    "private.timesheet_contract_move_public_assert_v1(jsonb,text)"
+  ],
+  "privateNew": 6,
+  "publicNewWithServiceExecute": 0,
+  "sourceTestsScope": "PG17 grammar +actual pure assignment AST projections +actual unchanged decoder/source gates; no database/type/concurrency/financial proof",
+  "native": "NOT_RUN",
+  "API": "NOT_RUN",
+  "inApp": "NOT_RUN"
+}

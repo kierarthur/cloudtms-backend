@@ -1,0 +1,6 @@
+{
+  "migration": "supabase/migrations/17102026_0749_source_current_read_private_admission.sql",
+  "createdAtUtc": "2026-10-17T06:49:06.344Z",
+  "command": "node scripts/cloudtms-db-release.mjs new --kind=migration --name=source_current_read_private_admission",
+  "scaffoldSha256": "a89581076ebb773bfc1247a788b458e9f467395e99f12c03239bc73a827fa12b"
+}

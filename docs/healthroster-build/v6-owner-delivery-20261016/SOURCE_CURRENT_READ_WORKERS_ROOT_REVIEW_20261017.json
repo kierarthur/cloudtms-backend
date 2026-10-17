@@ -1,0 +1,65 @@
+{
+  "version": "SOURCE_CURRENT_READ_WORKERS_SCOPED_REVIEW_V1",
+  "sourceCommit": "083f144b3fa1658fc9296c9fd7f8bd4afcd20f6f",
+  "sourceOnly": true,
+  "latestBestPracticeReference": "https://developers.cloudflare.com/workers/best-practices/workers-best-practices/",
+  "types": {
+    "name": "@cloudflare/workers-types",
+    "version": "5.20261016.1",
+    "tarball": "https://registry.npmjs.org/@cloudflare/workers-types/-/workers-types-5.20261016.1.tgz",
+    "integrity": "sha512-I8OJdPl3M6TIl9ksU3wtEyWVhSE8E8txJ/vGOv3SkhjcvN8uMjyFmMvRsNOZgzMe5xYFQ0LctmiGqTwR7DbZ6w==",
+    "indexSha256": "dd24c1870cb19c1b9337cca57bbc0bd9a7ae9b14098dacd81ae7a712196ab5ca",
+    "sourceOnly": true,
+    "dependencyInstalled": false
+  },
+  "relevantTypesInspected": [
+    "Request",
+    "Response.json",
+    "ReadableStream.getReader",
+    "ReadableStreamDefaultReader.read/cancel/releaseLock",
+    "TextDecoder.decode"
+  ],
+  "files": [
+    {
+      "file": "docs/healthroster-build/proposals/source-current-read-health-successor-20261017/payload/broker/src/weekly-source/routes.js",
+      "sha256": "196fefff89b45583c46ddea1cae5d4d22ea4f02d2f5089899a95e39e2601d9fe"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/source-current-read-health-successor-20261017/payload/broker/src/weekly-source/source-pay-decision-http.mjs",
+      "sha256": "4f671072a398b6e8e64640b75c29dcc7c0b6339f55ac2ee85ef394fbdd78086f"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/source-current-read-health-successor-20261017/payload/broker/src/weekly-source/source-pay-decision-worker.mjs",
+      "sha256": "21a6ea07e67d7d1cdb76c55e3fdf3d02fe7601252d22047ef771d16ff8bb02c4"
+    }
+  ],
+  "scope": "New READ_RESULT transport and adjacent existing bounded Source HTTP/Worker flow; not full Worker/config security sign-off",
+  "checks": {
+    "boundedStreamingInputBytes": 262144,
+    "fatalUtf8AndDuplicateKeyDecoder": true,
+    "readerCleanupAndCancellationRetained": true,
+    "currentAuthenticatedActorInjected": true,
+    "noGlobalRequestStateAdded": true,
+    "sequentialRpcBoundaryPreserved": true,
+    "allNewAsyncCallsAwaited": true,
+    "closedNativeErrorMapping": true,
+    "opaquePrivateSuccessNeverPromoted": true,
+    "bindingsOrWranglerConfigurationChanged": false,
+    "dependencyInstalled": false,
+    "wranglerExecuted": false
+  },
+  "publicResult": "GENUINE_B051_DEPENDENCY_UNPROVIDED_NOT_WORKING_PUBLIC_SUCCESS",
+  "rootNewComposedTests": 51,
+  "rootSourceChecks": 19,
+  "regressionRootReplay": "ORIGINAL_LOADER_PORTABILITY_HOLD_PRESERVED_FORWARD_UNDER_REVIEW",
+  "newFindings": 0,
+  "native": "NOT_RUN",
+  "API": "NOT_RUN",
+  "release": "NOT_RUN",
+  "cleanup": {
+    "ownedDirectory": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\.codex-tmp\\workers-types-review-SL5ge0",
+    "filesRemoved": 2,
+    "nonrecursiveDirectoryRemoved": true,
+    "deletionRefused": false
+  }
+}

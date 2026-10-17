@@ -1,0 +1,279 @@
+{
+  "checkpoint": "84738fe4057d9d693ccd723eb1835106f1091f57",
+  "readCommit": "083f144b3fa1658fc9296c9fd7f8bd4afcd20f6f",
+  "gateSha256": "0ae982224fda89dc77d6f6bd606acdaa6a37ccf126db01b87d5134f4612f2dda",
+  "files": [
+    {
+      "target": "supabase/repeatable/17102026_0741_weekly_source_complete_classification/01_complete_current_classification.sqlinc",
+      "bytes": 94520,
+      "sha256": "d6ea8fd40e152bb9038a300274be39c63be1a451e300e9f4ad3eb1bb12f208e7",
+      "points": [
+        {
+          "hazard": "AGGREGATE_TYPE_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0741_weekly_source_complete_classification/01_complete_current_classification.sqlinc\",\"AGGREGATE_TYPE_UNCLASSIFIED\",\"if exists(\\n    select 1\\n    from private._weekly_source_acl_lifecycle_column_contract_v1() allowed\\n    left join pg_catalog.pg_attribute a\\n      on a.attrelid=pg_catalog.to_regclass(pg_catalog.format('public.%I',allowed.table_name))\\n     and a.attname=allowed.column_name\\n     and a.attnum>0\\n     and not a.attisdropped\\n    where a.attrelid is null\\n  )\\n  or exists(\\n    select 1\\n    from private._weekly_source_acl_lifecycle_column_contract_v1() allowed\\n    group by allowed.table_name\\n    having pg_catalog.min(allowed.column_ordinal)<>1\\n       or pg_catalog.max(allowed.column_ordinal)<>count(*)\\n       or count(distinct allowed.column_ordinal)<>count(*)\\n  ) then\\n    raise exception 'WEEKLY_SOURCE_ACL_LIFECYCLE_COLUMN_INVALID' using errcode='55000';\"]"
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0741_weekly_source_complete_classification/01_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"for v_table in\\n    select c.table_name,c.record_class\\n    from private._weekly_source_acl_table_contract_v1() c\\n    order by c.table_name\\n  loop\\n    execute pg_catalog.format('alter table public.%I enable row level security',v_table.table_name);\"]"
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0741_weekly_source_complete_classification/01_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"execute pg_catalog.format('alter table public.%I force row level security',v_table.table_name);\"]"
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0741_weekly_source_complete_classification/01_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"execute pg_catalog.format(\\n      'revoke all on table public.%I from public,anon,authenticated,service_role',\\n      v_table.table_name\\n    );\"]"
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0741_weekly_source_complete_classification/01_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"if exists(select 1 from pg_catalog.pg_roles where rolname='authenticator') then\\n      execute pg_catalog.format('revoke all on table public.%I from authenticator',v_table.table_name);\"]"
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0741_weekly_source_complete_classification/01_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"if exists(select 1 from pg_catalog.pg_roles where rolname='supabase_admin') then\\n      execute pg_catalog.format('revoke all on table public.%I from supabase_admin',v_table.table_name);\"]"
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0741_weekly_source_complete_classification/01_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"execute pg_catalog.format(\\n      'drop policy if exists cloudtms_miget_service_owner_all on public.%I',\\n      v_table.table_name\\n    );\"]"
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0741_weekly_source_complete_classification/01_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"execute pg_catalog.format(\\n      'create policy cloudtms_miget_service_owner_all on public.%I for all to %I, service_role using (true) with check (true)',\\n      v_table.table_name,current_user\\n    );\"]"
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0741_weekly_source_complete_classification/01_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"execute pg_catalog.format(\\n      'drop trigger if exists weekly_source_immutable_record_guard on public.%I',\\n      v_table.table_name\\n    );\"]"
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0741_weekly_source_complete_classification/01_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"execute pg_catalog.format(\\n      'drop trigger if exists weekly_source_immutable_fact_guard on public.%I',\\n      v_table.table_name\\n    );\"]"
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0741_weekly_source_complete_classification/01_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"execute pg_catalog.format(\\n      'drop trigger if exists weekly_source_immutable_truncate_guard on public.%I',\\n      v_table.table_name\\n    );\"]"
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0741_weekly_source_complete_classification/01_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"if v_table.record_class='IMMUTABLE_APPEND_ONLY' then\\n      execute pg_catalog.format(\\n        'create trigger weekly_source_immutable_record_guard before update or delete on public.%I for each row execute function private._weekly_source_immutable_record_guard_v1()',\\n        v_table.table_name\\n      );\"]"
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0741_weekly_source_complete_classification/01_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"execute pg_catalog.format(\\n        'create trigger weekly_source_immutable_fact_guard before update or delete on public.%I for each row execute function private._weekly_source_immutable_fact_guard_v1(%s)',\\n        v_table.table_name,v_lifecycle_columns\\n      );\"]"
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0741_weekly_source_complete_classification/01_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"if v_table.record_class in ('IMMUTABLE_APPEND_ONLY','IMMUTABLE_FACTS_WITH_LIFECYCLE') then\\n      execute pg_catalog.format(\\n        'create trigger weekly_source_immutable_truncate_guard before truncate on public.%I for each statement execute function private._weekly_source_immutable_record_guard_v1()',\\n        v_table.table_name\\n      );\"]"
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0741_weekly_source_complete_classification/01_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"begin\\n  for v_function in\\n    select p.oid,p.proowner,n.nspname,p.proname,\\n           pg_catalog.pg_get_function_identity_arguments(p.oid) as identity_arguments\\n    from pg_catalog.pg_proc p\\n    join pg_catalog.pg_namespace n on n.oid=p.pronamespace\\n    where n.nspname in ('public','private')\\n      and (\\n        p.proname like 'weekly\\\\_source\\\\_%' escape '\\\\'\\n        or p.proname like '\\\\_weekly\\\\_source\\\\_%' escape '\\\\'\\n        or p.proname like '\\\\_ctms\\\\_weekly\\\\_source\\\\_%' escape '\\\\'\\n        or p.proname like 'weekly\\\\_exceptional\\\\_%' escape '\\\\'\\n      )\\n  loop\\n    execute pg_catalog.format(\\n      'revoke all on function %I.%I(%s) from public,anon,authenticated,service_role',\\n      v_function.nspname,v_function.proname,v_function.identity_arguments\\n    );\"]"
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0741_weekly_source_complete_classification/01_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"if exists(select 1 from pg_catalog.pg_roles where rolname='authenticator') then\\n      execute pg_catalog.format(\\n        'revoke all on function %I.%I(%s) from authenticator',\\n        v_function.nspname,v_function.proname,v_function.identity_arguments\\n      );\"]"
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0741_weekly_source_complete_classification/01_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"if exists(select 1 from pg_catalog.pg_roles where rolname='supabase_admin') then\\n      execute pg_catalog.format(\\n        'revoke all on function %I.%I(%s) from supabase_admin',\\n        v_function.nspname,v_function.proname,v_function.identity_arguments\\n      );\"]"
+        },
+        {
+          "hazard": "DYNAMIC_SQL_UNCLASSIFIED",
+          "key": "[\"outer:supabase/repeatable/17102026_0741_weekly_source_complete_classification/01_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"for v_signature in\\n    select function_signature\\n    from private._weekly_source_acl_service_rpc_contract_v1()\\n  loop\\n    if pg_catalog.to_regprocedure(v_signature) is not null then\\n      execute 'grant execute on function '||v_signature||' to service_role';\"]"
+        }
+      ]
+    },
+    {
+      "target": "supabase/repeatable/17102026_0741_weekly_source_complete_classification/99_exact_acl.sqlinc",
+      "bytes": 22221,
+      "sha256": "42ca54a71e7dfb0165b22e3285c6173efc7b5494079ae1fd360ef9f849cd9cc5",
+      "points": []
+    },
+    {
+      "target": "supabase/repeatable/17102026_0741_weekly_source_complete_classification_v1.sql",
+      "bytes": 211,
+      "sha256": "4e220b43f3759f2f3644d85673a42c556debffd6a600b9d35483bbb96da9ac75",
+      "points": []
+    },
+    {
+      "target": "supabase/verification/15092026_1534_weekly_source_acl_contract_v1.sql",
+      "bytes": 102517,
+      "sha256": "78d97ce6a540356b07039e2dc6a0748ff322ce0eb571dce2db0b441b5f3ae152",
+      "points": [
+        {
+          "hazard": "AGGREGATE_TYPE_UNCLASSIFIED",
+          "key": "[\"outer:supabase/verification/15092026_1534_weekly_source_acl_contract_v1.sql\",\"AGGREGATE_TYPE_UNCLASSIFIED\",\"if v_lifecycle_column_count<>67\\n     or (\\n       select count(distinct (table_name,column_name))\\n       from private._weekly_source_acl_lifecycle_column_contract_v1()\\n     )<>67\\n     or exists(\\n       select 1\\n       from private._weekly_source_acl_lifecycle_column_contract_v1() allowed\\n       left join private._weekly_source_acl_table_contract_v1() expected\\n         on expected.table_name=allowed.table_name\\n       where expected.record_class is distinct from 'IMMUTABLE_FACTS_WITH_LIFECYCLE'\\n     )\\n     or exists(\\n       select 1\\n       from private._weekly_source_acl_table_contract_v1() expected\\n       where expected.record_class='IMMUTABLE_FACTS_WITH_LIFECYCLE'\\n         and not exists(\\n           select 1\\n           from private._weekly_source_acl_lifecycle_column_contract_v1() allowed\\n           where allowed.table_name=expected.table_name\\n         )\\n     )\\n     or exists(\\n       select 1\\n       from private._weekly_source_acl_lifecycle_column_contract_v1() allowed\\n       left join pg_catalog.pg_attribute a\\n         on a.attrelid=pg_catalog.to_regclass(pg_catalog.format('public.%I',allowed.table_name))\\n        and a.attname=allowed.column_name\\n        and a.attnum>0\\n        and not a.attisdropped\\n       where a.attrelid is null\\n     )\\n     or exists(\\n       select 1\\n       from private._weekly_source_acl_lifecycle_column_contract_v1() allowed\\n       group by allowed.table_name\\n       having pg_catalog.min(allowed.column_ordinal)<>1\\n          or pg_catalog.max(allowed.column_ordinal)<>count(*)\\n          or count(distinct allowed.column_ordinal)<>count(*)\\n     ) then\\n    raise exception 'weekly source lifecycle-column contract is malformed';\"]"
+        }
+      ]
+    },
+    {
+      "target": "supabase/verification/17102026_0741_source_complete_security.sql",
+      "bytes": 10668,
+      "sha256": "07c1240b1b3acbb7fd3f81f97b5904d4ce66443e84aaec0cfabfc8ed141461bf",
+      "points": []
+    }
+  ],
+  "counts": {
+    "inputs": 5,
+    "rawOccurrences": 19,
+    "uniqueKeys": 19
+  },
+  "transfers": [
+    {
+      "file": "supabase/repeatable/17102026_0741_weekly_source_complete_classification/01_complete_current_classification.sqlinc",
+      "parentFile": "supabase/repeatable/17102026_0722_weekly_source_current_read_health/98_complete_current_classification.sqlinc",
+      "parentSha256": "43978ebb8373d40c7bd972151be3215fc0070299256e5cdee8d70383f7bab338",
+      "successorKey": "[\"outer:supabase/repeatable/17102026_0741_weekly_source_complete_classification/01_complete_current_classification.sqlinc\",\"AGGREGATE_TYPE_UNCLASSIFIED\",\"if exists(\\n    select 1\\n    from private._weekly_source_acl_lifecycle_column_contract_v1() allowed\\n    left join pg_catalog.pg_attribute a\\n      on a.attrelid=pg_catalog.to_regclass(pg_catalog.format('public.%I',allowed.table_name))\\n     and a.attname=allowed.column_name\\n     and a.attnum>0\\n     and not a.attisdropped\\n    where a.attrelid is null\\n  )\\n  or exists(\\n    select 1\\n    from private._weekly_source_acl_lifecycle_column_contract_v1() allowed\\n    group by allowed.table_name\\n    having pg_catalog.min(allowed.column_ordinal)<>1\\n       or pg_catalog.max(allowed.column_ordinal)<>count(*)\\n       or count(distinct allowed.column_ordinal)<>count(*)\\n  ) then\\n    raise exception 'WEEKLY_SOURCE_ACL_LIFECYCLE_COLUMN_INVALID' using errcode='55000';\"]",
+      "originalKey": "[\"outer:supabase/repeatable/17102026_0722_weekly_source_current_read_health/98_complete_current_classification.sqlinc\",\"AGGREGATE_TYPE_UNCLASSIFIED\",\"if exists(\\n    select 1\\n    from private._weekly_source_acl_lifecycle_column_contract_v1() allowed\\n    left join pg_catalog.pg_attribute a\\n      on a.attrelid=pg_catalog.to_regclass(pg_catalog.format('public.%I',allowed.table_name))\\n     and a.attname=allowed.column_name\\n     and a.attnum>0\\n     and not a.attisdropped\\n    where a.attrelid is null\\n  )\\n  or exists(\\n    select 1\\n    from private._weekly_source_acl_lifecycle_column_contract_v1() allowed\\n    group by allowed.table_name\\n    having pg_catalog.min(allowed.column_ordinal)<>1\\n       or pg_catalog.max(allowed.column_ordinal)<>count(*)\\n       or count(distinct allowed.column_ordinal)<>count(*)\\n  ) then\\n    raise exception 'WEEKLY_SOURCE_ACL_LIFECYCLE_COLUMN_INVALID' using errcode='55000';\"]",
+      "unchangedWholeStatement": true
+    },
+    {
+      "file": "supabase/repeatable/17102026_0741_weekly_source_complete_classification/01_complete_current_classification.sqlinc",
+      "parentFile": "supabase/repeatable/17102026_0722_weekly_source_current_read_health/98_complete_current_classification.sqlinc",
+      "parentSha256": "43978ebb8373d40c7bd972151be3215fc0070299256e5cdee8d70383f7bab338",
+      "successorKey": "[\"outer:supabase/repeatable/17102026_0741_weekly_source_complete_classification/01_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"for v_table in\\n    select c.table_name,c.record_class\\n    from private._weekly_source_acl_table_contract_v1() c\\n    order by c.table_name\\n  loop\\n    execute pg_catalog.format('alter table public.%I enable row level security',v_table.table_name);\"]",
+      "originalKey": "[\"outer:supabase/repeatable/17102026_0722_weekly_source_current_read_health/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"for v_table in\\n    select c.table_name,c.record_class\\n    from private._weekly_source_acl_table_contract_v1() c\\n    order by c.table_name\\n  loop\\n    execute pg_catalog.format('alter table public.%I enable row level security',v_table.table_name);\"]",
+      "unchangedWholeStatement": true
+    },
+    {
+      "file": "supabase/repeatable/17102026_0741_weekly_source_complete_classification/01_complete_current_classification.sqlinc",
+      "parentFile": "supabase/repeatable/17102026_0722_weekly_source_current_read_health/98_complete_current_classification.sqlinc",
+      "parentSha256": "43978ebb8373d40c7bd972151be3215fc0070299256e5cdee8d70383f7bab338",
+      "successorKey": "[\"outer:supabase/repeatable/17102026_0741_weekly_source_complete_classification/01_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"execute pg_catalog.format('alter table public.%I force row level security',v_table.table_name);\"]",
+      "originalKey": "[\"outer:supabase/repeatable/17102026_0722_weekly_source_current_read_health/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"execute pg_catalog.format('alter table public.%I force row level security',v_table.table_name);\"]",
+      "unchangedWholeStatement": true
+    },
+    {
+      "file": "supabase/repeatable/17102026_0741_weekly_source_complete_classification/01_complete_current_classification.sqlinc",
+      "parentFile": "supabase/repeatable/17102026_0722_weekly_source_current_read_health/98_complete_current_classification.sqlinc",
+      "parentSha256": "43978ebb8373d40c7bd972151be3215fc0070299256e5cdee8d70383f7bab338",
+      "successorKey": "[\"outer:supabase/repeatable/17102026_0741_weekly_source_complete_classification/01_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"execute pg_catalog.format(\\n      'revoke all on table public.%I from public,anon,authenticated,service_role',\\n      v_table.table_name\\n    );\"]",
+      "originalKey": "[\"outer:supabase/repeatable/17102026_0722_weekly_source_current_read_health/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"execute pg_catalog.format(\\n      'revoke all on table public.%I from public,anon,authenticated,service_role',\\n      v_table.table_name\\n    );\"]",
+      "unchangedWholeStatement": true
+    },
+    {
+      "file": "supabase/repeatable/17102026_0741_weekly_source_complete_classification/01_complete_current_classification.sqlinc",
+      "parentFile": "supabase/repeatable/17102026_0722_weekly_source_current_read_health/98_complete_current_classification.sqlinc",
+      "parentSha256": "43978ebb8373d40c7bd972151be3215fc0070299256e5cdee8d70383f7bab338",
+      "successorKey": "[\"outer:supabase/repeatable/17102026_0741_weekly_source_complete_classification/01_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"if exists(select 1 from pg_catalog.pg_roles where rolname='authenticator') then\\n      execute pg_catalog.format('revoke all on table public.%I from authenticator',v_table.table_name);\"]",
+      "originalKey": "[\"outer:supabase/repeatable/17102026_0722_weekly_source_current_read_health/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"if exists(select 1 from pg_catalog.pg_roles where rolname='authenticator') then\\n      execute pg_catalog.format('revoke all on table public.%I from authenticator',v_table.table_name);\"]",
+      "unchangedWholeStatement": true
+    },
+    {
+      "file": "supabase/repeatable/17102026_0741_weekly_source_complete_classification/01_complete_current_classification.sqlinc",
+      "parentFile": "supabase/repeatable/17102026_0722_weekly_source_current_read_health/98_complete_current_classification.sqlinc",
+      "parentSha256": "43978ebb8373d40c7bd972151be3215fc0070299256e5cdee8d70383f7bab338",
+      "successorKey": "[\"outer:supabase/repeatable/17102026_0741_weekly_source_complete_classification/01_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"if exists(select 1 from pg_catalog.pg_roles where rolname='supabase_admin') then\\n      execute pg_catalog.format('revoke all on table public.%I from supabase_admin',v_table.table_name);\"]",
+      "originalKey": "[\"outer:supabase/repeatable/17102026_0722_weekly_source_current_read_health/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"if exists(select 1 from pg_catalog.pg_roles where rolname='supabase_admin') then\\n      execute pg_catalog.format('revoke all on table public.%I from supabase_admin',v_table.table_name);\"]",
+      "unchangedWholeStatement": true
+    },
+    {
+      "file": "supabase/repeatable/17102026_0741_weekly_source_complete_classification/01_complete_current_classification.sqlinc",
+      "parentFile": "supabase/repeatable/17102026_0722_weekly_source_current_read_health/98_complete_current_classification.sqlinc",
+      "parentSha256": "43978ebb8373d40c7bd972151be3215fc0070299256e5cdee8d70383f7bab338",
+      "successorKey": "[\"outer:supabase/repeatable/17102026_0741_weekly_source_complete_classification/01_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"execute pg_catalog.format(\\n      'drop policy if exists cloudtms_miget_service_owner_all on public.%I',\\n      v_table.table_name\\n    );\"]",
+      "originalKey": "[\"outer:supabase/repeatable/17102026_0722_weekly_source_current_read_health/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"execute pg_catalog.format(\\n      'drop policy if exists cloudtms_miget_service_owner_all on public.%I',\\n      v_table.table_name\\n    );\"]",
+      "unchangedWholeStatement": true
+    },
+    {
+      "file": "supabase/repeatable/17102026_0741_weekly_source_complete_classification/01_complete_current_classification.sqlinc",
+      "parentFile": "supabase/repeatable/17102026_0722_weekly_source_current_read_health/98_complete_current_classification.sqlinc",
+      "parentSha256": "43978ebb8373d40c7bd972151be3215fc0070299256e5cdee8d70383f7bab338",
+      "successorKey": "[\"outer:supabase/repeatable/17102026_0741_weekly_source_complete_classification/01_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"execute pg_catalog.format(\\n      'create policy cloudtms_miget_service_owner_all on public.%I for all to %I, service_role using (true) with check (true)',\\n      v_table.table_name,current_user\\n    );\"]",
+      "originalKey": "[\"outer:supabase/repeatable/17102026_0722_weekly_source_current_read_health/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"execute pg_catalog.format(\\n      'create policy cloudtms_miget_service_owner_all on public.%I for all to %I, service_role using (true) with check (true)',\\n      v_table.table_name,current_user\\n    );\"]",
+      "unchangedWholeStatement": true
+    },
+    {
+      "file": "supabase/repeatable/17102026_0741_weekly_source_complete_classification/01_complete_current_classification.sqlinc",
+      "parentFile": "supabase/repeatable/17102026_0722_weekly_source_current_read_health/98_complete_current_classification.sqlinc",
+      "parentSha256": "43978ebb8373d40c7bd972151be3215fc0070299256e5cdee8d70383f7bab338",
+      "successorKey": "[\"outer:supabase/repeatable/17102026_0741_weekly_source_complete_classification/01_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"execute pg_catalog.format(\\n      'drop trigger if exists weekly_source_immutable_record_guard on public.%I',\\n      v_table.table_name\\n    );\"]",
+      "originalKey": "[\"outer:supabase/repeatable/17102026_0722_weekly_source_current_read_health/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"execute pg_catalog.format(\\n      'drop trigger if exists weekly_source_immutable_record_guard on public.%I',\\n      v_table.table_name\\n    );\"]",
+      "unchangedWholeStatement": true
+    },
+    {
+      "file": "supabase/repeatable/17102026_0741_weekly_source_complete_classification/01_complete_current_classification.sqlinc",
+      "parentFile": "supabase/repeatable/17102026_0722_weekly_source_current_read_health/98_complete_current_classification.sqlinc",
+      "parentSha256": "43978ebb8373d40c7bd972151be3215fc0070299256e5cdee8d70383f7bab338",
+      "successorKey": "[\"outer:supabase/repeatable/17102026_0741_weekly_source_complete_classification/01_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"execute pg_catalog.format(\\n      'drop trigger if exists weekly_source_immutable_fact_guard on public.%I',\\n      v_table.table_name\\n    );\"]",
+      "originalKey": "[\"outer:supabase/repeatable/17102026_0722_weekly_source_current_read_health/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"execute pg_catalog.format(\\n      'drop trigger if exists weekly_source_immutable_fact_guard on public.%I',\\n      v_table.table_name\\n    );\"]",
+      "unchangedWholeStatement": true
+    },
+    {
+      "file": "supabase/repeatable/17102026_0741_weekly_source_complete_classification/01_complete_current_classification.sqlinc",
+      "parentFile": "supabase/repeatable/17102026_0722_weekly_source_current_read_health/98_complete_current_classification.sqlinc",
+      "parentSha256": "43978ebb8373d40c7bd972151be3215fc0070299256e5cdee8d70383f7bab338",
+      "successorKey": "[\"outer:supabase/repeatable/17102026_0741_weekly_source_complete_classification/01_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"execute pg_catalog.format(\\n      'drop trigger if exists weekly_source_immutable_truncate_guard on public.%I',\\n      v_table.table_name\\n    );\"]",
+      "originalKey": "[\"outer:supabase/repeatable/17102026_0722_weekly_source_current_read_health/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"execute pg_catalog.format(\\n      'drop trigger if exists weekly_source_immutable_truncate_guard on public.%I',\\n      v_table.table_name\\n    );\"]",
+      "unchangedWholeStatement": true
+    },
+    {
+      "file": "supabase/repeatable/17102026_0741_weekly_source_complete_classification/01_complete_current_classification.sqlinc",
+      "parentFile": "supabase/repeatable/17102026_0722_weekly_source_current_read_health/98_complete_current_classification.sqlinc",
+      "parentSha256": "43978ebb8373d40c7bd972151be3215fc0070299256e5cdee8d70383f7bab338",
+      "successorKey": "[\"outer:supabase/repeatable/17102026_0741_weekly_source_complete_classification/01_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"if v_table.record_class='IMMUTABLE_APPEND_ONLY' then\\n      execute pg_catalog.format(\\n        'create trigger weekly_source_immutable_record_guard before update or delete on public.%I for each row execute function private._weekly_source_immutable_record_guard_v1()',\\n        v_table.table_name\\n      );\"]",
+      "originalKey": "[\"outer:supabase/repeatable/17102026_0722_weekly_source_current_read_health/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"if v_table.record_class='IMMUTABLE_APPEND_ONLY' then\\n      execute pg_catalog.format(\\n        'create trigger weekly_source_immutable_record_guard before update or delete on public.%I for each row execute function private._weekly_source_immutable_record_guard_v1()',\\n        v_table.table_name\\n      );\"]",
+      "unchangedWholeStatement": true
+    },
+    {
+      "file": "supabase/repeatable/17102026_0741_weekly_source_complete_classification/01_complete_current_classification.sqlinc",
+      "parentFile": "supabase/repeatable/17102026_0722_weekly_source_current_read_health/98_complete_current_classification.sqlinc",
+      "parentSha256": "43978ebb8373d40c7bd972151be3215fc0070299256e5cdee8d70383f7bab338",
+      "successorKey": "[\"outer:supabase/repeatable/17102026_0741_weekly_source_complete_classification/01_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"execute pg_catalog.format(\\n        'create trigger weekly_source_immutable_fact_guard before update or delete on public.%I for each row execute function private._weekly_source_immutable_fact_guard_v1(%s)',\\n        v_table.table_name,v_lifecycle_columns\\n      );\"]",
+      "originalKey": "[\"outer:supabase/repeatable/17102026_0722_weekly_source_current_read_health/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"execute pg_catalog.format(\\n        'create trigger weekly_source_immutable_fact_guard before update or delete on public.%I for each row execute function private._weekly_source_immutable_fact_guard_v1(%s)',\\n        v_table.table_name,v_lifecycle_columns\\n      );\"]",
+      "unchangedWholeStatement": true
+    },
+    {
+      "file": "supabase/repeatable/17102026_0741_weekly_source_complete_classification/01_complete_current_classification.sqlinc",
+      "parentFile": "supabase/repeatable/17102026_0722_weekly_source_current_read_health/98_complete_current_classification.sqlinc",
+      "parentSha256": "43978ebb8373d40c7bd972151be3215fc0070299256e5cdee8d70383f7bab338",
+      "successorKey": "[\"outer:supabase/repeatable/17102026_0741_weekly_source_complete_classification/01_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"if v_table.record_class in ('IMMUTABLE_APPEND_ONLY','IMMUTABLE_FACTS_WITH_LIFECYCLE') then\\n      execute pg_catalog.format(\\n        'create trigger weekly_source_immutable_truncate_guard before truncate on public.%I for each statement execute function private._weekly_source_immutable_record_guard_v1()',\\n        v_table.table_name\\n      );\"]",
+      "originalKey": "[\"outer:supabase/repeatable/17102026_0722_weekly_source_current_read_health/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"if v_table.record_class in ('IMMUTABLE_APPEND_ONLY','IMMUTABLE_FACTS_WITH_LIFECYCLE') then\\n      execute pg_catalog.format(\\n        'create trigger weekly_source_immutable_truncate_guard before truncate on public.%I for each statement execute function private._weekly_source_immutable_record_guard_v1()',\\n        v_table.table_name\\n      );\"]",
+      "unchangedWholeStatement": true
+    },
+    {
+      "file": "supabase/repeatable/17102026_0741_weekly_source_complete_classification/01_complete_current_classification.sqlinc",
+      "parentFile": "supabase/repeatable/17102026_0722_weekly_source_current_read_health/98_complete_current_classification.sqlinc",
+      "parentSha256": "43978ebb8373d40c7bd972151be3215fc0070299256e5cdee8d70383f7bab338",
+      "successorKey": "[\"outer:supabase/repeatable/17102026_0741_weekly_source_complete_classification/01_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"begin\\n  for v_function in\\n    select p.oid,p.proowner,n.nspname,p.proname,\\n           pg_catalog.pg_get_function_identity_arguments(p.oid) as identity_arguments\\n    from pg_catalog.pg_proc p\\n    join pg_catalog.pg_namespace n on n.oid=p.pronamespace\\n    where n.nspname in ('public','private')\\n      and (\\n        p.proname like 'weekly\\\\_source\\\\_%' escape '\\\\'\\n        or p.proname like '\\\\_weekly\\\\_source\\\\_%' escape '\\\\'\\n        or p.proname like '\\\\_ctms\\\\_weekly\\\\_source\\\\_%' escape '\\\\'\\n        or p.proname like 'weekly\\\\_exceptional\\\\_%' escape '\\\\'\\n      )\\n  loop\\n    execute pg_catalog.format(\\n      'revoke all on function %I.%I(%s) from public,anon,authenticated,service_role',\\n      v_function.nspname,v_function.proname,v_function.identity_arguments\\n    );\"]",
+      "originalKey": "[\"outer:supabase/repeatable/17102026_0722_weekly_source_current_read_health/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"begin\\n  for v_function in\\n    select p.oid,p.proowner,n.nspname,p.proname,\\n           pg_catalog.pg_get_function_identity_arguments(p.oid) as identity_arguments\\n    from pg_catalog.pg_proc p\\n    join pg_catalog.pg_namespace n on n.oid=p.pronamespace\\n    where n.nspname in ('public','private')\\n      and (\\n        p.proname like 'weekly\\\\_source\\\\_%' escape '\\\\'\\n        or p.proname like '\\\\_weekly\\\\_source\\\\_%' escape '\\\\'\\n        or p.proname like '\\\\_ctms\\\\_weekly\\\\_source\\\\_%' escape '\\\\'\\n        or p.proname like 'weekly\\\\_exceptional\\\\_%' escape '\\\\'\\n      )\\n  loop\\n    execute pg_catalog.format(\\n      'revoke all on function %I.%I(%s) from public,anon,authenticated,service_role',\\n      v_function.nspname,v_function.proname,v_function.identity_arguments\\n    );\"]",
+      "unchangedWholeStatement": true
+    },
+    {
+      "file": "supabase/repeatable/17102026_0741_weekly_source_complete_classification/01_complete_current_classification.sqlinc",
+      "parentFile": "supabase/repeatable/17102026_0722_weekly_source_current_read_health/98_complete_current_classification.sqlinc",
+      "parentSha256": "43978ebb8373d40c7bd972151be3215fc0070299256e5cdee8d70383f7bab338",
+      "successorKey": "[\"outer:supabase/repeatable/17102026_0741_weekly_source_complete_classification/01_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"if exists(select 1 from pg_catalog.pg_roles where rolname='authenticator') then\\n      execute pg_catalog.format(\\n        'revoke all on function %I.%I(%s) from authenticator',\\n        v_function.nspname,v_function.proname,v_function.identity_arguments\\n      );\"]",
+      "originalKey": "[\"outer:supabase/repeatable/17102026_0722_weekly_source_current_read_health/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"if exists(select 1 from pg_catalog.pg_roles where rolname='authenticator') then\\n      execute pg_catalog.format(\\n        'revoke all on function %I.%I(%s) from authenticator',\\n        v_function.nspname,v_function.proname,v_function.identity_arguments\\n      );\"]",
+      "unchangedWholeStatement": true
+    },
+    {
+      "file": "supabase/repeatable/17102026_0741_weekly_source_complete_classification/01_complete_current_classification.sqlinc",
+      "parentFile": "supabase/repeatable/17102026_0722_weekly_source_current_read_health/98_complete_current_classification.sqlinc",
+      "parentSha256": "43978ebb8373d40c7bd972151be3215fc0070299256e5cdee8d70383f7bab338",
+      "successorKey": "[\"outer:supabase/repeatable/17102026_0741_weekly_source_complete_classification/01_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"if exists(select 1 from pg_catalog.pg_roles where rolname='supabase_admin') then\\n      execute pg_catalog.format(\\n        'revoke all on function %I.%I(%s) from supabase_admin',\\n        v_function.nspname,v_function.proname,v_function.identity_arguments\\n      );\"]",
+      "originalKey": "[\"outer:supabase/repeatable/17102026_0722_weekly_source_current_read_health/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"if exists(select 1 from pg_catalog.pg_roles where rolname='supabase_admin') then\\n      execute pg_catalog.format(\\n        'revoke all on function %I.%I(%s) from supabase_admin',\\n        v_function.nspname,v_function.proname,v_function.identity_arguments\\n      );\"]",
+      "unchangedWholeStatement": true
+    },
+    {
+      "file": "supabase/repeatable/17102026_0741_weekly_source_complete_classification/01_complete_current_classification.sqlinc",
+      "parentFile": "supabase/repeatable/17102026_0722_weekly_source_current_read_health/98_complete_current_classification.sqlinc",
+      "parentSha256": "43978ebb8373d40c7bd972151be3215fc0070299256e5cdee8d70383f7bab338",
+      "successorKey": "[\"outer:supabase/repeatable/17102026_0741_weekly_source_complete_classification/01_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"for v_signature in\\n    select function_signature\\n    from private._weekly_source_acl_service_rpc_contract_v1()\\n  loop\\n    if pg_catalog.to_regprocedure(v_signature) is not null then\\n      execute 'grant execute on function '||v_signature||' to service_role';\"]",
+      "originalKey": "[\"outer:supabase/repeatable/17102026_0722_weekly_source_current_read_health/98_complete_current_classification.sqlinc\",\"DYNAMIC_SQL_UNCLASSIFIED\",\"for v_signature in\\n    select function_signature\\n    from private._weekly_source_acl_service_rpc_contract_v1()\\n  loop\\n    if pg_catalog.to_regprocedure(v_signature) is not null then\\n      execute 'grant execute on function '||v_signature||' to service_role';\"]",
+      "unchangedWholeStatement": true
+    },
+    {
+      "file": "supabase/verification/15092026_1534_weekly_source_acl_contract_v1.sql",
+      "parentFile": "supabase/verification/15092026_1534_weekly_source_acl_contract_v1.sql",
+      "parentSha256": "cafad1e069b9dd4f579998c3ee5be9f8c2205813117ce26efa02cdec6f07c4d3",
+      "successorKey": "[\"outer:supabase/verification/15092026_1534_weekly_source_acl_contract_v1.sql\",\"AGGREGATE_TYPE_UNCLASSIFIED\",\"if v_lifecycle_column_count<>67\\n     or (\\n       select count(distinct (table_name,column_name))\\n       from private._weekly_source_acl_lifecycle_column_contract_v1()\\n     )<>67\\n     or exists(\\n       select 1\\n       from private._weekly_source_acl_lifecycle_column_contract_v1() allowed\\n       left join private._weekly_source_acl_table_contract_v1() expected\\n         on expected.table_name=allowed.table_name\\n       where expected.record_class is distinct from 'IMMUTABLE_FACTS_WITH_LIFECYCLE'\\n     )\\n     or exists(\\n       select 1\\n       from private._weekly_source_acl_table_contract_v1() expected\\n       where expected.record_class='IMMUTABLE_FACTS_WITH_LIFECYCLE'\\n         and not exists(\\n           select 1\\n           from private._weekly_source_acl_lifecycle_column_contract_v1() allowed\\n           where allowed.table_name=expected.table_name\\n         )\\n     )\\n     or exists(\\n       select 1\\n       from private._weekly_source_acl_lifecycle_column_contract_v1() allowed\\n       left join pg_catalog.pg_attribute a\\n         on a.attrelid=pg_catalog.to_regclass(pg_catalog.format('public.%I',allowed.table_name))\\n        and a.attname=allowed.column_name\\n        and a.attnum>0\\n        and not a.attisdropped\\n       where a.attrelid is null\\n     )\\n     or exists(\\n       select 1\\n       from private._weekly_source_acl_lifecycle_column_contract_v1() allowed\\n       group by allowed.table_name\\n       having pg_catalog.min(allowed.column_ordinal)<>1\\n          or pg_catalog.max(allowed.column_ordinal)<>count(*)\\n          or count(distinct allowed.column_ordinal)<>count(*)\\n     ) then\\n    raise exception 'weekly source lifecycle-column contract is malformed';\"]",
+      "originalKey": "[\"outer:supabase/verification/15092026_1534_weekly_source_acl_contract_v1.sql\",\"AGGREGATE_TYPE_UNCLASSIFIED\",\"if v_lifecycle_column_count<>67\\n     or (\\n       select count(distinct (table_name,column_name))\\n       from private._weekly_source_acl_lifecycle_column_contract_v1()\\n     )<>67\\n     or exists(\\n       select 1\\n       from private._weekly_source_acl_lifecycle_column_contract_v1() allowed\\n       left join private._weekly_source_acl_table_contract_v1() expected\\n         on expected.table_name=allowed.table_name\\n       where expected.record_class is distinct from 'IMMUTABLE_FACTS_WITH_LIFECYCLE'\\n     )\\n     or exists(\\n       select 1\\n       from private._weekly_source_acl_table_contract_v1() expected\\n       where expected.record_class='IMMUTABLE_FACTS_WITH_LIFECYCLE'\\n         and not exists(\\n           select 1\\n           from private._weekly_source_acl_lifecycle_column_contract_v1() allowed\\n           where allowed.table_name=expected.table_name\\n         )\\n     )\\n     or exists(\\n       select 1\\n       from private._weekly_source_acl_lifecycle_column_contract_v1() allowed\\n       left join pg_catalog.pg_attribute a\\n         on a.attrelid=pg_catalog.to_regclass(pg_catalog.format('public.%I',allowed.table_name))\\n        and a.attname=allowed.column_name\\n        and a.attnum>0\\n        and not a.attisdropped\\n       where a.attrelid is null\\n     )\\n     or exists(\\n       select 1\\n       from private._weekly_source_acl_lifecycle_column_contract_v1() allowed\\n       group by allowed.table_name\\n       having pg_catalog.min(allowed.column_ordinal)<>1\\n          or pg_catalog.max(allowed.column_ordinal)<>count(*)\\n          or count(distinct allowed.column_ordinal)<>count(*)\\n     ) then\\n    raise exception 'weekly source lifecycle-column contract is malformed';\"]",
+      "unchangedWholeStatement": true
+    }
+  ],
+  "completeOwnerReverses": "CURRENT_OWNER_EDITS.json",
+  "classification": "FINITE_ORIGINAL_STATEMENT_EVIDENCE_GATE_REGISTRATION_REQUIRES_INDEPENDENT_REVIEW",
+  "sqlWriteAndExactNumericGuards": "PASS",
+  "noHashOnlyWaiver": true,
+  "native": "NOT_RUN"
+}

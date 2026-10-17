@@ -1,0 +1,27 @@
+-- Owner-only complete-closure verification BODY, never run/mounted here.
+-- Service exposure needs a separately reviewed genuine complete successor.
+do $verification$
+declare expected record; p pg_proc%rowtype; role_name text; settings text[];
+begin
+ for expected in select * from(values ('public.timesheet_contract_move_preview_v1(jsonb)','pg_catalog,public,private,pg_temp'),('private.timesheet_contract_move_read_v1(uuid,uuid)','pg_catalog,public,private,pg_temp'),('private.timesheet_contract_move_preview_replay_v1(jsonb)','pg_catalog,public,private,pg_temp'),('private.timesheet_contract_move_preview_read_v1(uuid,uuid)','pg_catalog,public,private,pg_temp'),('private.timesheet_contract_move_invoice_effect_v1(jsonb,uuid)','pg_catalog,public,private,pg_temp'),('private.timesheet_contract_move_actions_assert_v1(jsonb)','pg_catalog,private,pg_temp'),('private.timesheet_contract_move_public_assert_v1(jsonb,text)','pg_catalog,private,pg_temp')) declarations(signature,search_path) loop
+  select x.* into p from pg_proc x where x.oid=to_regprocedure(expected.signature);
+  if p.oid is null or p.proowner<>(select r.oid from pg_roles r where r.rolname=current_user) or not p.prosecdef
+   or p.prokind<>'f' or p.prolang<>(select l.oid from pg_language l where l.lanname='plpgsql')
+   or cardinality(p.proconfig) is distinct from 1 then
+   raise exception 'CONTRACT_PREVIEW_READ_OWNER_SECURITY_INVALID' using errcode='55000';end if;
+  select array_agg(btrim(v,' "') order by n) into settings
+   from unnest(string_to_array(substring(p.proconfig[1] from '^search_path=(.*)$'),',')) with ordinality e(v,n);
+  if settings is distinct from string_to_array(expected.search_path,',') then
+   raise exception 'CONTRACT_PREVIEW_READ_SEARCH_PATH_INVALID' using errcode='55000';end if;
+  if exists(select 1 from aclexplode(coalesce(p.proacl,acldefault('f',p.proowner))) a
+   where a.grantee=0 and a.privilege_type='EXECUTE') then
+   raise exception 'CONTRACT_PREVIEW_READ_PUBLIC_EXPOSURE' using errcode='55000';end if;
+  foreach role_name in array array['anon','authenticated','service_role'] loop
+   if not exists(select 1 from pg_roles r where r.rolname=role_name) then
+    raise exception 'CONTRACT_PREVIEW_READ_REQUIRED_ROLE_MISSING' using errcode='55000';end if;
+   if has_function_privilege(role_name,p.oid,'EXECUTE') then
+    raise exception 'CONTRACT_PREVIEW_READ_ROLE_EXPOSURE' using errcode='55000';end if;
+  end loop;
+ end loop;
+end;
+$verification$;

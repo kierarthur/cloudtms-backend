@@ -1,0 +1,22 @@
+{
+  "purpose": "Independent literal expected sets, never derived from runtime classifiers at verification time.",
+  "newRoutineSignatures": [
+    "private.weekly_source_pay_decision_native_status_child_v1(jsonb,uuid,uuid,uuid,uuid)",
+    "private.weekly_source_pay_decision_read_access_v1(uuid,uuid,uuid)"
+  ],
+  "newServiceSignatures": [],
+  "privateHelpers": [
+    "private.weekly_source_pay_decision_native_normal_gate_v1(uuid,uuid,uuid,text)",
+    "private.weekly_source_pay_decision_native_status_child_v1(jsonb,uuid,uuid,uuid,uuid)",
+    "private.weekly_source_pay_decision_read_access_v1(uuid,uuid,uuid)",
+    "private.weekly_source_pay_decision_read_source_v1(uuid,uuid,uuid)"
+  ],
+  "serviceRpcs": [
+    "public.weekly_source_pay_decision_accept_v1(jsonb)",
+    "public.weekly_source_pay_decision_read_source_v1(jsonb)"
+  ],
+  "newRelations": [],
+  "newLifecycleColumns": [],
+  "broaderPreExistingSourceInventory": "SEPARATE_REQUIRED_IMPLEMENTATION_OBLIGATION",
+  "native": "NOT_RUN"
+}

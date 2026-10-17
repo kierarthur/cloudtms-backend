@@ -1,0 +1,38 @@
+{
+  "parentReadCommit": "083f144b3fa1658fc9296c9fd7f8bd4afcd20f6f",
+  "reverses": [
+    {
+      "target": "broker/src/weekly-source/source-pay-decision-contract.mjs",
+      "parentCommit": "083f144b3fa1658fc9296c9fd7f8bd4afcd20f6f",
+      "inputSha256": "19b64546a74f1838cdb21b9caa2ccc56468e6e97ed1ffeec94497e5025cce9ec",
+      "outputSha256": "0443bd80fce1be5e324cc53135c018f2470add6b6830daffca017962cef3e7bb",
+      "hunks": [
+        {
+          "before": " const acceptedMembers=new Map(v.accepted_receipt.members.map(m=>[m.member_key,m]));",
+          "after": " // A read of the original request projects the same immutable saved receipt twice.\n const canonicalReadReceipt=x=>Array.isArray(x)?'['+x.map(canonicalReadReceipt).join(',')+']':x!==null&&typeof x==='object'\n  ?'{'+Object.keys(x).sort().map(k=>JSON.stringify(k)+':'+canonicalReadReceipt(x[k])).join(',')+'}':JSON.stringify(x);\n if(v.request_id===v.accepted_receipt.request_id&&canonicalReadReceipt(v.request_receipt)!==canonicalReadReceipt(v.accepted_receipt))invalid();\n const acceptedMembers=new Map(v.accepted_receipt.members.map(m=>[m.member_key,m]));"
+        },
+        {
+          "before": "  if(!original||!['scope_kind','scope_mode','source_row_id'].every(k=>same(m[k],original[k])))invalid();}",
+          "after": "  if(!original||!['scope_kind','scope_mode','source_row_id'].every(k=>same(m[k],original[k]))\n   ||m.scope_kind==='TIMESHEET_FAMILY'&&!same(m.family_root_id,original.family_root_id))invalid();}"
+        }
+      ],
+      "completeRawReverse": true
+    },
+    {
+      "target": "loader.mjs",
+      "parentCommit": "083f144b3fa1658fc9296c9fd7f8bd4afcd20f6f",
+      "inputSha256": "15f694b262108bd0b57dc8ea2aec1d0b762f65b4a11a19227504132a98d3dd85",
+      "outputSha256": "c34260f6c003d03ac41cb123907e595b17ea0552fac3ffe3300a6c3df1e6b574",
+      "hunks": [
+        {
+          "before": "registerHooks({resolve(specifier,context,next){",
+          "after": "registerHooks({resolve(specifier,context,next){\n // Exact self-module exemption: Node --test can re-import this --import loader\n // inside I2. It is evidence infrastructure, not a Git-backed product module.\n if(specifier===import.meta.url)return next(specifier,context);"
+        }
+      ],
+      "completeRawReverse": true
+    }
+  ],
+  "namespaceForward": "supabase/migrations/17102026_0749_source_current_read_private_admission.sql",
+  "SQLBusinessBodiesChanged": 0,
+  "publicSchemaChanged": 0
+}

@@ -1,0 +1,17 @@
+create or replace function public.weekly_source_pay_decision_read_source_v1(p_request jsonb)
+returns jsonb language plpgsql stable security definer set search_path=pg_catalog,private,public as $function$
+declare k text;
+begin
+ if coalesce(current_setting('request.jwt.claim.role',true),nullif(current_setting('request.jwt.claims',true),'')::jsonb->>'role','')<>'service_role' then
+  raise exception 'WEEKLY_SOURCE_SERVICE_ROLE_REQUIRED' using errcode='42501';end if;
+ if not private.weekly_exceptional_json_keys_exact_v1(p_request,array['version','actor_user_id','decision_id','request_id'])
+  or not(p_request ?& array['version','actor_user_id','decision_id','request_id'])
+  or p_request->>'version' is distinct from 'SOURCE_PAY_DECISION_INTERNAL_SOURCE_READ_V1' then raise exception 'SOURCE_PAY_DECISION_REQUEST_INVALID' using errcode='22023';end if;
+ foreach k in array array['decision_id','request_id','actor_user_id'] loop
+  if jsonb_typeof(p_request->k) is distinct from 'string'
+   or coalesce(p_request->>k,'') !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then
+   raise exception 'SOURCE_PAY_DECISION_REQUEST_INVALID' using errcode='22023';end if;
+ end loop;
+ return private.weekly_source_pay_decision_read_source_v1((p_request->>'decision_id')::uuid,(p_request->>'request_id')::uuid,(p_request->>'actor_user_id')::uuid);
+end;
+$function$;
