@@ -1,0 +1,40 @@
+{
+  "version": "CONTACT_CONSTRUCTORS_NATIVE_R1_PREQUERY_HOLD_V1",
+  "executionCommit": "2b0fcee4eeecb9ce3adb61ef3c25d02c0e5a948c",
+  "actualHolderHold": {
+    "status": "HOLD",
+    "caseId": "CONTACT_CONSTRUCTORS_V1",
+    "code": "LOCAL_METADATA_DIAGNOSTIC_REFUSED",
+    "observedErrorCode": "LOCAL_METADATA_DIAGNOSTIC_REFUSED",
+    "deadlineObserved": false,
+    "localTiming": {
+      "sequenceStartedAt": "2026-10-17T08:57:32.383Z",
+      "workDeadlineAt": "2026-10-17T08:59:32.383Z"
+    },
+    "nativeClockFrames": [],
+    "sharedTurnCompletion": "SEE_ORIGINAL_SEND7_JOURNAL_NO_SYNTHETIC_CLOSE_PROOF",
+    "dispatchedMcpMustBeReconciledBeforeNextTrial": true,
+    "elapsedMilliseconds": 49881,
+    "completeMapsPersisted": false
+  },
+  "mcpDispatched": false,
+  "rollbackSqlSubmitted": false,
+  "markerCreated": false,
+  "constructorsOrFixturesAttempted": false,
+  "cause": "UNKNOWN_GENERIC_STDERR_REFUSAL_NO_SQLSTATE_RETAINED",
+  "interpretation": "Do not infer timeout, resource exhaustion or guard failure from elapsed time alone",
+  "ownTurn": {
+    "takenAt": "2026-10-17T08:57:28.813Z",
+    "releasedAt": "2026-10-17T08:58:22.259Z",
+    "explicitUnlockConfirmed": true,
+    "connectionClosed": true,
+    "proved": false
+  },
+  "noWaitingOwnedConnection": true,
+  "completeRestorationPassClaimed": false,
+  "nativeRetry": "HELD_PENDING_FINITE_CLOSED_DIAGNOSTIC_REVIEW",
+  "temporaryFolder": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\.codex-tmp\\contact-qt-positive-native-20261017-constructors-r1",
+  "cleanupAttempted": false,
+  "install2": "NOT_INSTALLED",
+  "finalCritics": "NOT_RUN"
+}

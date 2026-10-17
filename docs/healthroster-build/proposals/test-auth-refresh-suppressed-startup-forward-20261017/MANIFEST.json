@@ -1,0 +1,123 @@
+{
+  "version": "TEST_AUTH_REFRESH_ABORTED_STARTUP_FREEZE_V1",
+  "parentCommit": "aaf6e878dff85a1612a98e32910dffe34e5e1e6b",
+  "auth": "NOT_RUN",
+  "privateContentsIncluded": false,
+  "files": [
+    {
+      "file": "admission.mjs",
+      "bytes": 1255,
+      "sha256": "9530585f413b8c36807a7af8530f68f4f2afe87ca5f654a67cf23d7606b12447"
+    },
+    {
+      "file": "credentials-child.mjs",
+      "bytes": 771,
+      "sha256": "9a8be0bc76302102dafbb697b474c3ce61e7b48fd8baafc7e2e39045a6afc894"
+    },
+    {
+      "file": "forward/authenticate.mjs",
+      "bytes": 2513,
+      "sha256": "2a44dcfc76aa9350678d0139e4ec1d7ff808d7a387052f24500a8dae83763b39"
+    },
+    {
+      "file": "forward/config.mjs",
+      "bytes": 607,
+      "sha256": "698c3c746c6f63e642171a748cc270b53832f66ed77f59dd929afbe04ba59de6"
+    },
+    {
+      "file": "OFFLINE_RESULTS.json",
+      "bytes": 589,
+      "sha256": "8c2e2d2848c8e0dcb1628bba55fb210ddac059245d4b880d15b6d333e906b582"
+    },
+    {
+      "file": "policy.mjs",
+      "bytes": 7669,
+      "sha256": "62f4daa452ece71dc6189155a85bb13af716120a8d6cbbf28551a6f23fc379cd"
+    },
+    {
+      "file": "README.md",
+      "bytes": 3839,
+      "sha256": "98dcafe37950258e382ff13c32a1cb1281b28185b74e79bc33fb7e956c1f2b7f"
+    },
+    {
+      "file": "reference/health-query-workspace-schema.js.txt",
+      "bytes": 6398,
+      "sha256": "77495c4ffb9b05ec0ec4ce3bf5cf96c5d9c9ea1a74911dcfa81460626b7dc1aa"
+    },
+    {
+      "file": "reference/r3-policy.mjs.txt",
+      "bytes": 7288,
+      "sha256": "91335abd77f5439be911c45e4558a5b52387c3833a7144d15054f8fe77b7f0e8"
+    },
+    {
+      "file": "reference/r3-run-auth-refresh.mjs.txt",
+      "bytes": 9344,
+      "sha256": "c28c1a45b7b9ea88c68be071aad86ec17038eb1d4e0dceb4ad3a604cdf5c92f1"
+    },
+    {
+      "file": "reference/r3-test-diagnostic.mjs.txt",
+      "bytes": 5380,
+      "sha256": "b2bf941c43acf60e1f681236334fb3e77c8aac8453d341958b9c06c20a894889"
+    },
+    {
+      "file": "reference/r3-test.mjs.txt",
+      "bytes": 10159,
+      "sha256": "830d34c063566b593cedf676ba2ff8073576bdfdcb0bf5aea7b5c8e8a719a6df"
+    },
+    {
+      "file": "reference/r3-worker.mjs.txt",
+      "bytes": 5324,
+      "sha256": "f3cf58b68042cf10cfae648de50fa27b6c6fdcf71c7b166c931ec7e4fa4ca33c"
+    },
+    {
+      "file": "run-auth-refresh.mjs",
+      "bytes": 9514,
+      "sha256": "abe211b76df1b3700972de37dc194ed9561815d9e2fb4163f5601274447990fd"
+    },
+    {
+      "file": "secure-owned.ps1",
+      "bytes": 1349,
+      "sha256": "b9bbeabb5ea8cee109a08a866d8590cac8c22b2d2dc52d83562e257789daf211"
+    },
+    {
+      "file": "SOURCE_PINS.json",
+      "bytes": 2719,
+      "sha256": "d8dfd7d2e09197208a30a8d51c02310fbc5523c402b12c11de15d1a9727bb913"
+    },
+    {
+      "file": "STATIC_ROUTE_SOURCE.json",
+      "bytes": 1334,
+      "sha256": "69c3b96e9272924f2ec62c742d18c688a9f81c3c16dd5772ae93a93e728e33f7"
+    },
+    {
+      "file": "SUPPRESSION_FULL_PARENT_TRANSFERS.json",
+      "bytes": 6326,
+      "sha256": "2896d741ad71a97cd9fef2d9d654574d589ffa341916b1b3030e46a1ebdaff5b"
+    },
+    {
+      "file": "test-diagnostic.mjs",
+      "bytes": 5510,
+      "sha256": "e7de6accbfc1e6a28475b4fc24bb6f1ab93c6032d6d97d7d7316e5940c33ce68"
+    },
+    {
+      "file": "test-suppression.mjs",
+      "bytes": 6906,
+      "sha256": "fed0fbff61568a2ec2320a9e5d64933b438d671b8487f2152980f340ee9fea6b"
+    },
+    {
+      "file": "test.mjs",
+      "bytes": 10215,
+      "sha256": "534882a784cfb2b162d95681e0e580c7408dc89df7289c958b0d9049a2bde02b"
+    },
+    {
+      "file": "verify-suppression.py",
+      "bytes": 4821,
+      "sha256": "72af8d7f74decf00c5c74875850e912c03dcd2ecbb0395b8a8f4df75eec36a13"
+    },
+    {
+      "file": "worker.mjs",
+      "bytes": 5514,
+      "sha256": "75a287ecd94493f64b3850ab11a2b2adc685802850312e9fc017d2dcfce923dd"
+    }
+  ]
+}

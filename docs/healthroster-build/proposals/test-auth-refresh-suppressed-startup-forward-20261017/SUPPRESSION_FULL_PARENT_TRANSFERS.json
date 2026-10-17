@@ -1,0 +1,130 @@
+{
+  "parentCommit": "aaf6e878dff85a1612a98e32910dffe34e5e1e6b",
+  "runtimeFiles": 3,
+  "files": [
+    {
+      "file": "policy.mjs",
+      "reference": "reference/r3-policy.mjs.txt",
+      "beforeSha256": "91335abd77f5439be911c45e4558a5b52387c3833a7144d15054f8fe77b7f0e8",
+      "afterSha256": "62f4daa452ece71dc6189155a85bb13af716120a8d6cbbf28551a6f23fc379cd",
+      "hunks": [
+        {
+          "before": "  if(method==='POST'&&!u.search&&u.pathname==='/auth/refresh')return 'REFRESH';",
+          "after": "  if(method==='POST'&&!u.search&&u.pathname==='/auth/refresh')return 'REFRESH';\n  if(method==='POST'&&url===BACK+'/api/changes/ping')return 'SUPPRESSED_STARTUP';"
+        },
+        {
+          "before": "'blockedReadRequests','diagnostic'];",
+          "after": "'blockedReadRequests','diagnostic','suppressedStartupRequests'];"
+        },
+        {
+          "before": "value.version==='TEST_AUTH_REFRESH_PRIVATE_RESULT_V2'",
+          "after": "value.version==='TEST_AUTH_REFRESH_PRIVATE_RESULT_V3'"
+        },
+        {
+          "before": "['loginRequests','refreshRequests','blockedReadRequests','forbiddenWriteRequests','refusedRequests']",
+          "after": "['loginRequests','refreshRequests','blockedReadRequests','forbiddenWriteRequests','refusedRequests','suppressedStartupRequests']"
+        },
+        {
+          "before": "HOME:1,STATIC:400,PREFLIGHT:24}[kind];",
+          "after": "HOME:1,STATIC:400,PREFLIGHT:24,SUPPRESSED_STARTUP:1}[kind];"
+        },
+        {
+          "before": "   if(cap===undefined)return false;",
+          "after": "   if(kind==='SUPPRESSED_STARTUP'){\n    if(counts[kind]>cap)violation=true;\n    return false; // Expected startup suppression is always aborted, never forwarded.\n   }\n   if(cap===undefined)return false;"
+        },
+        {
+          "before": "   refusedRequests:counts.REFUSED??0};}",
+          "after": "   refusedRequests:counts.REFUSED??0,suppressedStartupRequests:counts.SUPPRESSED_STARTUP??0};}"
+        }
+      ]
+    },
+    {
+      "file": "worker.mjs",
+      "reference": "reference/r3-worker.mjs.txt",
+      "beforeSha256": "f3cf58b68042cf10cfae648de50fa27b6c6fdcf71c7b166c931ec7e4fa4ca33c",
+      "afterSha256": "75a287ecd94493f64b3850ab11a2b2adc685802850312e9fc017d2dcfce923dd",
+      "hunks": [
+        {
+          "before": "version:'TEST_AUTH_REFRESH_PRIVATE_RESULT_V2'",
+          "after": "version:'TEST_AUTH_REFRESH_PRIVATE_RESULT_V3'"
+        },
+        {
+          "before": "  if(!success&&fs.existsSync(state)){",
+          "after": "  // Closing the browser can finish late route callbacks. Recheck before keeping state.\n  if(success){try{network.assertAdmission();}catch{success=false;code='AUTH_NETWORK_BOUNDARY_HELD';}}\n  if(!success&&fs.existsSync(state)){"
+        }
+      ]
+    },
+    {
+      "file": "run-auth-refresh.mjs",
+      "reference": "reference/r3-run-auth-refresh.mjs.txt",
+      "beforeSha256": "c28c1a45b7b9ea88c68be071aad86ec17038eb1d4e0dceb4ad3a604cdf5c92f1",
+      "afterSha256": "abe211b76df1b3700972de37dc194ed9561815d9e2fb4163f5601274447990fd",
+      "hunks": [
+        {
+          "before": "test-auth-refresh-diagnostic-forward-20261017','AUTH_SOURCE_LOCATION_REQUIRED'",
+          "after": "test-auth-refresh-suppressed-startup-forward-20261017','AUTH_SOURCE_LOCATION_REQUIRED'"
+        },
+        {
+          "before": "diagnostic:result?.diagnostic??null};",
+          "after": "diagnostic:result?.diagnostic??null,suppressedStartupRequests:result?.suppressedStartupRequests??null};"
+        },
+        {
+          "before": "&&result.forbiddenWriteRequests===0&&result.refusedRequests===0,",
+          "after": "&&result.forbiddenWriteRequests===0&&result.refusedRequests===0&&result.suppressedStartupRequests<=1,"
+        },
+        {
+          "before": "sharedFrontendStateUntouched:true,diagnostic:result.diagnostic,",
+          "after": "sharedFrontendStateUntouched:true,diagnostic:result.diagnostic,suppressedStartupRequests:result.suppressedStartupRequests,"
+        }
+      ]
+    },
+    {
+      "file": "test.mjs",
+      "reference": "reference/r3-test.mjs.txt",
+      "beforeSha256": "830d34c063566b593cedf676ba2ff8073576bdfdcb0bf5aea7b5c8e8a719a6df",
+      "afterSha256": "534882a784cfb2b162d95681e0e580c7408dc89df7289c958b0d9049a2bde02b",
+      "hunks": [
+        {
+          "before": "'loginRequests','refusedRequests','refreshRequests'].sort()",
+          "after": "'loginRequests','refusedRequests','refreshRequests','suppressedStartupRequests'].sort()"
+        },
+        {
+          "before": "version:'TEST_AUTH_REFRESH_PRIVATE_RESULT_V2'",
+          "after": "version:'TEST_AUTH_REFRESH_PRIVATE_RESULT_V3'"
+        },
+        {
+          "before": "refusedRequests:0,diagnostic:",
+          "after": "refusedRequests:0,suppressedStartupRequests:0,diagnostic:"
+        }
+      ]
+    },
+    {
+      "file": "test-diagnostic.mjs",
+      "reference": "reference/r3-test-diagnostic.mjs.txt",
+      "beforeSha256": "b2bf941c43acf60e1f681236334fb3e77c8aac8453d341958b9c06c20a894889",
+      "afterSha256": "e7de6accbfc1e6a28475b4fc24bb6f1ab93c6032d6d97d7d7316e5940c33ce68",
+      "hunks": [
+        {
+          "before": "../test-auth-refresh-ps5-forward-20261017/policy.mjs",
+          "after": "../test-auth-refresh-diagnostic-forward-20261017/policy.mjs"
+        },
+        {
+          "before": "const n=networkGuard();n.accept(BACK+'/api/changes/ping','POST','fetch');n.accept(BACK+'/api/users/me/grid-prefs'",
+          "after": "const n=networkGuard();n.accept(BACK+'/api/changes/ping?unapproved=1','POST','fetch');n.accept(BACK+'/api/users/me/grid-prefs'"
+        },
+        {
+          "before": "[BACK+'/api/changes/ping','POST','fetch'],",
+          "after": "[BACK+'/api/changes/ping?unapproved=1','POST','fetch'],"
+        },
+        {
+          "before": " assert.deepEqual(now.summary(),old.summary());assert.throws",
+          "after": " const {suppressedStartupRequests,...same}=now.summary();assert.equal(suppressedStartupRequests,0);assert.deepEqual(same,old.summary());assert.throws"
+        },
+        {
+          "before": "if(scenario==='blockedWrite')network.accept(BACK+'/api/changes/ping','POST','fetch');",
+          "after": "if(scenario==='blockedWrite')network.accept(BACK+'/api/users/me/grid-prefs','PATCH','fetch');"
+        }
+      ]
+    }
+  ]
+}

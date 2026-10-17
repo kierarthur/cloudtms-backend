@@ -1,0 +1,19 @@
+{
+  "version": "TEST_AUTH_SUPPRESSION_ROOT_REVIEW_V1",
+  "authorCommit": "462c196c503c39731fe331f4b6899f3e72b35b9c",
+  "files":24,
+  "manifestSha256":"60473f9d778850e00b4d88120bd2e5678fa22a874f77ea2814ebc37c5ae7d299",
+  "rootVerdict":"ACCEPT_FINITE_ONE_ABORTED_STARTUP_PING",
+  "rootReplayed":{"originalChecks":88,"ps5Checks":86,"diagnosticChecks":113,"suppressionChecks":112,"nodeTests":19},
+  "completeParentInverses":{"runtime":3,"tests":2},
+  "transport":"Unchanged guardedRoute aborts exactly queryless normal-TEST POST changes/ping before fetch, body access or response; never forwarded or stubbed",
+  "suppressionCap":1,
+  "allOtherWrites":"ABORT_AND_VIOLATION_UNCHANGED",
+  "genuineAdmission":"ME200 actual Admin UUID and workspace200 exact contract/queries required; otherwise HOLD",
+  "state":"Fresh private child-owned state only; shared state unchanged; network gate rechecked after confirmed browser close; late violation removes new state",
+  "actualExecution":"NOT_RUN_AT_REVIEW",
+  "nativeInterval":"Must be closed before actual login; Contact R1 own turn closed 08:58:22.259Z",
+  "fixtures":"NOT_CREATED",
+  "install2":"NOT_INSTALLED",
+  "finalCritics":"NOT_RUN"
+}

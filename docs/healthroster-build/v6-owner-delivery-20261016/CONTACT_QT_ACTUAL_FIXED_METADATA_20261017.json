@@ -1,0 +1,365 @@
+{
+  "version": "CONTACT_QT_ACTUAL_FIXED_METADATA_V1",
+  "authenticated": true,
+  "readOnly": true,
+  "database": "agency_test",
+  "relations": [
+    {
+      "owner": "dee50tht",
+      "schema": "private",
+      "present": true,
+      "relation": "candidate_daily_batch_receipts",
+      "rls_forced": false,
+      "persistence": "permanent",
+      "rls_enabled": true,
+      "column_count": 24,
+      "policy_count": 1,
+      "relation_kind": "table",
+      "trigger_count": 4,
+      "replica_identity": "default"
+    },
+    {
+      "owner": "dee50tht",
+      "schema": "public",
+      "present": true,
+      "relation": "audit_events",
+      "rls_forced": false,
+      "persistence": "permanent",
+      "rls_enabled": true,
+      "column_count": 16,
+      "policy_count": 1,
+      "relation_kind": "table",
+      "trigger_count": 2,
+      "replica_identity": "default"
+    },
+    {
+      "owner": "dee50tht",
+      "schema": "public",
+      "present": true,
+      "relation": "settings_defaults",
+      "rls_forced": false,
+      "persistence": "permanent",
+      "rls_enabled": true,
+      "column_count": 217,
+      "policy_count": 1,
+      "relation_kind": "table",
+      "trigger_count": 6,
+      "replica_identity": "default"
+    },
+    {
+      "owner": "dee50tht",
+      "schema": "public",
+      "present": true,
+      "relation": "tms_users",
+      "rls_forced": false,
+      "persistence": "permanent",
+      "rls_enabled": true,
+      "column_count": 15,
+      "policy_count": 1,
+      "relation_kind": "table",
+      "trigger_count": 267,
+      "replica_identity": "default"
+    },
+    {
+      "owner": "dee50tht",
+      "schema": "public",
+      "present": true,
+      "relation": "ts_financials_outbox",
+      "rls_forced": false,
+      "persistence": "permanent",
+      "rls_enabled": true,
+      "column_count": 7,
+      "policy_count": 1,
+      "relation_kind": "table",
+      "trigger_count": 2,
+      "replica_identity": "default"
+    },
+    {
+      "owner": "dee50tht",
+      "schema": "public",
+      "present": true,
+      "relation": "weekly_candidate_cohorts",
+      "rls_forced": true,
+      "persistence": "permanent",
+      "rls_enabled": true,
+      "column_count": 8,
+      "policy_count": 1,
+      "relation_kind": "table",
+      "trigger_count": 20,
+      "replica_identity": "default"
+    },
+    {
+      "owner": "dee50tht",
+      "schema": "public",
+      "present": true,
+      "relation": "weekly_candidate_outreach_generations",
+      "rls_forced": true,
+      "persistence": "permanent",
+      "rls_enabled": true,
+      "column_count": 18,
+      "policy_count": 1,
+      "relation_kind": "table",
+      "trigger_count": 32,
+      "replica_identity": "default"
+    },
+    {
+      "owner": "dee50tht",
+      "schema": "public",
+      "present": true,
+      "relation": "weekly_manager_recipient_generations",
+      "rls_forced": true,
+      "persistence": "permanent",
+      "rls_enabled": true,
+      "column_count": 8,
+      "policy_count": 1,
+      "relation_kind": "table",
+      "trigger_count": 16,
+      "replica_identity": "default"
+    },
+    {
+      "owner": "dee50tht",
+      "schema": "public",
+      "present": true,
+      "relation": "weekly_message_dispatch_commands",
+      "rls_forced": true,
+      "persistence": "permanent",
+      "rls_enabled": true,
+      "column_count": 33,
+      "policy_count": 1,
+      "relation_kind": "table",
+      "trigger_count": 20,
+      "replica_identity": "default"
+    },
+    {
+      "owner": "dee50tht",
+      "schema": "public",
+      "present": true,
+      "relation": "weekly_source_global_settings",
+      "rls_forced": true,
+      "persistence": "permanent",
+      "rls_enabled": true,
+      "column_count": 10,
+      "policy_count": 1,
+      "relation_kind": "table",
+      "trigger_count": 2,
+      "replica_identity": "default"
+    },
+    {
+      "owner": "dee50tht",
+      "schema": "public",
+      "present": true,
+      "relation": "weekly_timesheet_submission_request_memberships",
+      "rls_forced": true,
+      "persistence": "permanent",
+      "rls_enabled": true,
+      "column_count": 13,
+      "policy_count": 1,
+      "relation_kind": "table",
+      "trigger_count": 14,
+      "replica_identity": "default"
+    },
+    {
+      "owner": "dee50tht",
+      "schema": "public",
+      "present": true,
+      "relation": "weekly_timesheet_submission_requests",
+      "rls_forced": true,
+      "persistence": "permanent",
+      "rls_enabled": true,
+      "column_count": 16,
+      "policy_count": 1,
+      "relation_kind": "table",
+      "trigger_count": 12,
+      "replica_identity": "default"
+    }
+  ],
+  "policies": [
+    {
+      "roles": [
+        "dee50tht",
+        "service_role"
+      ],
+      "policy": "cloudtms_miget_service_owner_all",
+      "schema": "private",
+      "command": "all",
+      "relation": "candidate_daily_batch_receipts",
+      "permissive": true,
+      "check_expression": "true",
+      "using_expression": "true"
+    },
+    {
+      "roles": [
+        "dee50tht",
+        "service_role"
+      ],
+      "policy": "cloudtms_miget_service_owner_all",
+      "schema": "public",
+      "command": "all",
+      "relation": "audit_events",
+      "permissive": true,
+      "check_expression": "true",
+      "using_expression": "true"
+    },
+    {
+      "roles": [
+        "dee50tht",
+        "service_role"
+      ],
+      "policy": "cloudtms_miget_service_owner_all",
+      "schema": "public",
+      "command": "all",
+      "relation": "settings_defaults",
+      "permissive": true,
+      "check_expression": "true",
+      "using_expression": "true"
+    },
+    {
+      "roles": [
+        "dee50tht",
+        "service_role"
+      ],
+      "policy": "cloudtms_miget_service_owner_all",
+      "schema": "public",
+      "command": "all",
+      "relation": "tms_users",
+      "permissive": true,
+      "check_expression": "true",
+      "using_expression": "true"
+    },
+    {
+      "roles": [
+        "dee50tht",
+        "service_role"
+      ],
+      "policy": "cloudtms_miget_service_owner_all",
+      "schema": "public",
+      "command": "all",
+      "relation": "ts_financials_outbox",
+      "permissive": true,
+      "check_expression": "true",
+      "using_expression": "true"
+    },
+    {
+      "roles": [
+        "dee50tht",
+        "service_role"
+      ],
+      "policy": "cloudtms_miget_service_owner_all",
+      "schema": "public",
+      "command": "all",
+      "relation": "weekly_candidate_cohorts",
+      "permissive": true,
+      "check_expression": "true",
+      "using_expression": "true"
+    },
+    {
+      "roles": [
+        "dee50tht",
+        "service_role"
+      ],
+      "policy": "cloudtms_miget_service_owner_all",
+      "schema": "public",
+      "command": "all",
+      "relation": "weekly_candidate_outreach_generations",
+      "permissive": true,
+      "check_expression": "true",
+      "using_expression": "true"
+    },
+    {
+      "roles": [
+        "dee50tht",
+        "service_role"
+      ],
+      "policy": "cloudtms_miget_service_owner_all",
+      "schema": "public",
+      "command": "all",
+      "relation": "weekly_manager_recipient_generations",
+      "permissive": true,
+      "check_expression": "true",
+      "using_expression": "true"
+    },
+    {
+      "roles": [
+        "dee50tht",
+        "service_role"
+      ],
+      "policy": "cloudtms_miget_service_owner_all",
+      "schema": "public",
+      "command": "all",
+      "relation": "weekly_message_dispatch_commands",
+      "permissive": true,
+      "check_expression": "true",
+      "using_expression": "true"
+    },
+    {
+      "roles": [
+        "dee50tht",
+        "service_role"
+      ],
+      "policy": "cloudtms_miget_service_owner_all",
+      "schema": "public",
+      "command": "all",
+      "relation": "weekly_source_global_settings",
+      "permissive": true,
+      "check_expression": "true",
+      "using_expression": "true"
+    },
+    {
+      "roles": [
+        "dee50tht",
+        "service_role"
+      ],
+      "policy": "cloudtms_miget_service_owner_all",
+      "schema": "public",
+      "command": "all",
+      "relation": "weekly_timesheet_submission_request_memberships",
+      "permissive": true,
+      "check_expression": "true",
+      "using_expression": "true"
+    },
+    {
+      "roles": [
+        "dee50tht",
+        "service_role"
+      ],
+      "policy": "cloudtms_miget_service_owner_all",
+      "schema": "public",
+      "command": "all",
+      "relation": "weekly_timesheet_submission_requests",
+      "permissive": true,
+      "check_expression": "true",
+      "using_expression": "true"
+    }
+  ],
+  "rules": 0,
+  "userTriggerCensus": {
+    "pages": 3,
+    "total": 267,
+    "internal": 266,
+    "nonInternal": [
+      {
+        "schema": "public",
+        "enabled": "origin_and_local",
+        "trigger": "tms_users_touch",
+        "internal": false,
+        "relation": "tms_users",
+        "constraint": null,
+        "definition": "CREATE TRIGGER tms_users_touch BEFORE UPDATE ON tms_users FOR EACH ROW EXECUTE FUNCTION tms_touch_updated_at()",
+        "function_name": "tms_touch_updated_at",
+        "function_owner": "dee50tht",
+        "function_schema": "public",
+        "constraint_trigger": false,
+        "function_configuration": [
+          "search_path=public, extensions, pg_temp"
+        ],
+        "function_security_definer": true,
+        "function_identity_arguments": ""
+      }
+    ],
+    "EOF": true
+  },
+  "noNativeGuardCauseInferred": true,
+  "actualPrequeryHold": "LOCAL_METADATA_DIAGNOSTIC_REFUSED",
+  "businessRowsReturned": 0,
+  "functionsInvoked": false
+}

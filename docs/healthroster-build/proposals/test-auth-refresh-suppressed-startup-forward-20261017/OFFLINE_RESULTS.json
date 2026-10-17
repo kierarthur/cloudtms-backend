@@ -1,0 +1,19 @@
+{
+  "status": "PASS_SOURCE_ONLY",
+  "inheritedChecks": [88,86,113],
+  "suppressionChecksBeforeManifest": 88,
+  "protocolTests": 19,
+  "fullParentReversals": 5,
+  "runtimeParentReversals": 3,
+  "onlyChangedClassification": "EXACT_QUERYLESS_NORMAL_BACKEND_POST_CHANGES_PING",
+  "suppressedRequestForwarded": false,
+  "responseFabricated": false,
+  "maximumSuppressionBeforeHold": 1,
+  "actualCompleteWorkerSyntheticClosureCases": 3,
+  "auth": "NOT_RUN",
+  "browser": "NOT_RUN",
+  "network": "NOT_RUN",
+  "privateContentsRead": false,
+  "aclMutation": "NOT_RUN",
+  "stateExport": "NOT_RUN"
+}

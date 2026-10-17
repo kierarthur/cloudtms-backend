@@ -1,0 +1,63 @@
+{
+  "version": "APPROVED_TEST_AUTH_HARNESS_SOURCE_PINS_V1",
+  "sources": [
+    {
+      "root": "D:/Development/GitHub/TEST-Frontend",
+      "source": "tests/e2e/auth.setup.ts",
+      "captured": "reference/auth.setup.ts",
+      "bytes": 1989,
+      "sha256": "ce6324a65869d6b4d58a3038b4f3b8e0204ff2dda49e80ef95c249817c1fe9ef",
+      "commit": "7a75111ec2923693e75feef4a7ccbcb6ecba942e",
+      "gitLineEndingRule": "Only saved CRLF to Git LF; exact complete files, no source edits"
+    },
+    {
+      "root": "D:/Development/GitHub/TEST-Frontend",
+      "source": "playwright.config.ts",
+      "captured": "reference/playwright.config.ts",
+      "bytes": 790,
+      "sha256": "4648b57b4a5d78e86f96ee3f7472e9cdb99977bba3fbc22750ad363a8475036b",
+      "commit": "7a75111ec2923693e75feef4a7ccbcb6ecba942e",
+      "gitLineEndingRule": "Only saved CRLF to Git LF; exact complete files, no source edits"
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+      "source": "docs/healthroster-build/proposals/daily-health-fixture-s0-s5-source-bindings-20261017/PLAN.json",
+      "bytes": 6108,
+      "sha256": "65125ba8814b0bcb70f7c9dc32da8fd73852a881c99c0230f066c692585b9dcc",
+      "commit": "17a0ec1b5b9c31454c29b2a3b18cf004192ba810"
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+      "source": "docs/healthroster-build/v6-owner-delivery-20261016/REAL_TEST_ACTOR_READ_HOLD_20261017.json",
+      "bytes": 2791,
+      "sha256": "858404bfaa4d38f68ba2f8914d994e0854193267b1ab26b27d3b3fefdc328c8b",
+      "commit": "17a0ec1b5b9c31454c29b2a3b18cf004192ba810"
+    }
+  ],
+  "credentialsRead": false,
+  "stateContentsRead": false,
+  "localRuntime": [
+    {
+      "file": "D:/Development/GitHub/TEST-Frontend/node_modules/@playwright/test/package.json",
+      "bytes": 754,
+      "sha256": "cf92117ef1d8cbf1e4b2dffb63a0da552c0173bd6052f0f45711c0f00b79dc99"
+    },
+    {
+      "file": "D:/Development/GitHub/TEST-Frontend/node_modules/playwright/lib/index.js",
+      "bytes": 34490,
+      "sha256": "36faa53b7c6fa8f76788f2bcfa21d72edc22e5f528c45328b71d07e215d79a32"
+    }
+  ],
+  "querySchemaSource": {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-office-13102026",
+    "commit": "ac112422e529aefbcba0fc0147d2b28123751823",
+    "file": "js/weekly-source/import-workspace.js",
+    "sha256": "2d9a658b46745e58f56df6d6b5125a3aa4cdff4a4a5e5cf17199494795c435f3",
+    "selectedCompleteFunctions": [
+      "normalisePage",
+      "normaliseWorkspace"
+    ],
+    "captured": "reference/health-query-workspace-schema.js.txt",
+    "capturedSha256": "77495c4ffb9b05ec0ec4ce3bf5cf96c5d9c9ea1a74911dcfa81460626b7dc1aa"
+  }
+}
