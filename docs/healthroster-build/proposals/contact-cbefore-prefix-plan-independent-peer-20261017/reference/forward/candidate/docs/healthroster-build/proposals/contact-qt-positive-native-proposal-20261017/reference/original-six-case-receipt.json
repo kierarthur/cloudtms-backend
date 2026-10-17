@@ -1,0 +1,74 @@
+{
+  "version": "HEALTH_CONTACT_SIX_NATIVE_LOCK_CASES_V1",
+  "status": "PASS_SIX_EXPECTED_EXACT_LOCK_REFUSALS_AND_FULL_CANONICAL_LIVE_RESTORATION",
+  "cases": [
+    {
+      "file": "CONTACT_SIX_LOCK_NATIVE_20261016/contact20-lock1.json",
+      "caseId": "contact20-lock1",
+      "sha256": "2830ceb81f246d81ea6e8bd0b184c4e2ed4da8843e9aea88d21371f879ab2892",
+      "expectedFailedStatement": 12,
+      "expectedSqlstate": "55P03",
+      "elapsedMilliseconds": 86962,
+      "sharedTurnUnlockedAndClosed": true
+    },
+    {
+      "file": "CONTACT_SIX_LOCK_NATIVE_20261016/contact20-lock2-attempt3-PASS-20261017.json",
+      "caseId": "contact20-lock2",
+      "sha256": "fb0d4736f3f1193a2d0031c9dcb98003cc9d662253995ca3069fd147d08addd3",
+      "expectedFailedStatement": 14,
+      "expectedSqlstate": "55P03",
+      "elapsedMilliseconds": 75995,
+      "sharedTurnUnlockedAndClosed": true
+    },
+    {
+      "file": "CONTACT_SIX_LOCK_NATIVE_20261016/contact30-lock1-PASS-20261017.json",
+      "caseId": "contact30-lock1",
+      "sha256": "aca772a3bac31392958316bceb6133753895129c1d7721ccb23447783b528600",
+      "expectedFailedStatement": 12,
+      "expectedSqlstate": "55P03",
+      "elapsedMilliseconds": 69169,
+      "sharedTurnUnlockedAndClosed": true
+    },
+    {
+      "file": "CONTACT_SIX_LOCK_NATIVE_20261016/contact30-lock2-PASS-20261017.json",
+      "caseId": "contact30-lock2",
+      "sha256": "bee9f4ff89a0195451bf556a0c75bf70164dab3a92b7dce15aa9599c7c764270",
+      "expectedFailedStatement": 14,
+      "expectedSqlstate": "55P03",
+      "elapsedMilliseconds": 57659,
+      "sharedTurnUnlockedAndClosed": true
+    },
+    {
+      "file": "CONTACT_SIX_LOCK_NATIVE_20261016/contact30-lock3-PASS-20261017.json",
+      "caseId": "contact30-lock3",
+      "sha256": "462decdea115e349049157585c7746efd42668886220695d7e3ffa05b5526da8",
+      "expectedFailedStatement": 16,
+      "expectedSqlstate": "55P03",
+      "elapsedMilliseconds": 54956,
+      "sharedTurnUnlockedAndClosed": true
+    },
+    {
+      "file": "CONTACT_SIX_LOCK_NATIVE_20261016/contact30-lock4-PASS-20261017.json",
+      "caseId": "contact30-lock4",
+      "sha256": "3b12aff6edb3cea0a499b76434835bd004fef636d71f5bb76fe89ddfaac1056e",
+      "expectedFailedStatement": 18,
+      "expectedSqlstate": "55P03",
+      "elapsedMilliseconds": 55174,
+      "sharedTurnUnlockedAndClosed": true
+    }
+  ],
+  "sourceScope": "Exact two original Contact NOWAIT constructor lock prefixes only; no original constructor/assertion/body/ledger/DDL/business fixture was sent",
+  "sameCanonicalRestorationModuleSha256": "fb4ffa42acf7cf319cdcb45a233babdb9720bb1bc73e4cb1f6ddcd3be696a4a6",
+  "fixtureProofRoute": "Independent physically fresh C-after READ ONLY/RR third frame on 17 October; original 16 October first case retained",
+  "backgroundJobsPaused": false,
+  "historicalHoldsPreserved": [
+    "contact20-lock2-attempt1-HOLD.json",
+    "contact20-lock2-attempt2-HOLD.json"
+  ],
+  "fullBusinessMapsPersisted": false,
+  "positiveMigrationBodies": "NOT_RUN",
+  "outerRepeatableReadSnapshotCurrentness": "NOT_QUALIFIED",
+  "fullRehearsal": "NOT_RUN",
+  "install2": "NOT_INSTALLED",
+  "finalCritics": "NOT_RUN"
+}

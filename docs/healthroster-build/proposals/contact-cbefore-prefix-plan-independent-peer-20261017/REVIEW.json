@@ -1,0 +1,22 @@
+{
+  "version": "CONTACT_CBEFORE_PREFIX_PLAN_INDEPENDENT_PEER_V1",
+  "reviewer": "GPT-6.1-sol / xhigh",
+  "disposition": "ACCEPT_BOUNDED_SOURCE_FORWARD",
+  "actionableFindings": [],
+  "authorCommit": "8ded68468803127fcbbc3c543d5ecf9934c79cba",
+  "authorFolder": "docs/healthroster-build/proposals/contact-cbefore-plan-scope-forward-20261017",
+  "authorManifestSha256": "1bcb5841685ab84d4349ae2a06faa5ead652a5285f6853fb2a30e25d640c7c9c",
+  "selectionSha256": "8cc341d47c2b3a2829f9c4a6a99e7d02de21e71cc82fd8fa344a2c9921e170d9",
+  "authorProofSha256": "76a7e0b4f6d06b2913b87b917690191e1ca963c42b3c4baf3ffcdcd0ffbe5590",
+  "rootParent": "78b2ae42c1b47a222d32a46121066825dc20115c",
+  "initialCommit": "9a00861188b4b35e427e97d6e43f351b049b91e0",
+  "initialManifestSha256": "04d9472111d6ddd028b60da6166ac18ca9c0092ddff037de58270d04bc5b763f",
+  "selection": {"targets":49,"existingChanged":4,"new":3,"unchangedRoot":42,"wholeRootInverses":4,"rootHunks":9,"wholeInitialInverses":2,"unchangedInitialPayloads":46,"initialFilesPreserved":70},
+  "sourceMap": {"directRelationNames":33,"closedRelationNames":37,"ctes":16,"sha256":"0426985ea599c726934b2a10eca00f1642d6fe99537a2a3441a723c00c395caf","fourPgViewExpansions":"DOCUMENTARY_ONLY_NOT_FRESH_NATIVE_IDENTITY"},
+  "replay": {"authorTests":33,"grammarCases":2,"additionalPeerTests":6,"completeAuthorFilesCaptured":73,"savedIndexHeadEquality":true,"productionOrSqlHookChanges":0,"testLocatorAmendments":2},
+  "preserved": ["whole original canonical query and exact prefix/rollback", "all twelve full canonical maps and fingerprints", "WeakMap attribution", "original source/saved/index/HEAD/setup guards", "ordinary before/after reader", "original constructors and B payloads", "closed SQLSTATE only and all-stderr refusal", "owned-child termination and shared-turn cleanup", "45/70/120/60/180-second bounds"],
+  "limits": {"statementSeconds":45,"childSeconds":70,"workSeconds":120,"cleanupSeconds":60,"totalSeconds":180},
+  "execution": {"native":"NOT_RUN","psqlOrExplainExecuted":false,"osDatabaseChildren":0,"mcpDispatched":false,"privateActualStateReads":0,"rootWrites":0,"officeWrites":0,"bankSemanticBodiesRead":0},
+  "remainingQualifications": ["actual root committed selection/source/setup admission", "actual native PREFIX/PLAN result and format", "original cancellation cause and ordinal UNKNOWN", "no full canonical snapshot or constructor/B/restoration proof", "no measured performance claim"],
+  "sourceStorage": {"configuredCwd":"D:/Development/GitHub","writeRoot":"D:/Development/GitHub/.codex-worktrees/healthroster-v2-money-build-13102026","gitDir":"D:/Development/GitHub/cloudtms-backend/.git/worktrees/healthroster-v2-money-build-13102026","commonGitDir":"D:/Development/GitHub/cloudtms-backend/.git","allPhysicalPathsOnD":true}
+}
