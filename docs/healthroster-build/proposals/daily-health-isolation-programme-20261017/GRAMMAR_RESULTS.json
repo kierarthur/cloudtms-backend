@@ -1,0 +1,60 @@
+{
+  "parser": "v7.20",
+  "postgresqlGrammar": [
+    17,
+    7
+  ],
+  "examples": [
+    {
+      "name": "READ COMMITTED",
+      "statements": 7,
+      "definitions": 4,
+      "plpgsqlBodies": 6,
+      "grammar": "PASS",
+      "nativeBodyCompilation": "NOT_PROVED"
+    },
+    {
+      "name": "READ COMMITTED REVIEW SCRIPT",
+      "statements": 9,
+      "definitions": 4,
+      "plpgsqlBodies": 6,
+      "grammar": "PASS",
+      "nativeBodyCompilation": "NOT_PROVED"
+    },
+    {
+      "name": "REPEATABLE READ",
+      "statements": 7,
+      "definitions": 4,
+      "plpgsqlBodies": 6,
+      "grammar": "PASS",
+      "nativeBodyCompilation": "NOT_PROVED"
+    },
+    {
+      "name": "REPEATABLE READ REVIEW SCRIPT",
+      "statements": 9,
+      "definitions": 4,
+      "plpgsqlBodies": 6,
+      "grammar": "PASS",
+      "nativeBodyCompilation": "NOT_PROVED"
+    },
+    {
+      "name": "SERIALIZABLE",
+      "statements": 7,
+      "definitions": 4,
+      "plpgsqlBodies": 6,
+      "grammar": "PASS",
+      "nativeBodyCompilation": "NOT_PROVED"
+    },
+    {
+      "name": "SERIALIZABLE REVIEW SCRIPT",
+      "statements": 9,
+      "definitions": 4,
+      "plpgsqlBodies": 6,
+      "grammar": "PASS",
+      "nativeBodyCompilation": "NOT_PROVED"
+    }
+  ],
+  "substitutions": [],
+  "native": "NOT_RUN",
+  "dbConnections": 0
+}

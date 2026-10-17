@@ -1,0 +1,85 @@
+{
+  "version": "DAILY_HEALTH_ISOLATION_EXACT_SOURCE_V1",
+  "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+  "sourceCommit": "b4cb19f04be68f67b8aad81692c26e96f7b6f0ed",
+  "runtimeSourceCommit": "84738fe4057d9d693ccd723eb1835106f1091f57",
+  "definitions": [
+    {
+      "file": "supabase/repeatable/includes/nhsp_v6_health_composition_wrappers.sqlinc",
+      "name": "private.timesheet_contract_move_reason_v1",
+      "fileSha256": "a5e50977d1ad2fe957ab3e306e5272d2a181dbf460d8d766c5638d1adc073ab8",
+      "completeParent": "inputs/current/supabase/repeatable/includes/nhsp_v6_health_composition_wrappers.sqlinc",
+      "sha256": "fdd0828b61397e8e542a8a8644c3d12b7b1f654c0b926f359ac2333839d136c3",
+      "bytes": 997
+    },
+    {
+      "file": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/03_requests.sqlinc",
+      "name": "private.daily_rate_correction_request_assert_v1",
+      "fileSha256": "daf9306ef07b5f9a8102ab65be38995e6465e13a433e997265911019eaed1912",
+      "completeParent": "inputs/current/supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/03_requests.sqlinc",
+      "sha256": "be5b79f7b84f6d5f11df9f79dd20cd6cf30d8efd3a77ee651cec53072678e076",
+      "bytes": 2698
+    },
+    {
+      "file": "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/01_complete_helpers.sqlinc",
+      "name": "private.daily_rate_correction_health_actor_require_v1",
+      "fileSha256": "95c35931e723787e4c5258ef704cb1115f0edbd9fd6b34e9ab25c4d0966b355b",
+      "completeParent": "inputs/current/supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/01_complete_helpers.sqlinc",
+      "sha256": "83d8b84284f46415977fdad8735843ac2f9d82aa25bbf16c7994ab157f9fe07e",
+      "bytes": 901
+    },
+    {
+      "file": "supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/01_complete_helpers.sqlinc",
+      "name": "private.daily_rate_correction_health_basis_v1",
+      "fileSha256": "95c35931e723787e4c5258ef704cb1115f0edbd9fd6b34e9ab25c4d0966b355b",
+      "completeParent": "inputs/current/supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/01_complete_helpers.sqlinc",
+      "sha256": "2a725307cbd78636a529ef37d3962deac435ee47e27fa105b23203e9f2506a31",
+      "bytes": 1899
+    }
+  ],
+  "preserved": [
+    {
+      "file": "scripts/healthroster-install1-full-rehearsal.mjs",
+      "sha256": "af2b6b591a8d6c251ad08507130bd2cf0cc9861d966055174e511de9c4102754",
+      "bytes": 48190
+    },
+    {
+      "file": "scripts/healthroster-live-test-restoration.mjs",
+      "sha256": "fb4ffa42acf7cf319cdcb45a233babdb9720bb1bc73e4cb1f6ddcd3be696a4a6",
+      "bytes": 14597
+    },
+    {
+      "file": "scripts/healthroster-full-rehearsal-protocol.mjs",
+      "sha256": "53c301664b449168b34803ca995eedcfd4cf90df1533c6d78086637df6488550",
+      "bytes": 10596
+    },
+    {
+      "file": "scripts/healthroster-rehearsal-turn.mjs",
+      "sha256": "2a4078b744545a4b4c15a9842947e222ffae75dcadf9b087f49b3c8a30cd36aa",
+      "bytes": 12827
+    },
+    {
+      "file": "scripts/healthroster-turn-control.mjs",
+      "sha256": "ae6aa38307faf3fdc7a1c1a0fe20ff6aab3589c420c5bfd5642566e3a0c23ad8",
+      "bytes": 9580
+    },
+    {
+      "file": "supabase/release/export_contract.sql",
+      "sha256": "05a904bd4f7739409b28e0459b9f68d7c54a5e51796aefbe2829b370ce1dfe43",
+      "bytes": 14978
+    }
+  ],
+  "snapshotRelations": [
+    "private.candidate_daily_batch_receipts",
+    "public.tms_users",
+    "public.ts_financials_outbox"
+  ],
+  "directBusinessReads": [
+    "public.tms_users"
+  ],
+  "businessFixtureRows": 0,
+  "native": "NOT_RUN",
+  "executionAdapter": "UNPROVIDED",
+  "policy": "Existing locked basis RC-only guard; no new restriction, actor or financial permission",
+  "bankingBodies": []
+}

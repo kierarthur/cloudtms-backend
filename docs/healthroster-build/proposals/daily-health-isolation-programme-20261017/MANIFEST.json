@@ -1,0 +1,77 @@
+{
+  "version": "DAILY_HEALTH_ISOLATION_PROGRAMME_FREEZE_V1",
+  "rootCommit": "b4cb19f04be68f67b8aad81692c26e96f7b6f0ed",
+  "definitions": 4,
+  "examples": 6,
+  "businessFixtureRows": 0,
+  "executionAdapter": "UNPROVIDED",
+  "sourceOnly": true,
+  "native": "NOT_RUN",
+  "files": [
+    {
+      "file": "GRAMMAR_RESULTS.json",
+      "bytes": 1378,
+      "sha256": "a7dc8ce0a1af2fb90af70223fcfb68ba07f880be38e8a2f7c38243e1e140f166"
+    },
+    {
+      "file": "PROGRAMMES.json",
+      "bytes": 65098,
+      "sha256": "d84552a32a528c3c0ccd640f49c3789dce009eb0cded38fe8d371896f7e0277b"
+    },
+    {
+      "file": "README.md",
+      "bytes": 4836,
+      "sha256": "13cd6e498df87637acba38837e24573f1faa839c4de77e1c242d6da2e9c2e3e4"
+    },
+    {
+      "file": "SOURCE_PINS.json",
+      "bytes": 3770,
+      "sha256": "72ca3fed09cacb01d244374de2be827bf47113f58c5aca18f51ee9af7d1a34ca"
+    },
+    {
+      "file": "TEST_RESULTS.json",
+      "bytes": 814,
+      "sha256": "7574506674e59d7689320324d5643d691076c51c702338515984a32b3daea382"
+    },
+    {
+      "file": "build-program.mjs",
+      "bytes": 7224,
+      "sha256": "52f927186e2af27949c5ca679b90ea8d44015a607675b47d6ab90553d3ea8823"
+    },
+    {
+      "file": "freeze.mjs",
+      "bytes": 1954,
+      "sha256": "035ae674c61eee558bf575488fd9f5a4980c8720a4013f3185945bfb7772c19d"
+    },
+    {
+      "file": "grammar.py",
+      "bytes": 1525,
+      "sha256": "8b8ec67939081342167d41aba70b5048f9959bfa0f1d7328f42d762b6ec216da"
+    },
+    {
+      "file": "inputs/current/supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/03_requests.sqlinc",
+      "bytes": 4862,
+      "sha256": "daf9306ef07b5f9a8102ab65be38995e6465e13a433e997265911019eaed1912"
+    },
+    {
+      "file": "inputs/current/supabase/repeatable/17102026_0248_nhsp_v6_daily_health_support/01_complete_helpers.sqlinc",
+      "bytes": 15886,
+      "sha256": "95c35931e723787e4c5258ef704cb1115f0edbd9fd6b34e9ab25c4d0966b355b"
+    },
+    {
+      "file": "inputs/current/supabase/repeatable/includes/nhsp_v6_health_composition_wrappers.sqlinc",
+      "bytes": 13366,
+      "sha256": "a5e50977d1ad2fe957ab3e306e5272d2a181dbf460d8d766c5638d1adc073ab8"
+    },
+    {
+      "file": "prepare.mjs",
+      "bytes": 3494,
+      "sha256": "1e97eac1e8c0bd4cefedd1cac2f9ab984cb19c65ea3f192ddad622d7cfb85fb8"
+    },
+    {
+      "file": "test.mjs",
+      "bytes": 5013,
+      "sha256": "c234d4cadcd5d219e797c256323cf56822319e57fd79cefce5a3b36910c98b8d"
+    }
+  ]
+}
