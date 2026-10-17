@@ -1,0 +1,29 @@
+{
+  "version": "BANKING_NAMED_PUBLISHED_DEPENDENCY_CHECKPOINT_R8_V1",
+  "capturedAt": "2026-10-17T17:22:31.971286+00:00",
+  "bankLocalHead": "08ba4dff1d6923ac7dab3b535040916c380c7e3b",
+  "freshRemoteBranch": "codex/bpay-next-build-20261009",
+  "freshRemoteHead": "40193adc09e55c804b44b76f322b0e08e9533e74",
+  "localRemoteEqual": false,
+  "namedSavedInputs": [
+    {
+      "file": "docs/bpay-next/TEST_INSTALLS.md",
+      "bytes": 6628,
+      "sha256": "d7eed66e7a0dde18defa4628fbbbb3137e50017742195b387ab1a817f17cc1ca",
+      "savedIndexHeadEqual": true,
+      "rawEqualPriorR7": true
+    },
+    {
+      "file": "docs/bpay-next/IMPLEMENTATION_CHECKLIST.csv",
+      "bytes": 9213207,
+      "sha256": "1b413e919e465c3ed1d922239c3b7badc5ea71093e01ecc46cfde607f48d0ab9",
+      "savedIndexHeadEqual": true,
+      "rawEqualPriorR7": true
+    }
+  ],
+  "previousCompleteStatusRecord": "docs/healthroster-build/v6-owner-delivery-20261016/BANKING_PUBLISHED_DEPENDENCY_CHECKPOINT_R7_20261017.json",
+  "statusDisposition": "R7 selected original status rows and first-disabled-install reading remain exact because both named complete images are raw-equal.",
+  "semanticBankingBodiesRead": false,
+  "bankingCodeChanged": false,
+  "bankingChatMessaged": false
+}

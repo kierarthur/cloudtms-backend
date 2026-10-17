@@ -1,0 +1,26 @@
+{
+  "version": "QT_COST1000_SOURCE_ONLY_RESULTS_V1",
+  "status": "SOURCE_TESTS_PASS",
+  "pureTests": 69,
+  "pgMajor": 17,
+  "parsedModes": 5,
+  "parsedProgrammes": 10,
+  "parsedMainStatements": 20,
+  "parsedFreshStatements": 5,
+  "fixedSampleLimit": 1000,
+  "actualSavedIndexCurrentHistoricalParents": 8,
+  "holderCompleteRawInverseEdits": 18,
+  "securePathCompleteRawInverseEdits": 1,
+  "rootFunctionTemplatePlainRealm": "PASS",
+  "privateAuthState": "NOT_ACCESSED",
+  "holderSourceAdmission": "NOT_RUN",
+  "native": "NOT_RUN",
+  "performance": "NOT_PROVED",
+  "assertionEquivalence": "NOT_PROVED",
+  "qtAcceptance": "NOT_RUN",
+  "sourceParentHeadsObserved": {
+    "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026": "506cd695ab0cb38182a0c1076b0685803151f307",
+    "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026": "0b3145d4aaa2a558420cb09c79f0b11df4ee6b36"
+  },
+  "sourceAdmission": "Only after root reviewed actual copy/commit/push and exact current saved/index/history checks"
+}

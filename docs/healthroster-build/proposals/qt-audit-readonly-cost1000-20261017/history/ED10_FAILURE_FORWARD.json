@@ -1,0 +1,27 @@
+{
+  "version": "QT_COST1000_CLOSED_FAILURE_FULL_SOURCE_FORWARD_V1",
+  "parentManifestSha256": "0a80059a270f79e4f702f710ae9bbbe7f88641304f7943e8cec3b629080acad5",
+  "parentRootToolsSha256": "73c66b44a2379e5f8eca5d74bd7f905859857538c25520e3ac5fb3b490a80136",
+  "afterRootToolsSha256": "2b41516b63dd6b994612b6b290e77f75def3393eeca812b40e1b7f49a9a4137b",
+  "edits": [
+    {
+      "before": "parse=s=>JSON.parse(s.trim());",
+      "after": "parse=s=>{try{return JSON.parse(s.trim());}catch{throw Error('COST_CLOSED_JSON_REQUIRED');}};"
+    },
+    {
+      "before": " }finally{\n  if(!normal&&!closed)",
+      "after": " }catch(error){throw Error(/^COST_[A-Z0-9_]+$/.test(error?.message??'')?error.message:'COST_ROOT_TOOL_HELD');}finally{\n  if(!normal&&!closed)"
+    },
+    {
+      "before": "for(const line of lines){if(!line)continue;const r=parse(line);",
+      "after": "for(const raw of lines){const line=raw.replace(/\\x1b\\[[0-?]*[ -/]*[@-~]/g,'');if(!line)continue;const r=parse(line);"
+    },
+    {
+      "before": "check(buffer.length<=16384,'COST_OWN_OUTPUT_BOUND_REQUIRED');",
+      "after": "check([...buffer].reduce((n,c)=>n+(c.codePointAt(0)<128?1:c.codePointAt(0)<2048?2:c.codePointAt(0)<65536?3:4),0)<=16384,'COST_OWN_OUTPUT_BOUND_REQUIRED');"
+    }
+  ],
+  "allSqlAndNativePredicateAndHolderImagesUnchanged": true,
+  "native": "NOT_RUN",
+  "closedPtyLineNormalization": "Full CSI only after complete newline; raw chunks bounded16KiB; no banner/unknown text or malformedJSON allowance"
+}

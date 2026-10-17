@@ -1,0 +1,16 @@
+{
+  "verdict": "HOLD_P2_BUFFERED_TRAILING_RECORDS_IGNORED",
+  "sourceManifest": "ed10acad577a90a40ea5aa31749933ad725755e09ae4efb864198a1e9b8f53eb",
+  "originalReplaysObservedThisTurn": {
+    "tests": 77,
+    "sourceVerifier": "PASS",
+    "pg17GrammarAst": "PASS",
+    "publicSourcePins": 8
+  },
+  "actualExportedFunctionReproductions": 4,
+  "native": "NOT_RUN",
+  "actualAdmission": "NOT_RUN",
+  "exitCode": 0,
+  "stdout": "✔ observed current source ignores banner after valid pending in same tool chunk (5.7232ms)\n✔ observed current source ignores closed-HOLD after valid pending in same tool chunk (1.7696ms)\n✔ observed current source ignores duplicate after valid pending in same tool chunk (1.7532ms)\n✔ observed current source ignores partial-trailer after valid pending in same tool chunk (1.8376ms)\nℹ tests 4\nℹ suites 0\nℹ pass 4\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 113.5051\n",
+  "stderr": ""
+}

@@ -1,0 +1,26 @@
+{
+  "version": "QT_COST1000_CLOSED_FAILURE_TARGETED_PEER_HOLD_V1",
+  "qualification": "HOLD_P2_SOURCE_STREAM_PARSER",
+  "files": [
+    {
+      "file": "RESULTS.json",
+      "bytes": 958,
+      "sha256": "49c07207d0c1b04efca41c55862552621fa89846265c0f45e2de12ff21af58d6"
+    },
+    {
+      "file": "REVIEW.md",
+      "bytes": 2350,
+      "sha256": "d7d09928f65032f6e0a13eb76baca090925ecbd0402afb4ab7ef00fb38c1e560"
+    },
+    {
+      "file": "stream-reproduction.test.mjs",
+      "bytes": 2563,
+      "sha256": "2f3258ac3d5f92794887582dd0f36fcc3a5791f2f30f255355bb8dc75750aba4"
+    },
+    {
+      "file": "verify.mjs",
+      "bytes": 1378,
+      "sha256": "0a26ba70b44f80c15804dd1ddabd06ec933ec6f35b76279e79bc9c4aa77c9f3e"
+    }
+  ]
+}

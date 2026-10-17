@@ -1,0 +1,67 @@
+{
+  "version": "QT_COST_LOCAL_WINDOWS_TRANSPORT_QUALIFICATION_V1",
+  "recordedAt": "2026-10-17 17:28:52 UTC",
+  "scope": "Local Node input/output probe only; no database, auth, browser, credentials or native calls",
+  "folder": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/.codex-tmp/qt-cost-pty-transport-check-20261017-3e2f1689567c48109efc71d19f23b4ca",
+  "cookedPty": {
+    "launch": {
+      "chunk_id": "c62663",
+      "wall_time_seconds": 10.0020444,
+      "session_id": 59526,
+      "original_token_count": 30,
+      "output": "\u001b[?9001h\u001b[?1004h\u001b[?25l\u001b[2J\u001b[m\u001b[H{\"status\":\"LOCAL_TRANSPORT_READY_NO_DATABASE\"}\r\n\u001b]0;C:\\Windows\\system32\\cmd.exe\u0007\u001b[?25h"
+    },
+    "resultReady": {
+      "chunk_id": "b63f9f",
+      "wall_time_seconds": 1.0010539,
+      "session_id": 59526,
+      "original_token_count": 16,
+      "output": "RESULT_READY\r\n{\"status\":\"LOCAL_TRANSPORT_PENDING_NO_DATABASE\"}\r\n"
+    },
+    "release": {
+      "chunk_id": "c2f964",
+      "wall_time_seconds": 0.000038,
+      "exit_code": 0,
+      "original_token_count": 19,
+      "output": "RELEASE\r\n\u001b[?9001l\u001b[?1004l{\"status\":\"LOCAL_TRANSPORT_SUMMARY_NO_DATABASE\"}\r\n"
+    },
+    "finding": "Actual PTY echoes RESULT_READY and RELEASE into terminal output; child JSON records remain distinct. Initial PTY also emits OSC title/CSI metadata."
+  },
+  "plainPipe": {
+    "launch": {
+      "chunk_id": "08755d",
+      "wall_time_seconds": 0.0000222,
+      "exit_code": 0,
+      "original_token_count": 12,
+      "output": "{\"status\":\"LOCAL_TRANSPORT_READY_NO_DATABASE\"}\n"
+    },
+    "finding": "stdin reached EOF and the no-database probe exited before controls; unsuitable for the retained original Controls"
+  },
+  "rawPty": {
+    "launch": {
+      "chunk_id": "6adff5",
+      "wall_time_seconds": 10.0028647,
+      "session_id": 39070,
+      "original_token_count": 30,
+      "output": "\u001b[?9001h\u001b[?1004h\u001b[?25l\u001b[2J\u001b[m\u001b[H{\"status\":\"LOCAL_TRANSPORT_READY_NO_DATABASE\"}\r\n\u001b]0;C:\\Windows\\system32\\cmd.exe\u0007\u001b[?25h"
+    },
+    "resultReady": {
+      "chunk_id": "bf10fb",
+      "wall_time_seconds": 1.0092292,
+      "session_id": 39070,
+      "original_token_count": 0,
+      "output": ""
+    },
+    "release": {
+      "chunk_id": "4b2835",
+      "wall_time_seconds": 1.0098751,
+      "session_id": 39070,
+      "original_token_count": 0,
+      "output": ""
+    },
+    "finding": "Raw-mode probe did not produce control responses, so it is unsuitable for the unchanged newline Controls. Only its uniquely identified local Node process61544 was stopped after command/executable/path identity recheck; tool session39070 exit-1 observed. No database holder or another session was cancelled."
+  },
+  "disposition": "Use reviewed native-cmd stdout redirection and a separately reviewed append-only public stdout reader bridge; existing Cost317 source remains immutable and not yet mounted.",
+  "genuineDatabaseProof": false,
+  "qtAcceptance": "NOT_RUN"
+}

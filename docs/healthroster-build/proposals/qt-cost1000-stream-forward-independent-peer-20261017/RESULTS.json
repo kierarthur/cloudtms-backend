@@ -1,0 +1,29 @@
+{
+  "version": "QT_COST1000_STREAM_FORWARD_INDEPENDENT_PEER_V1",
+  "verdict": "ACCEPT_BOUNDED_SOURCE_ONLY",
+  "finding": "P2_CLOSED_AT_SOURCE",
+  "authorManifestSha256": "3177911190336340676bb1fbd6756bc2b193850f8722ece225a9d9865c8e8344",
+  "authorRootToolsSha256": "33ba6d0dab85ca8eeb6d3413e543ab55800a9bc87b136ee6fe776ac6033cc4e4",
+  "authorStreamForwardSha256": "8cb34327d3a46a8900fcb40a19e228d05ddb1687e68aa7f3a1eca9794f4e46e7",
+  "authorFiles": 46,
+  "heldParentFiles": 33,
+  "originalHeldPeerManifestSha256": "b60f788daa7f3160b7ef6110f54fc79955fc700bb7d4674a01a634b004394ffc",
+  "replays": {
+    "unamendedAuthorTests": {"pass": 100, "fail": 0},
+    "independentActualFunctionMemoryTests": {"pass": 10, "fail": 0},
+    "pg17GrammarAst": {"modes": 5, "programmes": 10, "mainStatements": 20, "freshStatements": 5, "status": "PASS"},
+    "savedIndexHeadHistoricalPublicPins": {"pass": 8, "status": "PASS"},
+    "completeInventories": {"current": 46, "held": 33, "status": "PASS"},
+    "completeControllerInverse": {"literalHunks": 3, "status": "PASS"},
+    "completeTestFixtureInverse": {"literalHunks": 1, "status": "PASS"},
+    "sqlHolderValidatorSourceBudgetBodies": "RAW_EQUAL"
+  },
+  "native": "NOT_RUN",
+  "actualSourceAdmission": "NOT_RUN_REQUIRES_ROOT_COMMITTED_IMAGE",
+  "performanceCauseAndEquivalence": "NOT_PROVED",
+  "qtAcceptance": "NOT_PROVED",
+  "partBSignoff": false,
+  "privateStateAccess": false,
+  "trackedWrites": false,
+  "gitMutations": false
+}
