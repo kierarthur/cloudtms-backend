@@ -1,0 +1,17 @@
+{
+  "version": "DAILY_GENUINE_B2_S0_CONFIG_V1",
+  "operatorCommit": "b7694b8b727084fb749c8b015285ae3c74e76f09",
+  "metadataCommits": {
+    "functionalReport": "506cd695ab0cb38182a0c1076b0685803151f307",
+    "functionalRoot": "d6af1981b74b2ff1ae3b02891bdb5c1b2266d71a",
+    "operatorMetadata": "486e7c953b6a97446649ad460fc1cf378927c666",
+    "coordinatorMetadata": "68ffc220082033e18ff5d672df568fe0160ec952",
+    "oneMetadata": "e79b2317c0712b4f1b369e76a2efcd82dbd0c3b8",
+    "bookkeeperMetadata": "b7694b8b727084fb749c8b015285ae3c74e76f09",
+    "rootMetadata": "30996c62c50e7b8b4582aebe9b0565305221edaf"
+  },
+  "entrypointCommit": "d804eff7efa8b783b3f4c3d44a1e1bdfca6d948e",
+  "recipeCommit": "d6af1981b74b2ff1ae3b02891bdb5c1b2266d71a",
+  "authReviewCommit": "91c84401027da507e92c54414f1fb1f693bc08b5",
+  "sourceReviewCommit": "53a2e3227b54a39dfdc92e1b56b55104f9547270"
+}
