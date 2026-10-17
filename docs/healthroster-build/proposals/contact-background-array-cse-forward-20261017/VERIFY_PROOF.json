@@ -1,0 +1,264 @@
+{
+  "version": "CONTACT_BACKGROUND_ARRAY_CSE_FINITE_SOURCE_PROOF_V1",
+  "parent": "22d82c88b7a28ff9b17e0352f33a4639299b2bdb",
+  "targets": 54,
+  "changedExisting": 5,
+  "newFiles": 0,
+  "unchangedParentReferences": 49,
+  "actualPayloadFiles": 5,
+  "wholeParentReverses": 5,
+  "literalHunks": 5,
+  "all63SourcePinsRawUnchanged": true,
+  "complete12ScopesAndOriginalWeakMapRawUnchanged": true,
+  "privateChildCaptureAndControlRawUnchanged": true,
+  "raw21MemberJoinRawUnchanged": true,
+  "backgroundCompleteArraysMaterializedOnce": true,
+  "businessBagRecords": [
+    1,
+    9
+  ],
+  "businessArrayRecords": 2,
+  "legacyReaderOriginWholeReverse": true,
+  "referenceCanonicalSqlSha256": "5044b4d3821709aecc48d4d955aa6d8109bdf67d447067030e0dad444715e811",
+  "executedBatchInputSha256": "fd4ba309731fdb3a38ff57941fe82c179fd20047a674fd850fc9243e4b18bccc",
+  "canonicalStatementExecuted": false,
+  "sourceOrderProof": {
+    "postgresqlSourceVersion": "REL_17_11",
+    "objectKeyComparator": "lengthCompareJsonbString/lengthCompareJsonbPair/uniqueifyJsonbObject",
+    "orderSource": "https://raw.githubusercontent.com/postgres/postgres/REL_17_11/src/backend/utils/adt/jsonb_util.c",
+    "orderLines": [
+      1766,
+      1844
+    ],
+    "textRenderer": "JsonbToCString/JsonbToCStringWorker",
+    "formatSource": "https://raw.githubusercontent.com/postgres/postgres/REL_17_11/src/backend/utils/adt/jsonb.c",
+    "formatLines": [
+      446,
+      567
+    ],
+    "memberSeparator": ", ",
+    "keyValueSeparator": ": ",
+    "keys": [
+      {
+        "ordinal": 1,
+        "key": "module",
+        "utf8Bytes": 6,
+        "asciiHex": "6d6f64756c65"
+      },
+      {
+        "ordinal": 2,
+        "key": "identityTest",
+        "utf8Bytes": 12,
+        "asciiHex": "6964656e7469747954657374"
+      },
+      {
+        "ordinal": 3,
+        "key": "markerAbsent",
+        "utf8Bytes": 12,
+        "asciiHex": "6d61726b6572416273656e74"
+      },
+      {
+        "ordinal": 4,
+        "key": "applyingCount",
+        "utf8Bytes": 13,
+        "asciiHex": "6170706c79696e67436f756e74"
+      },
+      {
+        "ordinal": 5,
+        "key": "latestRelease",
+        "utf8Bytes": 13,
+        "asciiHex": "6c617465737452656c65617365"
+      },
+      {
+        "ordinal": 6,
+        "key": "backgroundRows",
+        "utf8Bytes": 14,
+        "asciiHex": "6261636b67726f756e64526f7773"
+      },
+      {
+        "ordinal": 7,
+        "key": "relationCensus",
+        "utf8Bytes": 14,
+        "asciiHex": "72656c6174696f6e43656e737573"
+      },
+      {
+        "ordinal": 8,
+        "key": "customerKeyNull",
+        "utf8Bytes": 15,
+        "asciiHex": "637573746f6d65724b65794e756c6c"
+      },
+      {
+        "ordinal": 9,
+        "key": "physicalDatabase",
+        "utf8Bytes": 16,
+        "asciiHex": "706879736963616c4461746162617365"
+      },
+      {
+        "ordinal": 10,
+        "key": "businessRelations",
+        "utf8Bytes": 17,
+        "asciiHex": "627573696e65737352656c6174696f6e73"
+      },
+      {
+        "ordinal": 11,
+        "key": "ledgerFingerprint",
+        "utf8Bytes": 17,
+        "asciiHex": "6c656467657246696e6765727072696e74"
+      },
+      {
+        "ordinal": 12,
+        "key": "otherActivityCount",
+        "utf8Bytes": 18,
+        "asciiHex": "6f746865724163746976697479436f756e74"
+      },
+      {
+        "ordinal": 13,
+        "key": "backgroundObservedAt",
+        "utf8Bytes": 20,
+        "asciiHex": "6261636b67726f756e644f627365727665644174"
+      },
+      {
+        "ordinal": 14,
+        "key": "catalogueFingerprint",
+        "utf8Bytes": 20,
+        "asciiHex": "636174616c6f67756546696e6765727072696e74"
+      },
+      {
+        "ordinal": 15,
+        "key": "backgroundSnapshotXip",
+        "utf8Bytes": 21,
+        "asciiHex": "6261636b67726f756e64536e617073686f74586970"
+      },
+      {
+        "ordinal": 16,
+        "key": "backgroundSnapshotXmax",
+        "utf8Bytes": 22,
+        "asciiHex": "6261636b67726f756e64536e617073686f74586d6178"
+      },
+      {
+        "ordinal": 17,
+        "key": "businessRowsFingerprint",
+        "utf8Bytes": 23,
+        "asciiHex": "627573696e657373526f777346696e6765727072696e74"
+      },
+      {
+        "ordinal": 18,
+        "key": "backgroundWriterRoutines",
+        "utf8Bytes": 24,
+        "asciiHex": "6261636b67726f756e64577269746572526f7574696e6573"
+      },
+      {
+        "ordinal": 19,
+        "key": "businessCountsFingerprint",
+        "utf8Bytes": 25,
+        "asciiHex": "627573696e657373436f756e747346696e6765727072696e74"
+      },
+      {
+        "ordinal": 20,
+        "key": "backgroundSnapshotEpochZero",
+        "utf8Bytes": 27,
+        "asciiHex": "6261636b67726f756e64536e617073686f7445706f63685a65726f"
+      },
+      {
+        "ordinal": 21,
+        "key": "backgroundSnapshotStartedAt",
+        "utf8Bytes": 27,
+        "asciiHex": "6261636b67726f756e64536e617073686f74537461727465644174"
+      }
+    ],
+    "hypotheticalSameNativeMemberValuesByteEquality": true,
+    "oldIndependentlyTimedFullFrameByteEqualityClaimed": false,
+    "jsValueReserialization": false
+  },
+  "tests": 43,
+  "originalContactTestSha256": "b644b59f663b37cf859137166fbd0dd6dc145887bb1ba0263dc52bab52f8dafd",
+  "ast": {
+    "parser": "v7.20",
+    "postgresql": [
+      17,
+      7
+    ],
+    "cases": [
+      {
+        "case": "CONTACT_CONSTRUCTORS_V1",
+        "statements": 8,
+        "originalPrefixRollbackAstEqual": true,
+        "wholeBaseInverse": true,
+        "catalogueTextLedgerIdentityUnchanged": true,
+        "bagRecords": [
+          1,
+          9
+        ],
+        "backgroundArrayRecords": 2,
+        "allOriginalTwelveRelationRecords": true,
+        "originalCompleteMapExpressions": true,
+        "twoFullRowHashLineagesAlphaExact": true,
+        "nativeCountStarAndOriginalSortedHashExpression": true,
+        "materializedFullArraysOnce": true,
+        "singleSnapshotOriginalStatusClocks": true,
+        "finalFramesOrdinalOrder": [
+          1,
+          2
+        ],
+        "raw21MemberJoin": "UNCHANGED",
+        "native": "NOT_RUN"
+      },
+      {
+        "case": "QT_ADMIN_CONTROLS_V1",
+        "statements": 8,
+        "originalPrefixRollbackAstEqual": true,
+        "wholeBaseInverse": true,
+        "catalogueTextLedgerIdentityUnchanged": true,
+        "bagRecords": [
+          1,
+          9
+        ],
+        "backgroundArrayRecords": 2,
+        "allOriginalTwelveRelationRecords": true,
+        "originalCompleteMapExpressions": true,
+        "twoFullRowHashLineagesAlphaExact": true,
+        "nativeCountStarAndOriginalSortedHashExpression": true,
+        "materializedFullArraysOnce": true,
+        "singleSnapshotOriginalStatusClocks": true,
+        "finalFramesOrdinalOrder": [
+          1,
+          2
+        ],
+        "raw21MemberJoin": "UNCHANGED",
+        "native": "NOT_RUN"
+      }
+    ],
+    "counterexamples": [
+      "audit skips row",
+      "audit deduplicates",
+      "bag count retyped",
+      "bag control removed",
+      "map materialization removed",
+      "map excludes row",
+      "map deduplicates hashes",
+      "array row count deduplicates",
+      "array count bounded int4",
+      "array hash delimiter",
+      "array hash order",
+      "array hash keyHash substitution",
+      "array skips one",
+      "snapshot refreshed shape",
+      "actual clock replaced",
+      "frames reversed",
+      "RR removed",
+      "rollback removed",
+      "unquoted variable",
+      "gset repeated execution",
+      "catalogue hash changed"
+    ],
+    "queriesExecuted": 0,
+    "native": "NOT_RUN"
+  },
+  "native": "NOT_RUN",
+  "queriesExecuted": 0,
+  "psqlOrExplainExecuted": false,
+  "actualPostimageSourceAdmission": "NOT_RUN_UNMOUNTED",
+  "restorationQualified": false,
+  "cancellationCause": "UNKNOWN",
+  "observations": "Genuine future PG clock/status/stats observations; never stitch diagnostic turns or compare to independently timed historical values"
+}
