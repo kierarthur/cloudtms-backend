@@ -1,0 +1,10 @@
+{
+  "sourceCommit": "b6922e27c18312cd4f285e31c6ad99489612d577",
+  "originalTestSha256": "650a8d4736402f8d4627d089f33cdde67f8519e2757942d2046704892348c51d",
+  "originalGrammarSha256": "b61aed2e56da0e7055b189d6fc153cd218fd471338a36626f24a95514595cb49",
+  "changes": [
+    "Read source from exact current D package; emit results only to owned report directory.",
+    "No assertion or runtime protocol changes; same named stub boundaries."
+  ],
+  "native": "NOT_RUN"
+}
