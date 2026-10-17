@@ -1,0 +1,30 @@
+{
+  "version": "DAILY_SINGLE_STAGE_CONTINUATION_ROOT_REVIEW_V1",
+  "authorCommit": "f74cb767794d806838993bc42d0eab2cbb6f163f",
+  "authorManifestSha256": "1a55a4a1b6cf598a544963418cca459dba5fafb69ba3fa9bd7e427b826576cf9",
+  "authorFiles": 24,
+  "peerCommit": "7309c029df5e5ab84899ab01fa1b782d24666101",
+  "peerManifestSha256": "bbcaa7e80afb718f73a5600e2c4a9708118249150a0199786de89dd12ab4a2cd",
+  "peerFiles": 28,
+  "peerVerdict": "ACCEPT_BOUNDED_SOURCE_CONTINUATION",
+  "rootVerdict": "ACCEPT_UNBOUND_BOILERPLATE_AND_REAL_METADATA_BINDER_BEFORE_FRESH_AUTH",
+  "rootRead": [
+    "complete coordinate,stage,sequence,source,progress,bind-parent,prepare,verify,seal",
+    "all frozen author/peer saved/index/current/historical bytes"
+  ],
+  "rootReplays": {
+    "tests": 39,
+    "failures": 0,
+    "wholeDerivations": 5,
+    "originalParentImages": 16,
+    "r8RecipeDependencies": 3
+  },
+  "requiredActualSequence": "Fresh auth outsideA; actualR8receipt; real K1 operator3/K2holder3/K3coordinator2; binder verifies realK0/receipt/K1/K2/K3 then exact two metadata images committed/pushedK4 BEFORE S0. Report runtime/HEAD stays fixed S0 throughS4. No guessed or virtual authority.",
+  "runtimeBoundary": "Original owner/worker alone checks genuine prefix, PRIVATE_BINDING and actor; parent never reads/hashes/copies state or private journal. One selected stage/actual ownedpath; native30s/120work60cleanup180whole/P1/sourcecallbacks/setup/one-shot/uncertainty unchanged.",
+  "native": "NOT_RUN",
+  "actualS0Prefix": "NOT_PROVIDED",
+  "fixesApplied": 0,
+  "fixesRejected": 0,
+  "install2": "NOT_INSTALLED",
+  "finalPartBCritics": "NOT_RUN"
+}

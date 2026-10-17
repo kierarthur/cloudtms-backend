@@ -1,0 +1,23 @@
+{
+  "verdict": "ACCEPT_BOUNDED_SOURCE_CONTINUATION",
+  "actionableFindings": [],
+  "controlledTests": {
+    "tests": 39,
+    "pass": 39,
+    "fail": 0
+  },
+  "completeDerivations": 5,
+  "parentImages": 16,
+  "frozenR8Dependencies": 3,
+  "actualFullBinderInvoked": false,
+  "originalP1PhaseOwner": "UNCHANGED",
+  "nativeFreshnessMs": 30000,
+  "budgetsMs": {
+    "work": 120000,
+    "cleanup": 60000,
+    "whole": 180000
+  },
+  "actualQualifiedS0Prefix": "NOT_PROVIDED",
+  "privateBindingStateJournalContentHashCopyMetadata": "NOT_ACCESSED",
+  "runtimeAuthBrowserApiIpcNative": "NOT_RUN"
+}

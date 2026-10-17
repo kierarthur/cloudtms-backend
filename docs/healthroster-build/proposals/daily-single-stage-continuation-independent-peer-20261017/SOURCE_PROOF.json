@@ -1,0 +1,378 @@
+{
+  "authorCommit": "f74cb767794d806838993bc42d0eab2cbb6f163f",
+  "manifestSha256": "1a55a4a1b6cf598a544963418cca459dba5fafb69ba3fa9bd7e427b826576cf9",
+  "frozenFilesSavedIndexGitExact": 24,
+  "files": [
+    {
+      "file": "BASE_PARENT_SELECTION.json",
+      "bytes": 4429,
+      "sha256": "cd456bc6be6ebeb5ba100aa4c4fac4294cd6c3f1f29176be22a29d03e51df20d"
+    },
+    {
+      "file": "bind-parent.mjs",
+      "bytes": 6578,
+      "sha256": "25c36f05e8737ff938c4b0d3e46422416834aa331b338772c3fd929d89245aca"
+    },
+    {
+      "file": "coordinate.mjs",
+      "bytes": 4938,
+      "sha256": "13127c4af70d3fdb32057d8c0a0cceaa58e430bbd22e2ec6accfaab169dcd614"
+    },
+    {
+      "file": "FULL_PARENT_DERIVATIONS.json",
+      "bytes": 30906,
+      "sha256": "8ee6930debfb0d4ad4349b4cf880913a473ba2d80beb716605a7881791d1e2b8"
+    },
+    {
+      "file": "prepare.mjs",
+      "bytes": 4285,
+      "sha256": "d90ef845d5cb854f9545ddfcc33033bc04d007e3c2147b4bd22900de84c5d320"
+    },
+    {
+      "file": "progress.mjs",
+      "bytes": 4560,
+      "sha256": "fda0b2de5a53f29c1fbd77bee5ed172ee22d80bb0d081794bf63e2a3ee2e076c"
+    },
+    {
+      "file": "progress.test.mjs",
+      "bytes": 3085,
+      "sha256": "2ebd89d70bcd9beecaa79974cb8e29b3a7db1d58dd28d864e98aa437b9682d8f"
+    },
+    {
+      "file": "README.md",
+      "bytes": 7961,
+      "sha256": "0da90107906205c44bd8b7601d163b6eb8e7ebc7548537bcb53752cc78468a9d"
+    },
+    {
+      "file": "RECIPE_SOURCE_PINS.json",
+      "bytes": 866,
+      "sha256": "decb4e0f2ec140669cbb0e49e3a4cb7d46ebd6ce1741d7afdc44f1d2b1854027"
+    },
+    {
+      "file": "reference/coordinate.mjs",
+      "bytes": 4630,
+      "sha256": "570ccb26ad180f10909eb13e05dc652efab03f8a67a1b9239a56ec858fcc7f92"
+    },
+    {
+      "file": "reference/phase.mjs",
+      "bytes": 859,
+      "sha256": "908efe47f24e00be5b2ca0b606079f61dac488a6c70d58ead3fe2eb592ce4cf0"
+    },
+    {
+      "file": "reference/progress.mjs",
+      "bytes": 4417,
+      "sha256": "7229524c58454a542adb6bb457959c7c5143646c7df55cf2f60b108b2ef04676"
+    },
+    {
+      "file": "reference/sequence.mjs",
+      "bytes": 1574,
+      "sha256": "f0d1c7e95bb9f81ab064bfc5bcb1145b81b0d991bbe3c584dadc0f74b25981a7"
+    },
+    {
+      "file": "reference/source.mjs",
+      "bytes": 2056,
+      "sha256": "fc7de33f9e40ab9429692127b466444195f6894fc03aef700a0fc255a773363d"
+    },
+    {
+      "file": "RESULT.json",
+      "bytes": 543,
+      "sha256": "16e399d2d0b21611c168ed349bc151941ab976aa9df6fea777daa53b5903cc8c"
+    },
+    {
+      "file": "seal.mjs",
+      "bytes": 795,
+      "sha256": "9b258428d960f5daf3860cb9be1a82bd3c5841d26709ad4387df1dffb378f64f"
+    },
+    {
+      "file": "sequence.mjs",
+      "bytes": 1631,
+      "sha256": "4edfc1a7103dc7eaee854bc1e535e9534fd9acb415ee6e6215dfd5ad494a4c1f"
+    },
+    {
+      "file": "SOURCE_PINS.json",
+      "bytes": 3,
+      "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+    },
+    {
+      "file": "source-binding.test.mjs",
+      "bytes": 5636,
+      "sha256": "a2c9fdb5650cfd1945105be18585381d22ff57df7233f4f3a7e44691011f1fa1"
+    },
+    {
+      "file": "source.mjs",
+      "bytes": 2362,
+      "sha256": "ae5269fca44137189e5f813d9a4159be65dbb235711a5523d80a0281a39123f6"
+    },
+    {
+      "file": "stage.mjs",
+      "bytes": 2089,
+      "sha256": "b33cd9943a80b87a04af6d0290e22a76549c741aed6666e338cf306ea784b39b"
+    },
+    {
+      "file": "stage.test.mjs",
+      "bytes": 5800,
+      "sha256": "40691154c3d18a0b8030152eb0d708253fddbd7e562692419fb1327169aff5ef"
+    },
+    {
+      "file": "verify.mjs",
+      "bytes": 1087,
+      "sha256": "336732508bad485730726ca25bb15f6be357ce0de5280406b44a6366e8a3b43e"
+    },
+    {
+      "file": "MANIFEST.json",
+      "bytes": 3556,
+      "sha256": "1a55a4a1b6cf598a544963418cca459dba5fafb69ba3fa9bd7e427b826576cf9"
+    }
+  ],
+  "completePreR8ParentImages": [
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-s0-stage-coordinator-20261017/MANIFEST.json",
+      "commit": "4d5873f820b764681d5fc36ec689cde6e5882ee8",
+      "bytes": 2417,
+      "sha256": "059e1d53d64db6f183336503cb1b1b93881d156ae0bdad3102108298c156b8a6"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-s0-stage-coordinator-20261017/LAUNCHER_FULL_PARENT_FORWARD.json",
+      "commit": "4d5873f820b764681d5fc36ec689cde6e5882ee8",
+      "bytes": 4002,
+      "sha256": "b6547e58c0a8c222fd5131998fe62c3f797670be7a7c12a44f5a54771ccbf7bc"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-s0-stage-coordinator-20261017/OFFLINE_RESULT.json",
+      "commit": "4d5873f820b764681d5fc36ec689cde6e5882ee8",
+      "bytes": 538,
+      "sha256": "5360929a2890b5857f86352e2a4f468e5d654a6016740b2f2b40131586f6daa2"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-s0-stage-coordinator-20261017/OFFLINE_TEST_OUTPUT.tap",
+      "commit": "4d5873f820b764681d5fc36ec689cde6e5882ee8",
+      "bytes": 7628,
+      "sha256": "fff3926bda0e0f9db346b2b8da9de0ab43b077ef5f813dac59d627b2cd8f5d74"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-s0-stage-coordinator-20261017/README.md",
+      "commit": "4d5873f820b764681d5fc36ec689cde6e5882ee8",
+      "bytes": 9315,
+      "sha256": "d3ce40915955c31a33571937c5131e3b89a14f08f6330e8ddd5e79f59d913796"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-s0-stage-coordinator-20261017/SOURCE_PINS.json",
+      "commit": "4d5873f820b764681d5fc36ec689cde6e5882ee8",
+      "bytes": 45299,
+      "sha256": "639a114ec741b89fb86516513e54957c7a1ea5b408b97390b8eede9cfdac0448"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-s0-stage-coordinator-20261017/coordinate.mjs",
+      "commit": "4d5873f820b764681d5fc36ec689cde6e5882ee8",
+      "bytes": 4630,
+      "sha256": "570ccb26ad180f10909eb13e05dc652efab03f8a67a1b9239a56ec858fcc7f92"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-s0-stage-coordinator-20261017/coordinator.test.mjs",
+      "commit": "4d5873f820b764681d5fc36ec689cde6e5882ee8",
+      "bytes": 10683,
+      "sha256": "2f594c66da1a87b71de9dbc94d2e28be7697619e988c8af92a42c138f2c7254b"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-s0-stage-coordinator-20261017/derive-phase.mjs",
+      "commit": "4d5873f820b764681d5fc36ec689cde6e5882ee8",
+      "bytes": 3832,
+      "sha256": "cbb8aaf477fd66abec58dd3d512010a03437294513fc47dac2cbde886377673e"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-s0-stage-coordinator-20261017/owned-worker.mjs",
+      "commit": "4d5873f820b764681d5fc36ec689cde6e5882ee8",
+      "bytes": 2788,
+      "sha256": "0b0ebce2a60d2958511d3df8d8d472bdbdde688bec13f53aab313996eac20d67"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-s0-stage-coordinator-20261017/phase-parent.mjs",
+      "commit": "4d5873f820b764681d5fc36ec689cde6e5882ee8",
+      "bytes": 5111,
+      "sha256": "5d487a9ba1b6f5c742e17d3d2b06bbfc6bb0e2937ea23600694122a3f2ca2c8b"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-s0-stage-coordinator-20261017/phase.mjs",
+      "commit": "4d5873f820b764681d5fc36ec689cde6e5882ee8",
+      "bytes": 859,
+      "sha256": "908efe47f24e00be5b2ca0b606079f61dac488a6c70d58ead3fe2eb592ce4cf0"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-s0-stage-coordinator-20261017/reference/run-staged-parent.mjs",
+      "commit": "4d5873f820b764681d5fc36ec689cde6e5882ee8",
+      "bytes": 5540,
+      "sha256": "533aa6bfc109bd0aa4d07b892ce027ce5ea0d99643df7cce2741128fd70558ec"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-s0-stage-coordinator-20261017/sequence.mjs",
+      "commit": "4d5873f820b764681d5fc36ec689cde6e5882ee8",
+      "bytes": 1574,
+      "sha256": "f0d1c7e95bb9f81ab064bfc5bcb1145b81b0d991bbe3c584dadc0f74b25981a7"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-s0-stage-coordinator-20261017/source.mjs",
+      "commit": "4d5873f820b764681d5fc36ec689cde6e5882ee8",
+      "bytes": 2056,
+      "sha256": "fc7de33f9e40ab9429692127b466444195f6894fc03aef700a0fc255a773363d"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-s0-stage-coordinator-20261017/verify.mjs",
+      "commit": "4d5873f820b764681d5fc36ec689cde6e5882ee8",
+      "bytes": 699,
+      "sha256": "a0ee567f4df33bcc5882849e952007316a640b19ab05233ff3499686a2ad4a3d"
+    }
+  ],
+  "frozenR8Dependencies": [
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-auth-r8-batch-source-recipe-20261017/recipe.mjs",
+      "commit": "6028253427ff6bf9bc1d2f4b2d4da0dee57fb66f",
+      "bytes": 8079,
+      "sha256": "b6182e3f1f6b9d57660632e0a31024fc6c45aded3f9c9b2c9fce463be7c99a3a"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-auth-r8-batch-source-recipe-20261017/materialize.mjs",
+      "commit": "6028253427ff6bf9bc1d2f4b2d4da0dee57fb66f",
+      "bytes": 5291,
+      "sha256": "602ed6dbae631b1418cc4b862db46adafb0276fca55590329240a1a8ff1298aa"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-auth-r8-batch-source-recipe-20261017/MANIFEST.json",
+      "commit": "6028253427ff6bf9bc1d2f4b2d4da0dee57fb66f",
+      "bytes": 5231,
+      "sha256": "1def645ed648213f619493327dd2442f972b759695d3d301ff01905fa40566c8"
+    }
+  ],
+  "wholeFrozenR8ManifestFilesChecked": [
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-auth-r8-batch-source-recipe-20261017/HOLDER_FULL_PARENT_FORWARD.json",
+      "sha256": "11777e6b5725987c430221ffb659dd3a496f2d536bca0dcb9c868fee0571ef0c"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-auth-r8-batch-source-recipe-20261017/holder-profile.mjs",
+      "sha256": "c9b5e2b1c9c3a244da3cb3422dbf4bbbf0c30f6d3e418152f635a90a90a2e48e"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-auth-r8-batch-source-recipe-20261017/holder.test.mjs",
+      "sha256": "cd432983f3ce9cd3cda4439f3f9a8a2c2a152a32148024149cf8538e64fd0986"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-auth-r8-batch-source-recipe-20261017/materialize.mjs",
+      "sha256": "602ed6dbae631b1418cc4b862db46adafb0276fca55590329240a1a8ff1298aa"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-auth-r8-batch-source-recipe-20261017/payload/holder/source.mjs",
+      "sha256": "9bcf873383794c3195ba51cf07b8246ca966b83b8a3a7e8b70106035f0dd4c88"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-auth-r8-batch-source-recipe-20261017/payload/progress.mjs",
+      "sha256": "7229524c58454a542adb6bb457959c7c5143646c7df55cf2f60b108b2ef04676"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-auth-r8-batch-source-recipe-20261017/prepare.mjs",
+      "sha256": "ef73681d9176711a8c604bc2513a7ef1c0fcac1d4c67f0f1c37b02d415de4de1"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-auth-r8-batch-source-recipe-20261017/PROFILE.json",
+      "sha256": "2239f0ac7ff3abb430a2e47e0994411e7339c7f954b316587b9dd0674687170f"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-auth-r8-batch-source-recipe-20261017/READER_FULL_PARENT_FORWARD.json",
+      "sha256": "7a1994a529b82e404c156438480291b0636d8342dda992e32fd78871db2d21e8"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-auth-r8-batch-source-recipe-20261017/reader-retained.test.mjs",
+      "sha256": "99fad4f57b38b46b8e2b586f9e7759e5f8e80d6e9d799860d87357199a44a8c9"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-auth-r8-batch-source-recipe-20261017/reader.test.mjs",
+      "sha256": "f8af381ebf70fabc9ad3edc0c03665673b77a3042addda6a780f06dda13c2594"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-auth-r8-batch-source-recipe-20261017/README.md",
+      "sha256": "5e3e9d4899d1cf6ffa05daa8758eddb2ca6671ef0d9a29df647f2c6f15e9fdb4"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-auth-r8-batch-source-recipe-20261017/recipe.mjs",
+      "sha256": "b6182e3f1f6b9d57660632e0a31024fc6c45aded3f9c9b2c9fce463be7c99a3a"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-auth-r8-batch-source-recipe-20261017/recipe.test.mjs",
+      "sha256": "939b52246f60055571eff398272e08c35bbe51a69e4b7a6399aefca7446fcca0"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-auth-r8-batch-source-recipe-20261017/reference/coordinator/MANIFEST.json",
+      "sha256": "059e1d53d64db6f183336503cb1b1b93881d156ae0bdad3102108298c156b8a6"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-auth-r8-batch-source-recipe-20261017/reference/coordinator/SOURCE_PINS.json",
+      "sha256": "639a114ec741b89fb86516513e54957c7a1ea5b408b97390b8eede9cfdac0448"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-auth-r8-batch-source-recipe-20261017/reference/holder/EXTERNAL_SOURCE_PINS.json",
+      "sha256": "3e691dc5cbf31ddc3710b29d3ac0ef87992c26265326e7ae3292778d5011e64a"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-auth-r8-batch-source-recipe-20261017/reference/holder/MANIFEST.json",
+      "sha256": "f5222274ac13932298b70f6931344130cb623cc93688cb2e03b38046958e6590"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-auth-r8-batch-source-recipe-20261017/reference/holder/ROOT_SOURCE_PINS.json",
+      "sha256": "a7665c14bb64412b68f60271d80f25505165b64f0d9eef971e430ad2f26e4e28"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-auth-r8-batch-source-recipe-20261017/reference/holder/source.mjs",
+      "sha256": "4d2e9fe18522883360e79a0c65c22e09c3c2d4215cd185ff4911a8c0d4324770"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-auth-r8-batch-source-recipe-20261017/reference/operator/contract.mjs",
+      "sha256": "a02f4e8c6e9f26c0b780490bcc09f9c860ffbb534095b0f10857fb149e297801"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-auth-r8-batch-source-recipe-20261017/reference/operator/MANIFEST.json",
+      "sha256": "765830a91a449d4ebbc3a6a8beae95d01c9f8d5243434c4efff6739cdffc1d82"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-auth-r8-batch-source-recipe-20261017/reference/operator/network.mjs",
+      "sha256": "595c1a8aae1d13f42a14d0651f28749e0ca46e0ea81ad301079b0e3c4b349928"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-auth-r8-batch-source-recipe-20261017/reference/operator/SOURCE_PINS.json",
+      "sha256": "65f08a57af9a807225bff0e17bd0fb27b831cb88987ad08957c7c7741462d980"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-auth-r8-batch-source-recipe-20261017/reference/operator/worker.mjs",
+      "sha256": "ef082cac41ef6f653d044a33b3801d83eb0b1bc1275a6bb9684d06a46b4d9f60"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-auth-r8-batch-source-recipe-20261017/reference/progress-before.mjs",
+      "sha256": "e625a92bd036564224792c51dff6358f7b65124105f953df12b220a9900fb089"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-auth-r8-batch-source-recipe-20261017/reference/progress-retained.test.mjs",
+      "sha256": "d2de8a2dd2e0ded7d0e4877bb698caccb90ebb48785915457bc2a6d6494fd08c"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-auth-r8-batch-source-recipe-20261017/reference/R7_PUBLIC_RECEIPT.json",
+      "sha256": "338e23c9e81be3b8a820f798ba2a57d009fa08779e5ecb4c06fbb792d4f6c073"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-auth-r8-batch-source-recipe-20261017/RESULT.json",
+      "sha256": "8134665a05659a7d361c95ecbf1dfad9cb895e788940dc45e5308100c8d54f96"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-auth-r8-batch-source-recipe-20261017/seal.mjs",
+      "sha256": "838a1ec91f0fc75d79c844e519aafce6f4a5861875110124bb33414f3f2ac0d7"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-auth-r8-batch-source-recipe-20261017/SOURCE_PINS.json",
+      "sha256": "9b77524d4d4c9955bb2bd8337768c342e85175b58551c62fdf6b6f359559264d"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-auth-r8-batch-source-recipe-20261017/verify.mjs",
+      "sha256": "d0a3817bbd3e9f4c2ad54a32ae2692b5f5ce0dc355ee13a8c329e3928e5c44c7"
+    }
+  ],
+  "futureK3K4": "NOT_PROVIDED_NOT_EXECUTED",
+  "privateBindingStateJournalRead": false,
+  "native": "NOT_RUN"
+}
