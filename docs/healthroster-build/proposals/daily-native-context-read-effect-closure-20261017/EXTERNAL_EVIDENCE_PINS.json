@@ -1,0 +1,37 @@
+{
+  "rows": [
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+      "commit": "2b0fcee4eeecb9ce3adb61ef3c25d02c0e5a948c",
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_CURRENT_NATIVE_CONTEXT_READONLY_20261017.json",
+      "to": "reference/current-native-top-context-observation.json",
+      "bytes": 14564,
+      "sha256": "631192d73fbe65e23b9cf98cbe133882b0c7043a82e3625fefdeb62353522f66"
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-checklist-native-14102026",
+      "commit": "be55b9a5d56386d58a7708b162bbb07b141f155a",
+      "file": "docs/healthroster-build/proposals/daily-health-s5-lifecycle-read-qualification-20261017/SCOPE_AND_FEASIBILITY.json",
+      "to": "reference/physical-s5-scope.json",
+      "bytes": 3756,
+      "sha256": "6a79abcb49a8c5140c6ac13fddf024342e75d89de3b2b087509f2e233b68586d"
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-checklist-native-14102026",
+      "commit": "ad02698589fa28b1a73af26390fad7cf4c0466f9",
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-fixture-recipe-20261017/RECIPE.json",
+      "to": "reference/genuine-daily-recipe.json",
+      "bytes": 11525,
+      "sha256": "f910e657771b8530f10c3a73527fede7c837dfd90f11945ed023e188f27a658c"
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+      "commit": "c276aa49eb4db86ff42e184011a09bf2b59f253e",
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_NATIVE_SUMMARY_FINANCE_BOUNDARY_METADATA_20261017.json",
+      "to": "reference/current-native-finance-boundary-observation.json",
+      "bytes": 10894,
+      "sha256": "29ef333fbf553cddc76aca0d4b17497a10dc76401a110167b5eb3b5cedfa4683"
+    }
+  ],
+  "nativeCallsInThisLane": 0
+}
