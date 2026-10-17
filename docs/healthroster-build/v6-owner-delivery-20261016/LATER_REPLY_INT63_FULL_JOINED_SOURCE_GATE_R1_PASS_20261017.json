@@ -1,0 +1,20 @@
+{
+  "status": "PASS",
+  "head": "91b0614a47cb734190b4dbd015b3a9141de52fb6",
+  "elapsedMs": 285908,
+  "result": {
+    "frozenFiles": 7,
+    "frozenTriggers": 18,
+    "frozenTables": 45,
+    "protectedSignatures": 24,
+    "sqlSources": 2261,
+    "rpcRoots": 80,
+    "routineWorkSignatures": 183,
+    "typedTransportSignatures": 41
+  },
+  "version": "LATER_REPLY_INT63_ACTUAL_FULL_JOINED_SOURCE_GATE_V1",
+  "generatedContract": "RESEAL_REQUIRED",
+  "native": "NOT_RUN",
+  "install2": "NOT_INSTALLED",
+  "finalCritics": "NOT_RUN"
+}
