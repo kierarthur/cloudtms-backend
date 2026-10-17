@@ -1,0 +1,17 @@
+{
+  "version":"DAILY_S0_QUEUED_PID_FORWARD_INDEPENDENT_PEER_V1",
+  "reviewer":"GPT-6.1-sol / xhigh",
+  "disposition":"ACCEPT_BOUNDED_SOURCE_FORWARD",
+  "F1":"CLOSED_AT_SOURCE",
+  "actionableFindings":[],
+  "authorCommit":"5381d1d747a839bddf7e51b823ec3950e1cf4b7e",
+  "authorManifestSha256":"432a891603d6ae38162b1812348cfadba1bda24c74b11b716cb1732bf55c5e36",
+  "heldParent":"8c4eb1f88db25ff6b7b88889be9f36dddc1387ed",
+  "findingPeer":"3cdd40d0afcc71b9e69a0e44f1ae976431e1d7a6",
+  "selection":{"targets":3,"wholeFactoryEdits":4,"wholeReadmeEdits":1,"manifestChangedRows":2,"manifestRetainedRows":13,"originalRuntimeImagesRetained":16},
+  "proof":{"capturedFiles":22,"savedIndexHeadEqual":true,"parentPeerPins":7,"testsPassed":50,"testsFailed":0,"oldReproductions":3,"correctedSkipVectors":3,"correctedSkipDispatches":0,"stillLiveDispatches":1,"changedPidDispatches":0,"forcedTreeActualInvocationOnly":true,"originalTestsRetained":40,"testLocatorEdits":6,"wholeTestInverse":true,"wholePayloadInverses":true,"reviewerSourceTestAmendments":0},
+  "boundary":"observed ChildProcess close/exitCode/signalCode and stable captured PID checked inside actual queued callback; no general OS PID-race guarantee",
+  "preserved":["original A ownership/unlock/close","fixed S0 phase order and actual native/effect/setup outside holder","environment-only control capability","120/60/180 bounds","actual close confirmation and conservative HOLD","browserClosed/exit0/nullsignal separate from tree closure","source/saved/index/HEAD/admission guards"],
+  "execution":{"coordinatorSourceOrPreflightInvoked":false,"native":"NOT_RUN","browser":"NOT_RUN","ipcPipes":0,"osTreeCommands":0,"apiOrConnectorCalls":0,"privateActualStateReads":0,"rootOrOfficeWrites":0,"bankSemanticBodiesRead":0},
+  "remaining":"root-only exact three-target mount and committed source admission before any separately authorised genuine S0 trial"
+}

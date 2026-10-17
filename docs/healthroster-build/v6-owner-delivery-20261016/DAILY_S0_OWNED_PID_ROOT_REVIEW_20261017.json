@@ -1,0 +1,22 @@
+{
+  "version": "DAILY_S0_OWNED_PID_ROOT_REVIEW_V1",
+  "status": "ACCEPT_EXACT_THREE_TARGET_SOURCE_FORWARD",
+  "authorCommit": "5381d1d747a839bddf7e51b823ec3950e1cf4b7e",
+  "authorFiles": 22,
+  "authorManifestSha256": "432a891603d6ae38162b1812348cfadba1bda24c74b11b716cb1732bf55c5e36",
+  "peerCommit": "6301cc1edd00821b65e2e14a0c479c3d06cd40e5",
+  "peerFiles": 32,
+  "peerManifestSha256": "dd769531e3a0ccdb75ab841f3a849720133363f8e13c8ebe68689eb1e0282072",
+  "peerReviewSha256": "7fd1675ed08f343a0c32664864c27688e9b2922d6a10758c4391e8231cd3612f",
+  "peerVerdict": "ACCEPT_BOUNDED_SOURCE_FORWARD_F1_CLOSED_AT_SOURCE",
+  "rootReview": "Exact factory captures own PID at spawn, rechecks closed and same child's PID/exitCode/signalCode inside actual queued dispatch, and calls killTree only with captured PID while still observed live. Separate forcedTree becomes true only on invocation. Conservative uncertain closure/HOLD, original actual browserClosed plus exit0/nullsignal and all source/A/budget/native/setup gates remain. README explicitly disclaims general OS PID-race immunity.",
+  "rootReplay": {"tests": 50, "failed": 0, "oldActualFactoryDefectVectors": 3, "correctedSkipVectors": 3, "stillLiveSingleDispatchAndActualClose": "PASS", "changedPidRefusal": "PASS", "wholeRawFactoryEdits": 4, "wholeRawReadmeEdits": 1, "manifestChangedRows": 2, "manifestRetainedRows": 13, "held16BeforeMount": "SAVED_INDEX_HEAD_EQUAL", "immutableFilesOverwritten": 0},
+  "rootBackupVerification": "All54 source/peer files raw-equal exact author saved/index/HEAD/historical Git images.",
+  "mountedReportCommit": "e9cc374c066ff13494ff17fb8436dd8d0e54017c",
+  "mount": "Root checked exact three parents saved/index/HEAD, mounted only approved payloads, committed/pushed feature branch, independently passed mounted16 verifier and fresh remote equality.",
+  "fixes": {"applied": 1, "rejected": 0},
+  "heldHistory": "Initial8c4, peer3cdd and initial root HOLD remain unchanged; no old process/native result relabelled.",
+  "execution": {"nativeS0": "NOT_RUN_AT_REVIEW", "browser": "NOT_RUN_AT_REVIEW", "osTermination": "NOT_RUN", "privateStateParentReads": 0},
+  "install2": "NOT_INSTALLED",
+  "finalPartBCritics": "NOT_RUN"
+}

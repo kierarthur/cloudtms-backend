@@ -1,0 +1,46 @@
+{
+  "version": "HEALTHROSTER_CONTINUATION_ROUTE_PREFLIGHT_20261017_V1",
+  "account": "kier@arthur-rai.co.uk",
+  "namespace": "mcp__cloudtms_miget_operations_kier_codex",
+  "authenticated": true,
+  "rollbackOnlyTransactionTool": true,
+  "durableWritesAllowed": false,
+  "secretsReturned": false,
+  "targets": [
+    {
+      "target": "agency_test",
+      "observedAt": "2026-10-17T10:55:54.613Z",
+      "physicalDatabase": "cloudtms_test_clone",
+      "version": 170011,
+      "postmasterStartedAt": "2026-10-14T09:07:33.240Z"
+    },
+    {
+      "target": "mytms_test",
+      "observedAt": "2026-10-17T10:55:54.734Z",
+      "physicalDatabase": "uofvkfi5",
+      "version": 170011,
+      "postmasterStartedAt": "2026-09-17T23:40:44.934Z"
+    }
+  ],
+  "normalHealth": {
+    "healthz": {
+      "status": 200,
+      "observedAt": "2026-10-17T10:56:02.841Z"
+    },
+    "readyz": {
+      "status": 200,
+      "observedAt": "2026-10-17T10:56:05.709Z",
+      "ready": true,
+      "backendReady": true,
+      "processorReady": true,
+      "dispatcherReady": true
+    }
+  },
+  "anonymousMcp": {
+    "status": 401,
+    "observedAt": "2026-10-17T10:56:05.780Z"
+  },
+  "operationalChanges": false,
+  "nativeRehearsal": "NOT_RUN_THIS_PREFLIGHT",
+  "scope": "Read-only route/physical identity and existing public readiness; no restart, pool refresh, job pause, credential change or business rows."
+}

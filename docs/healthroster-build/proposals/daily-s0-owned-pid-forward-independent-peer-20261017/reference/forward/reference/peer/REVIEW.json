@@ -1,0 +1,14 @@
+{
+  "version":"DAILY_S0_STAGE_COORDINATOR_INDEPENDENT_PEER_V1",
+  "reviewer":"GPT-6.1-sol / xhigh",
+  "disposition":"HOLD_SOURCE_CORRECTION_REQUIRED",
+  "authorCommit":"8c4eb1f88db25ff6b7b88889be9f36dddc1387ed",
+  "authorManifestSha256":"f3fb37a16b7e4aa256c89a9ab80b40fe070046f73333f98e2202844aefb66928",
+  "findings":[{"id":"F1","priority":"P1","file":"owned-worker.mjs","line":7,"sourceSha256":"5e2e0298a27a11bf06652aeee6e3a00cca55ba540d03c5402270e3775e68d95e","problem":"queued killTree callback uses PID after observed exit/signal/close because its liveness checks occurred before Promise scheduling","actualFactoryControlledCounterexamples":3,"requiredForward":"capture stable owned PID and recheck same child/closed/exitCode/signalCode inside queued callback before termination; preserve conservative uncertainty/close/browser/A guards","osPidReuseObserved":false}],
+  "otherScopedFindings":[],
+  "capture":{"authorFiles":16,"savedIndexHeadEqual":true,"actualParentChecks":151,"originalOperator133":133,"correctedHolder18":18},
+  "replay":{"originalTestsPassed":40,"failed":0,"launcherParentBytes":5540,"wholeRawLauncherInverse":true,"exactEdits":9,"sourceVerifierRows":15,"sourceOrTestBodyAmendments":0,"additionalFindingVectors":3},
+  "preservedSourceReview":["S0 bind/entry/submit/qualify only","actual native/effect/setup outside holder","capability environment only","original A owner/unlock/close","120/60/180 bounds","genuine browserClosed+exit0+nullsignal+actualclose required for PASS","no crash-to-browser-close substitution"],
+  "execution":{"coordinateSourceOrPreflightInvoked":false,"native":"NOT_RUN","browser":"NOT_RUN","ipcUsed":false,"apiOrConnectorCalls":0,"windowsTreeCommands":0,"privateActualStateReads":0,"rootOrOfficeWrites":0,"bankSemanticBodiesRead":0},
+  "qualification":"finite source correction and independent review required before root execution; no runtime scheduling/PID-reuse/native failure claim"
+}

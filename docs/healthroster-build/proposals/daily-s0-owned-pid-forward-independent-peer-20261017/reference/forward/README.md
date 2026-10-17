@@ -1,0 +1,19 @@
+# S0 queued termination P1 forward
+
+Held source8c4eb1f88db25ff6b7b88889be9f36dddc1387ed and independent peer3cdd40d0afcc71b9e69a0e44f1ae976431e1d7a6 remain immutable. The actual old factory checks ChildProcess state before scheduling a Promise callback, then calls killTree later without rechecking. The three frozen peer vectors observe exitCode0, signalCodeSIGTERM, or actual close in that interval; all three original callbacks still invoke killTree(81234). No OS command was run to reproduce this source defect.
+
+The narrow factory forward captures the exact worker PID once at spawn. Its queued callback rechecks observed closed/exitCode/signalCode and same ChildProcess PID ownership immediately before calling killTree with the captured PID. Observed exit without confirmed close retains the original unconfirmed/HOLD semantics. Observed close skips dispatch; actual child closure may be confirmed, but it supplies no browser proof. The separate forcedTree boolean becomes true only when killTree is actually invoked, so a scheduled/skipped Promise does not report tree termination.
+
+This closes the reproduced JavaScript scheduling window. It provides no general operating-system PID-reuse race immunity between that final check and command dispatch. The payload README replaces the original overbroad guarantee with that explicit limit. No source success, browserClosed flag or future S0 admission is inferred from a skipped command or parent exit. All original phase/browser/exit/currentness/role/source/budget/native/manifest gates remain intact.
+
+`FULL_PARENT_FORWARD.json` selects exactly three proposed runtime targets: owned-worker.mjs, README.md and the enclosing coordinator MANIFEST.json. Four exact factory edits, one README edit and two changed manifest rows have complete raw inverses; all13 other manifest rows are retained. Every original16 saved/index/HEAD image remains unchanged until a separately reviewed/authorised mount. `derive.mjs` is read-only by default and independently reproduces all three payloads/inverses. Do not use its author-only --freeze mode on a frozen packet.
+
+```powershell
+node --test docs/healthroster-build/proposals/daily-health-s0-stage-owned-pid-forward-20261017/pid-dispatch.test.mjs docs/healthroster-build/proposals/daily-health-s0-stage-owned-pid-forward-20261017/replay-original.test.mjs
+node docs/healthroster-build/proposals/daily-health-s0-stage-owned-pid-forward-20261017/derive.mjs
+node docs/healthroster-build/proposals/daily-health-s0-stage-owned-pid-forward-20261017/verify.mjs
+```
+
+All50 checks pass: three old defect reproductions; three corrected skip vectors; normal still-live dispatch/awaited closure; changed-PID refusal; normal child closure separated from browser proof; the qualified README; and all40 original coordinator/launcher/closure/budget cases against the corrected factory. `TEST_LOCATOR_FORWARD.json` records six public source-locator substitutions used to replay the complete original test body without editing it. `factory-loader.mjs` relocates one public contract import only; the actual old/new factory bodies execute with EventEmitter and injected killTree doubles. No child process, OS kill, IPC, source preflight, browser, auth, private state, API, native tool or database is invoked by these checks. The peer source/results/review are captured raw-exact, not rerun or rewritten.
+
+After root/independent acceptance and an explicit three-target mount, `verify.mjs --mounted` checks all16 actual runtime images, including the three payloads and13 retained source files, against saved/index/HEAD. Native/browser/OS tree execution remains NOT_RUN. Root alone may choose the reviewed S0 trial, with Report HEAD fixed while A is owned and I2-only effect/setup commits. No automatic retry or native capture is requested by this source correction.

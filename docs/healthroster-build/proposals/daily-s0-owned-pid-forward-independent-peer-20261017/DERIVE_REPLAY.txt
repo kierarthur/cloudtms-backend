@@ -1,0 +1,1 @@
+{"status":"PASS","targets":3,"rawFactoryEdits":4,"readmeEdits":1,"retainedManifestRows":13,"wholeRawInverses":true}
