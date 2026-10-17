@@ -1,0 +1,20 @@
+{
+  "version": "ROOT_HELPER_OPTIONAL_B2_INTEGRATION_MAP_FREEZE_V1",
+  "files": [
+    {
+      "file": "INTEGRATION.md",
+      "bytes": 4837,
+      "sha256": "9ebb77f08b497f6eae1a4512314a8558c742c8243e382910077d550cf1955c9e"
+    },
+    {
+      "file": "INTEGRATION_MAP.json",
+      "bytes": 19769,
+      "sha256": "85399b1b92c88c45496fb70766bff2392f3da7c16999df26d2fcbd3e19578ab5"
+    },
+    {
+      "file": "SOURCE_EVIDENCE.json",
+      "bytes": 12106,
+      "sha256": "96a5b02bbb34f5e7b023c78807412d320c3312887f9a277603a2eb9f0f1bdac7"
+    }
+  ]
+}

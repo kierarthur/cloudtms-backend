@@ -1,0 +1,239 @@
+{
+  "pins": [
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_S1_R10_PLAN_20261017.json",
+      "commit": "e18d4b670d04538399aab94b9d3a4566e385a0e4",
+      "bytes": 1568,
+      "sha256": "dbd3e1b1643c5cf06e3b7d1e1d9c5facff7464e6f0be903a861491f8803595f6",
+      "savedIndexHeadHistoricalEqual": true
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_S1_R10_PREDECISION_20261017.json",
+      "commit": "e18d4b670d04538399aab94b9d3a4566e385a0e4",
+      "bytes": 2474,
+      "sha256": "08495d5a5dde608bfc0b650db25757616d575555a593789d17db48a884994300",
+      "savedIndexHeadHistoricalEqual": true
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_S1_EFFECT_ADMISSION_20261017.json",
+      "commit": "e18d4b670d04538399aab94b9d3a4566e385a0e4",
+      "bytes": 867,
+      "sha256": "ed9bf357fb567cbd9f9dff8966141e931101bfd7435339a28fd572227bd6edf8",
+      "savedIndexHeadHistoricalEqual": true
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_S1a_R10_PLAN_20261017.json",
+      "commit": "e18d4b670d04538399aab94b9d3a4566e385a0e4",
+      "bytes": 1559,
+      "sha256": "9fa4ec3854daf1d9179f85bb4b6611cea3dff0aba33fc6ac90f7935b1f96a24c",
+      "savedIndexHeadHistoricalEqual": true
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_S1a_R10_PREDECISION_20261017.json",
+      "commit": "e18d4b670d04538399aab94b9d3a4566e385a0e4",
+      "bytes": 2030,
+      "sha256": "a7e76b6acd55788552ff9cdacd944c54410f0745df91e057c69a26d15b6197c6",
+      "savedIndexHeadHistoricalEqual": true
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_S1a_EFFECT_ADMISSION_20261017.json",
+      "commit": "e18d4b670d04538399aab94b9d3a4566e385a0e4",
+      "bytes": 842,
+      "sha256": "c66f3c758ddba231b3b3896c7c3bbc32ac5b9660069291d0190624ba242ccdd8",
+      "savedIndexHeadHistoricalEqual": true
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_S2_R10_PLAN_20261017.json",
+      "commit": "e18d4b670d04538399aab94b9d3a4566e385a0e4",
+      "bytes": 1565,
+      "sha256": "48476e1eb60c38bf266f67c7ca04da3d8a4e83b6954ab7a46703331e9310630e",
+      "savedIndexHeadHistoricalEqual": true
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_S2_R10_PREDECISION_20261017.json",
+      "commit": "e18d4b670d04538399aab94b9d3a4566e385a0e4",
+      "bytes": 2361,
+      "sha256": "c5d23e7d46cb585d6305ec66018bcbd46704d740d6d8d9c9b9d2af1b4cbf2b00",
+      "savedIndexHeadHistoricalEqual": true
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_S2_EFFECT_ADMISSION_20261017.json",
+      "commit": "e18d4b670d04538399aab94b9d3a4566e385a0e4",
+      "bytes": 841,
+      "sha256": "2f1f5201f195deb47fdcbce350e2c44670c249becb6b16eef4206172473e469a",
+      "savedIndexHeadHistoricalEqual": true
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_S3_R10_PLAN_20261017.json",
+      "commit": "e18d4b670d04538399aab94b9d3a4566e385a0e4",
+      "bytes": 1574,
+      "sha256": "3345efe89bc048eeebd2c9ee634872cfea1122a0e0abe357596321d4dac15296",
+      "savedIndexHeadHistoricalEqual": true
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_S3_R10_PREDECISION_20261017.json",
+      "commit": "e18d4b670d04538399aab94b9d3a4566e385a0e4",
+      "bytes": 2296,
+      "sha256": "94a7adfa66e47dc9f305ec72874385b9818dd6416b0b62344346b1503571500f",
+      "savedIndexHeadHistoricalEqual": true
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_S3_EFFECT_ADMISSION_20261017.json",
+      "commit": "e18d4b670d04538399aab94b9d3a4566e385a0e4",
+      "bytes": 841,
+      "sha256": "805bc8e3b64836822eb35bb1549bdff59b8d630dcb0ea6b1788cbade897cd06c",
+      "savedIndexHeadHistoricalEqual": true
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_S4_R10_PLAN_20261017.json",
+      "commit": "e18d4b670d04538399aab94b9d3a4566e385a0e4",
+      "bytes": 1595,
+      "sha256": "1cc4a97b97c25a6d53ef82bf1149eefc810bd57e4f633c5dd4705813118e3548",
+      "savedIndexHeadHistoricalEqual": true
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_S4_R10_PREDECISION_20261017.json",
+      "commit": "e18d4b670d04538399aab94b9d3a4566e385a0e4",
+      "bytes": 3002,
+      "sha256": "f58f8bfe185d5c0d090a60c4e406c0094f3e7db0c8ffe1a3ef130bf6a0c5090f",
+      "savedIndexHeadHistoricalEqual": true
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_S4_EFFECT_ADMISSION_20261017.json",
+      "commit": "e18d4b670d04538399aab94b9d3a4566e385a0e4",
+      "bytes": 852,
+      "sha256": "e5046cb41158c2da3c2b6a58d78d6d5083fb72e1d1980d7a22e69c2562995ec3",
+      "savedIndexHeadHistoricalEqual": true
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/MANIFEST.json",
+      "commit": "6b5ebedecf95c8a1adfda5141bbf3eccf5294d23",
+      "bytes": 24285,
+      "sha256": "6d9f4a05ca161c2bcfceb909e698a09db96bed453fbdcc5f7cc7f1cec4e9d960",
+      "savedIndexHeadHistoricalEqual": true,
+      "rows": 132
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/SOURCE_PINS.json",
+      "commit": "6b5ebedecf95c8a1adfda5141bbf3eccf5294d23",
+      "bytes": 4363,
+      "sha256": "20ea68c6e1204a40e2c5cb4f51a44dfd2c22331d93ae9113b18af5b7df272739",
+      "savedIndexHeadHistoricalEqual": true,
+      "rows": 0
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+      "file": "docs/healthroster-build/proposals/daily-health-s0-catalogue-holder-20261017/MANIFEST.json",
+      "commit": "6b5ebedecf95c8a1adfda5141bbf3eccf5294d23",
+      "bytes": 2880,
+      "sha256": "d3d6226da5fece2b741c13c795c470ab9de1a85c91a2902361e56841a1df1abb",
+      "savedIndexHeadHistoricalEqual": true,
+      "rows": 17
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+      "file": "docs/healthroster-build/proposals/daily-health-s0-catalogue-holder-20261017/EXTERNAL_SOURCE_PINS.json",
+      "commit": "6b5ebedecf95c8a1adfda5141bbf3eccf5294d23",
+      "bytes": 2057,
+      "sha256": "474d76922c63e01c41f26010f5db9a0c42553a26b90623696bdc182488bc5272",
+      "savedIndexHeadHistoricalEqual": true,
+      "rows": 7
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+      "file": "docs/healthroster-build/proposals/daily-health-s0-catalogue-holder-20261017/ROOT_SOURCE_PINS.json",
+      "commit": "6b5ebedecf95c8a1adfda5141bbf3eccf5294d23",
+      "bytes": 616,
+      "sha256": "a7665c14bb64412b68f60271d80f25505165b64f0d9eef971e430ad2f26e4e28",
+      "savedIndexHeadHistoricalEqual": true,
+      "rows": 2
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+      "file": "docs/healthroster-build/proposals/daily-health-s0-stage-coordinator-20261017/MANIFEST.json",
+      "commit": "6b5ebedecf95c8a1adfda5141bbf3eccf5294d23",
+      "bytes": 2417,
+      "sha256": "6a5bf8205786a21b4966f9fc8875fb2e09f22b852b2d61298112e9a8a1c85099",
+      "savedIndexHeadHistoricalEqual": true,
+      "rows": 15
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+      "file": "docs/healthroster-build/proposals/daily-health-s0-stage-coordinator-20261017/SOURCE_PINS.json",
+      "commit": "6b5ebedecf95c8a1adfda5141bbf3eccf5294d23",
+      "bytes": 45300,
+      "sha256": "b1c7a29c06f69e52e40b8c146cb9ce84c8947e0ac545501e2990e5d7ce0bc199",
+      "savedIndexHeadHistoricalEqual": true,
+      "rows": 151
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-single-stage-coordinator-20261017/MANIFEST.json",
+      "commit": "6b5ebedecf95c8a1adfda5141bbf3eccf5294d23",
+      "bytes": 3559,
+      "sha256": "7b935e9a3a09a06553d45589c8ec9e5c696bd672a14b463fda796be861b42873",
+      "savedIndexHeadHistoricalEqual": true,
+      "rows": 23
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+      "file": "docs/healthroster-build/proposals/daily-health-genuine-single-stage-coordinator-20261017/SOURCE_PINS.json",
+      "commit": "6b5ebedecf95c8a1adfda5141bbf3eccf5294d23",
+      "bytes": 4429,
+      "sha256": "8720d67675d157b02ef602bcdfac960f244180142ac745ad72d9f3a028f64fff",
+      "savedIndexHeadHistoricalEqual": true,
+      "rows": 16
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+      "file": "docs/healthroster-build/proposals/daily-genuine-stage-root-bookkeeper-20261017/MANIFEST.json",
+      "commit": "6b5ebedecf95c8a1adfda5141bbf3eccf5294d23",
+      "bytes": 4219,
+      "sha256": "f1a4867515b1769a9605763e613fce142809a2cc74dee1c27ee08940c8ebc42b",
+      "savedIndexHeadHistoricalEqual": true,
+      "rows": 26
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+      "file": "docs/healthroster-build/proposals/daily-genuine-stage-root-bookkeeper-20261017/PARENTS.json",
+      "commit": "6b5ebedecf95c8a1adfda5141bbf3eccf5294d23",
+      "bytes": 10293,
+      "sha256": "3359711d1b5035408c8a1173d6f396555a3e93b78ade4b29f2212d68290f0872",
+      "savedIndexHeadHistoricalEqual": true,
+      "rows": 12
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+      "file": "docs/healthroster-build/proposals/daily-genuine-root-stage-bookkeeper-20261017.mjs",
+      "commit": "e18d4b670d04538399aab94b9d3a4566e385a0e4",
+      "bytes": 11508,
+      "sha256": "7e90f2ccb4ef993891a09d616b8458dee0125a6c4414b38501714ae460d4a590",
+      "savedIndexHeadHistoricalEqual": true
+    },
+    {
+      "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+      "file": "docs/healthroster-build/proposals/daily-health-s0-stage-coordinator-20261017/phase-parent.mjs",
+      "commit": "6b5ebedecf95c8a1adfda5141bbf3eccf5294d23",
+      "bytes": 5111,
+      "sha256": "5d487a9ba1b6f5c742e17d3d2b06bbfc6bb0e2937ea23600694122a3f2ca2c8b",
+      "savedIndexHeadHistoricalEqual": true
+    }
+  ]
+}

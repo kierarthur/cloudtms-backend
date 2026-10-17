@@ -1,0 +1,14 @@
+{
+  "version": "DAILY_HELPER_B2_SOURCE_INTEGRATION_MAP_ROOT_REVIEW_V1",
+  "verdict": "ACCEPT_SOURCE_MAP_ONLY",
+  "files": 4,
+  "manifestSha256": "7dc54ce83cc49f014881c649671ab8b0d170a61ff203eb9c74921ebfec7f9c03",
+  "actualPublicSourcePins": 28,
+  "rootSavedIndexHeadHistoricalChecks": "PASS",
+  "observedHeads": {
+    "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026": "756742fcce7fcc2b23958a32556227ff0930a2e3",
+    "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026": "6b5ebedecf95c8a1adfda5141bbf3eccf5294d23"
+  },
+  "scope": "Root-only helper is already e18; source transport changes no five business producer hashes. Report B2/ACL future source must use concrete new bodies, complete dependent metadata and actual commits; old6b5 prefix remains historical.",
+  "runtime": "NOT_RUN; no B2 implementation or native qualification inferred."
+}
