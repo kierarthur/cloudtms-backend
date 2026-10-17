@@ -7191,5 +7191,20 @@
     "release": "NOT_RUN",
     "finalCritics": "NOT_RUN",
     "original92ObjectsUnchanged": true
+  },
+  "daily_pure_native_continuation_20261017": {
+    "status": "PASS_EXACT_PURE_PROGRAMME_AND_ORIGINAL_CANONICAL_RESTORATION",
+    "receipt": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_PURE_NATIVE_R3_PASS_20261017.json",
+    "receiptSha256": "936a4cb8d6ecd231e3d28e89c5d6c25c12160c899689417a69d499e60d59d139",
+    "programmeSha256": "779aff554ca8bce78a7e21520a41574beba211503ab1c79d492eccb6b5ad8ab6",
+    "definitions": 5,
+    "unicodePositiveVectors": 6,
+    "malformedStoredReasonRefusals": 8,
+    "elapsedMilliseconds": 64949,
+    "fullCanonicalRestoration": true,
+    "sharedTurnUnlockedAndClosed": true,
+    "sourceCommit": "b5809c06b2e6c6e8ad4c671a8bbee647cac44729",
+    "onlyPureReasonAndRequestHashQualification": true,
+    "allOtherNativeBusinessAndReleaseGates": "PRESERVED_NOT_QUALIFIED"
   }
 }

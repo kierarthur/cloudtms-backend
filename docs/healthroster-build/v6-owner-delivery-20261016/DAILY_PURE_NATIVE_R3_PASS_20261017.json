@@ -1,0 +1,423 @@
+{
+  "version": "DAILY_PURE_NATIVE_R3_ROOT_RECEIPT_V1",
+  "sourceCommit": "b5809c06b2e6c6e8ad4c671a8bbee647cac44729",
+  "sourceManifestSha256": "3238d920fccf6532967d2144f323c2f9fe123bb7da5e85b4f961fc06e70076d4",
+  "nativeEnvelope": {
+    "accepted": true,
+    "database": "cloudtms_test_clone",
+    "databaseTarget": "agency_test",
+    "rolledBack": true,
+    "connectedFresh": true,
+    "statementCount": 20,
+    "programmeAssertion": "DAILY_HEALTH_NATIVE_UNICODE_REASON_ROUNDTRIP_ASSERTED",
+    "commandABI": [
+      {
+        "statement": 1,
+        "command": "SET",
+        "rowCount": null,
+        "fields": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 2,
+        "command": "SET",
+        "rowCount": null,
+        "fields": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 3,
+        "command": "SET",
+        "rowCount": null,
+        "fields": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 4,
+        "command": "SET",
+        "rowCount": null,
+        "fields": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 5,
+        "command": "SELECT",
+        "rowCount": 1,
+        "fields": [
+          "hr_guard_clock"
+        ],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 6,
+        "command": "DO",
+        "rowCount": null,
+        "fields": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 7,
+        "command": "SELECT",
+        "rowCount": 1,
+        "fields": [
+          "hr_guard_clock"
+        ],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 8,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 9,
+        "command": "SELECT",
+        "rowCount": 1,
+        "fields": [
+          "?column?"
+        ],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 10,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 11,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 12,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 13,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 14,
+        "command": "CREATE",
+        "rowCount": null,
+        "fields": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 15,
+        "command": "DO",
+        "rowCount": null,
+        "fields": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 16,
+        "command": "SELECT",
+        "rowCount": 1,
+        "fields": [
+          "result"
+        ],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 17,
+        "command": "RESET",
+        "rowCount": null,
+        "fields": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 18,
+        "command": "RESET",
+        "rowCount": null,
+        "fields": [],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 19,
+        "command": "SELECT",
+        "rowCount": 1,
+        "fields": [
+          "?column?"
+        ],
+        "rowsTruncated": false
+      },
+      {
+        "statement": 20,
+        "command": "SELECT",
+        "rowCount": 1,
+        "fields": [
+          "jsonb_build_object"
+        ],
+        "rowsTruncated": false
+      }
+    ]
+  },
+  "sharedTurn": {
+    "takenAt": "2026-10-17T06:07:34.523Z",
+    "releasedAt": "2026-10-17T06:08:41.254Z",
+    "explicitUnlockConfirmed": true,
+    "connectionClosed": true,
+    "proved": true,
+    "key": [
+      20261013,
+      1
+    ]
+  },
+  "originalCanonicalSummary": {
+    "status": "PASS_EXACT_PURE_PROGRAMME_AND_ORIGINAL_CANONICAL_RESTORATION",
+    "scope": "DAILY_HEALTH_PURE_NO_BUSINESS_DML_BOTH_COMPLETE_BACKGROUND_RELATIONS_V1",
+    "route": "mcp__cloudtms_miget_operations_kier_codex__miget_db_transaction_rollback",
+    "programmeSha256": "779aff554ca8bce78a7e21520a41574beba211503ab1c79d492eccb6b5ad8ab6",
+    "programmeBytes": 8029,
+    "definitions": 5,
+    "positiveUnicodeVectors": 6,
+    "malformedStoredReasonRefusals": 8,
+    "sqlSha256": "4706ce7942760f88af8601764aa5fc1b06c269ba0079ea706c84717902a02516",
+    "rolledBack": true,
+    "connectedFresh": true,
+    "markerAbsent": true,
+    "realMarkerCreatedInB": true,
+    "businessFixtureRows": 0,
+    "readerPids": {
+      "holder": 259185,
+      "before": 259187,
+      "nativeB": 259239,
+      "mcpVerification": 259240,
+      "after": 259243
+    },
+    "localTransport": {
+      "before": {
+        "stdoutBytes": 28375295,
+        "snapshotUtf8Bytes": 28375119,
+        "snapshotSha256": "abafa3fbedc626d23bbb8515bfcd1fe00d03df5ebb98d362ece4b2ab95c0c239",
+        "frameCount": 2
+      },
+      "after": {
+        "stdoutBytes": 28375669,
+        "snapshotUtf8Bytes": 28375119,
+        "snapshotSha256": "87fb1b604958c9e83d3162e84c56010d9cc745d82e9cd95c5b591fe7b240b0c7",
+        "frameCount": 3,
+        "fixtureProofUtf8Bytes": 372,
+        "fixtureProofSha256": "243d5eefe8ad2fd0897749788dc89119a9865c2a6c7b18842f9693f28709dde8"
+      }
+    },
+    "before": {
+      "ledgerFingerprint": "1edba1ad792affa23e007538a5aaf4c00d989a51449fdcf66eccc543d5bcf653",
+      "catalogueFingerprint": "333fc9fc35cab2384133957777c084462aa6f87ebb28a9f13146f57a58a2448a",
+      "relationCensus": "d54216995c5217b9493feabbca0eb34778ac302eff81afc36c1f44044df82eb8",
+      "businessCountsFingerprint": "a7801263962e64efa3900c49468f7927a9b834278a3711af03d466e20c7cf301",
+      "businessRowsFingerprint": "41c7ce998e374bf9b9e9ae6ce10bab574f2b655796ad48d906532dda3e2f961d",
+      "businessRelations": [
+        {
+          "hash": "06c1f6bbdb0123ab1b4220ae17fbafb0cf2f1350f73a4dfe0559fece7849426f",
+          "count": 74291,
+          "relation": "private.candidate_daily_batch_receipts"
+        },
+        {
+          "hash": "0c325e157cf4b26d4ab79f8f9275ff3e67cb136bc4d8ba1426a8c75b95065553",
+          "count": 20,
+          "relation": "public.ts_financials_outbox"
+        }
+      ],
+      "otherActivityCount": 0
+    },
+    "after": {
+      "ledgerFingerprint": "1edba1ad792affa23e007538a5aaf4c00d989a51449fdcf66eccc543d5bcf653",
+      "catalogueFingerprint": "333fc9fc35cab2384133957777c084462aa6f87ebb28a9f13146f57a58a2448a",
+      "relationCensus": "d54216995c5217b9493feabbca0eb34778ac302eff81afc36c1f44044df82eb8",
+      "businessCountsFingerprint": "a7801263962e64efa3900c49468f7927a9b834278a3711af03d466e20c7cf301",
+      "businessRowsFingerprint": "41c7ce998e374bf9b9e9ae6ce10bab574f2b655796ad48d906532dda3e2f961d",
+      "businessRelations": [
+        {
+          "hash": "06c1f6bbdb0123ab1b4220ae17fbafb0cf2f1350f73a4dfe0559fece7849426f",
+          "count": 74291,
+          "relation": "private.candidate_daily_batch_receipts"
+        },
+        {
+          "hash": "0c325e157cf4b26d4ab79f8f9275ff3e67cb136bc4d8ba1426a8c75b95065553",
+          "count": 20,
+          "relation": "public.ts_financials_outbox"
+        }
+      ],
+      "otherActivityCount": 0
+    },
+    "restoration": {
+      "connectedFresh": true,
+      "physicalDatabase": "cloudtms_test_clone",
+      "module": "LEGACY:1",
+      "markerAbsent": true,
+      "compared": [
+        "ledgerFingerprint",
+        "catalogueFingerprint",
+        "businessCountsFingerprint",
+        "businessRowsFingerprint"
+      ],
+      "liveRestoration": {
+        "status": "LIVE_TEST_RESTORATION_QUALIFIED",
+        "ownerRuling": "14 October 2026: background changes require attribution, never job pause",
+        "relationCount": 2,
+        "unchangedBusinessRelations": 2,
+        "qualifiedBusinessChanges": [],
+        "parentRollback": {
+          "database": "cloudtms_test_clone",
+          "backendPid": 259239,
+          "xid": "414570346",
+          "status": "aborted",
+          "connectedFresh": true
+        },
+        "fixtureAbsence": {
+          "allUnchangedRelationsBound": true,
+          "exceptionCaptureUnits": 1,
+          "observedExceptionFixtureKeys": 0,
+          "remaining": 0
+        },
+        "writerProof": {
+          "matched": true,
+          "routines": [
+            {
+              "schema": "private",
+              "identity": "_candidate_daily_json_sha256_v1(p_value jsonb)",
+              "definitionSha256": "91bb08b79571e0e9937e8d82f4388959eea6dadf9981e259e537e7cb7fc199fd"
+            },
+            {
+              "schema": "public",
+              "identity": "candidate_daily_projection_claim_v1(p_internal_context jsonb, p_claim_request_id uuid, p_idempotency_key text, p_target text, p_claimant text, p_max_items integer, p_lease_seconds integer, p_correlation_id text)",
+              "definitionSha256": "f9323cdcb4f2163f97c8b0c31bf1f0f92c3e2766041f0e0571c3dc22698eae3d"
+            },
+            {
+              "schema": "public",
+              "identity": "tsfin_dequeue_batch_ids(p_limit integer)",
+              "definitionSha256": "3daeab18828c11b4b18a42cd07842f1c5fcc672e4940aa5824830a201a26e82d"
+            },
+            {
+              "schema": "public",
+              "identity": "tsfin_work_fail(p_id uuid, p_error text)",
+              "definitionSha256": "02f9b0d49608eeb7525a848c25eed3196f02dc24cf7493d2ec45060fa8701ace"
+            }
+          ],
+          "authority": "Exact original sealed four writer records equal genuine complete C-before and distinct C-after catalogue records"
+        },
+        "backgroundPaused": false,
+        "proofSha256": "12388bc33b3bb985166e63eecf77b046c8ead97c7adee64c2ef8b86e1d18f8fb"
+      },
+      "otherActivityCountObserved": 0,
+      "activityIsRestorationEvidence": false
+    },
+    "nativeClockFrames": [
+      {
+        "phase": "B_GUARD_BEFORE",
+        "readOnly": false,
+        "holderPid": 259185,
+        "backendPid": 259239,
+        "observedAt": "2026-10-17T06:08:07.812002+00:00",
+        "databaseOid": 324139,
+        "holderGranted": true,
+        "physicalDatabase": "cloudtms_test_clone",
+        "statementStartedAt": "2026-10-17T06:08:07.806164+00:00",
+        "transactionStartedAt": "2026-10-17T06:08:07.594873+00:00"
+      },
+      {
+        "phase": "B_GUARD_AFTER",
+        "readOnly": false,
+        "holderPid": 259185,
+        "backendPid": 259239,
+        "observedAt": "2026-10-17T06:08:07.858768+00:00",
+        "databaseOid": 324139,
+        "holderGranted": true,
+        "physicalDatabase": "cloudtms_test_clone",
+        "statementStartedAt": "2026-10-17T06:08:07.857272+00:00",
+        "transactionStartedAt": "2026-10-17T06:08:07.594873+00:00"
+      }
+    ],
+    "nativeCompletionObservedAt": "2026-10-17T06:08:08.422118+00:00",
+    "mcpVerificationObservedAt": "2026-10-17T06:08:08.769695+00:00",
+    "fullInstallRehearsal": "NOT_RUN",
+    "dailyComposers": "NOT_RUN",
+    "businessCurrentness": "NOT_QUALIFIED",
+    "rootCallTiming": {
+      "version": "ROOT_OBSERVED_MCP_CALL_TIMING_V1",
+      "route": "mcp__cloudtms_miget_operations_kier_codex__miget_db_transaction_rollback",
+      "sqlSha256": "4706ce7942760f88af8601764aa5fc1b06c269ba0079ea706c84717902a02516",
+      "callStartedAt": "2026-10-17T06:08:06.525Z",
+      "callReturnedAt": "2026-10-17T06:08:08.172Z",
+      "rootObservedCallMilliseconds": 1647,
+      "authority": "ACTUAL_ROOT_ORCHESTRATION_CLOCK_OBSERVATIONS_NOT_SERVER_OR_TRANSPORT_LATENCY"
+    },
+    "localTiming": {
+      "sequenceStartedAt": "2026-10-17T06:07:36.311Z",
+      "workDeadlineAt": "2026-10-17T06:09:36.311Z",
+      "readyAt": "2026-10-17T06:08:03.153Z",
+      "resultReadAt": "2026-10-17T06:08:10.031Z"
+    },
+    "elapsedMilliseconds": 64949,
+    "wholeSequenceBudgetMilliseconds": 180000,
+    "workBudgetMilliseconds": 120000,
+    "canonicalSharedTurnUnlockedAndClosed": true,
+    "completeMapsPersisted": false
+  },
+  "localEvidence": [
+    {
+      "path": ".codex-tmp/daily-health-pure-native-20261017-r3/INPUT.json",
+      "sha256": "d6680c4b4aadc15346cb2fe50028a63ad3216ef01f824c03abc80c24b7174fb2"
+    },
+    {
+      "path": ".codex-tmp/daily-health-pure-native-20261017-r3/INPUT_RECEIPT.json",
+      "sha256": "8abc53cf5fa4b36a791b513d2f8ab5de6368290ba43edbb2599d9ceacfca33e4"
+    },
+    {
+      "path": ".codex-tmp/daily-health-pure-native-20261017-r3/TURN_IDENTITY.json",
+      "sha256": "3ac1ddeb1292fe607030a56eb9636a7e6e1e35b368b95c1582d62366e26093b8"
+    },
+    {
+      "path": ".codex-tmp/daily-health-pure-native-20261017-r3/NATIVE_RESULT.json",
+      "sha256": "c89d71389b97693b72569d3bbc9a256ccc7c8a743e67996a39bead36c7378239"
+    },
+    {
+      "path": ".codex-tmp/daily-health-pure-native-20261017-r3/NATIVE_CALL_TIMING.json",
+      "sha256": "d8b6d472f79376d6860614c8c4f64e8dfeb1f8ca4fd211c860fdb79c4d763d49"
+    },
+    {
+      "path": ".codex-tmp/daily-health-pure-native-20261017-r3/READY_TIMING.json",
+      "sha256": "998ba20313d2ead5a94044aa0ca357946c42cbec0300c9b370860d357bc3196a"
+    },
+    {
+      "path": ".codex-tmp/daily-health-pure-native-20261017-r3/ROOT_CALL_TIMING_VALIDATED.json",
+      "sha256": "8217bf55fca94dc5f7422e7abbaaf02662efa1fe2117f87fd65f6918660cc420"
+    },
+    {
+      "path": ".codex-tmp/daily-health-pure-native-20261017-r3/NATIVE_CLOCK_OBSERVATIONS.json",
+      "sha256": "c636399d2e3139768d076d8bc922913080a8b76c9428b25478ad10fe4760733b"
+    },
+    {
+      "path": ".codex-tmp/daily-health-pure-native-20261017-r3/SUMMARY.json",
+      "sha256": "cf703a579ad7076cc1cf68be08d8dcb54cccbed904f131e8afad8e4a9bb75566"
+    }
+  ],
+  "scopeLimits": {
+    "onlyFivePureDefinitions": true,
+    "oneOfSixDailySupportHelpersReasonInversionTested": true,
+    "otherFiveDailySupportHelpers": "NOT_QUALIFIED",
+    "publicDailyComposers": "NOT_RUN",
+    "actorRateSelectorCurrentness": "NOT_RUN",
+    "API": "NOT_RUN",
+    "fullRehearsal": "NOT_RUN",
+    "install2": "NOT_INSTALLED",
+    "finalCritics": "NOT_RUN"
+  },
+  "noRawBusinessMapsPersisted": true,
+  "noOtherSessionsCancelled": true,
+  "noBackgroundJobsPaused": true
+}
