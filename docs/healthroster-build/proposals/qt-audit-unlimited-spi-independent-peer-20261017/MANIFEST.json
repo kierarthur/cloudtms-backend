@@ -1,0 +1,26 @@
+{
+  "version": "QT_LITERAL_SPI_PEER_MANIFEST_V1",
+  "files": [
+    {
+      "file": "README.md",
+      "bytes": 882,
+      "sha256": "a8e78a29f379f37d1cbd67ecb7a8b1a5aa7a295052f4b4796d4589473ea2dea9"
+    },
+    {
+      "file": "REVIEW.json",
+      "bytes": 1733,
+      "sha256": "dc43c95f675be0b880b0936a6ec2073f4a7940001bb896e0a1ba5a5e42ece84c"
+    },
+    {
+      "file": "ast-peer.py",
+      "bytes": 2128,
+      "sha256": "1dd2bef461796756bade5109449f3813540ffa70e61a0ed5243b7f79638120c4"
+    },
+    {
+      "file": "review.mjs",
+      "bytes": 1147,
+      "sha256": "2343f954baf3a33dd688c979f4a2d1c3c7558e09f5fe6f782154f66fb0bd37e3"
+    }
+  ],
+  "native": "NOT_RUN"
+}
