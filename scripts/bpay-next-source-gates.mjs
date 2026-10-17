@@ -1,3 +1,4 @@
+import {createReviewedSameSeparateClassifier} from './healthroster-same-separate-type-review.mjs';
 import {createReviewedLaterKeepClassifier} from './healthroster-later-keep-type-review.mjs';
 import {createReviewedKeptEntryClassifier} from './healthroster-kept-entry-type-review.mjs';
 import {reviewedSourceClassifierDelegates} from './healthroster-source-classifier-delegation-review.mjs';
@@ -38,6 +39,18 @@ const reviewedLaterKeepHazards=createReviewedLaterKeepClassifier(repoRoot,{
     for(const review of [reviewedContactFiniteHazards,reviewedHealthRowtypeHazards,reviewedHealthUuidHazards,reviewedHealthAggregateHazards,reviewedHealthDynamicHazards,reviewedJoinedNonDynamicHazards,reviewedPrebodyDynamicHazards,reviewedSource13Hazards])
       result=review(source,file,result,violations,parts);
     return result;
+  }
+});
+
+const reviewedSameSeparateHazards=createReviewedSameSeparateClassifier(repoRoot,{
+  tupleProof:provesSingleTableTuple,hazardCensus:specialConstructViolations,statementScan:scanManagedSql,
+  classifyPrior:(source,file,initial=new Map())=>{
+    const violations=specialConstructViolations(source,file),parts=executableParts(source,file);
+    let result=sortedStoredCreditHazards(source,file,firstInstallIncomingHazards(source,file,new Map(initial)));
+    for(const review of [reviewedContactFiniteHazards,reviewedHealthRowtypeHazards,reviewedHealthUuidHazards,reviewedHealthAggregateHazards,reviewedHealthDynamicHazards,reviewedJoinedNonDynamicHazards,reviewedPrebodyDynamicHazards,reviewedSource13Hazards])
+      result=review(source,file,result,violations,parts);
+    result=reviewedKeptEntryHazards(source,file,result,violations,parts);
+    return reviewedLaterKeepHazards(source,file,result,violations,parts);
   }
 });
 
@@ -2543,7 +2556,7 @@ export function verifyBpayNextSourceGates(){
           const isReadyReader=routineDefinitions(text,file).includes(readyReaderSignature);
           assertSpecialConstructs(text,file,baselineHazards,isReadyReader?readyPrefixColumns:new Map());
         }
-      } else assertSpecialConstructs(source,file,reviewedLaterKeepHazards(source,file,reviewedKeptEntryHazards(source,file,reviewedSource13Hazards(source,file,reviewedPrebodyDynamicHazards(source,file,reviewedJoinedNonDynamicHazards(source,file,reviewedHealthDynamicHazards(source,file,file===projectionFile?projectionHazards:file===earlyFenceFile?earlyFenceHazards:file===dr15OldFile?dr15OldHazards:reviewedHealthAggregateHazards(source,file,reviewedHealthUuidHazards(source,file,reviewedHealthRowtypeHazards(source,file,sortedStoredCreditHazards(source,file,firstInstallIncomingHazards(source,file,reviewedContactFiniteHazards(source,file,baselineHazards,specialConstructViolations(source,file),executableParts(source,file)))),specialConstructViolations(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)));assertFrozenAuthority(source,file,authorityPolicy,baseSources.get(file)??'');}
+      } else assertSpecialConstructs(source,file,reviewedSameSeparateHazards(source,file,reviewedLaterKeepHazards(source,file,reviewedKeptEntryHazards(source,file,reviewedSource13Hazards(source,file,reviewedPrebodyDynamicHazards(source,file,reviewedJoinedNonDynamicHazards(source,file,reviewedHealthDynamicHazards(source,file,file===projectionFile?projectionHazards:file===earlyFenceFile?earlyFenceHazards:file===dr15OldFile?dr15OldHazards:reviewedHealthAggregateHazards(source,file,reviewedHealthUuidHazards(source,file,reviewedHealthRowtypeHazards(source,file,sortedStoredCreditHazards(source,file,firstInstallIncomingHazards(source,file,reviewedContactFiniteHazards(source,file,baselineHazards,specialConstructViolations(source,file),executableParts(source,file)))),specialConstructViolations(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)));assertFrozenAuthority(source,file,authorityPolicy,baseSources.get(file)??'');}
       catch(error){sourceFailures.push(error.message);}
     }
   }

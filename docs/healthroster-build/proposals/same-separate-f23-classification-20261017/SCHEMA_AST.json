@@ -1,0 +1,150 @@
+{
+  "version": "SAME_SEPARATE_PG17_SOURCE_COLUMN_AST_V1",
+  "parser": "v7.20",
+  "postgresqlGrammar": [
+    17,
+    7
+  ],
+  "migration": {
+    "path": "supabase/migrations/17102026_0231_weekly_source_paid_same_separate_10_footprint.sql",
+    "rawSha256": "54fcc770a920641d2c4322e6ea9818bb3fc9d1e13c74e80372f61973888203d5",
+    "addedColumns": [
+      {
+        "relation": "private.weekly_source_office_row_choices",
+        "name": "pay_effect",
+        "type": "text"
+      },
+      {
+        "relation": "private.weekly_source_office_row_choices",
+        "name": "paid_overlap_target_work_event_id",
+        "type": "uuid"
+      },
+      {
+        "relation": "private.weekly_source_office_row_choices",
+        "name": "paid_overlap_inputs_json",
+        "type": "jsonb"
+      },
+      {
+        "relation": "private.weekly_source_office_row_choices",
+        "name": "paid_overlap_inputs_sha256",
+        "type": "bytea"
+      },
+      {
+        "relation": "public.weekly_source_row_resolutions",
+        "name": "pay_effect",
+        "type": "text"
+      },
+      {
+        "relation": "public.weekly_source_row_resolutions",
+        "name": "paid_overlap_choice_id",
+        "type": "bigint"
+      },
+      {
+        "relation": "public.weekly_source_final_snapshot_lines",
+        "name": "pay_effect",
+        "type": "text"
+      },
+      {
+        "relation": "public.weekly_source_final_snapshot_lines",
+        "name": "paid_overlap_choice_id",
+        "type": "bigint"
+      },
+      {
+        "relation": "public.weekly_source_billing_movements",
+        "name": "pay_effect",
+        "type": "text"
+      },
+      {
+        "relation": "public.weekly_source_billing_movements",
+        "name": "invoice_only_snapshot_line_id",
+        "type": "uuid"
+      },
+      {
+        "relation": "public.weekly_source_final_revisions",
+        "name": "paid_overlap_choice_census",
+        "type": "jsonb"
+      },
+      {
+        "relation": "public.weekly_source_state_transitions",
+        "name": "pay_basis_kind",
+        "type": "text"
+      },
+      {
+        "relation": "public.weekly_source_state_transitions",
+        "name": "paid_match_source_rows",
+        "type": "jsonb"
+      }
+    ]
+  },
+  "currentDDLRelations": [
+    {
+      "relation": "public.weekly_source_self_bill_reports",
+      "path": "supabase/migrations/13102026_1344_weekly_source_self_bill_report_schema.sql",
+      "rawSha256": "34b22ce64481534a73f0e2f32c97e426a7b57d8f11341ab94d709839b734a6ae",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid"
+        },
+        {
+          "name": "source_group_id",
+          "type": "uuid"
+        },
+        {
+          "name": "client_id",
+          "type": "uuid"
+        },
+        {
+          "name": "source_cycle_id",
+          "type": "uuid"
+        },
+        {
+          "name": "report_number",
+          "type": "text"
+        },
+        {
+          "name": "invoice_date",
+          "type": "date"
+        },
+        {
+          "name": "content_sha256",
+          "type": "bytea"
+        },
+        {
+          "name": "line_count",
+          "type": "integer"
+        },
+        {
+          "name": "net_pence",
+          "type": "bigint"
+        },
+        {
+          "name": "vat_pence",
+          "type": "bigint"
+        },
+        {
+          "name": "gross_pence",
+          "type": "bigint"
+        },
+        {
+          "name": "row_manifest_hash",
+          "type": "bytea"
+        },
+        {
+          "name": "layout",
+          "type": "text"
+        },
+        {
+          "name": "created_by_user_id",
+          "type": "uuid"
+        },
+        {
+          "name": "created_at_utc",
+          "type": "timestamptz"
+        }
+      ]
+    }
+  ],
+  "native": "NOT_RUN",
+  "actualCatalogueCompilation": "NOT_PROVED"
+}

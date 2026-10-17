@@ -1,0 +1,145 @@
+// Finite Health source construction proof; no native or financial qualification.
+import fs from 'node:fs';
+import path from 'node:path';
+import {createHash} from 'node:crypto';
+export const reviewPath='docs/healthroster-build/proposals/same-separate-f23-classification-20261017/CLASSIFICATION.json';
+export const reviewSha256='f338e3eaf7f3ce2ff027cd2728cc5f16f0724ea4ce7eeea139f5217ee949766d';
+const sha=x=>createHash('sha256').update(x).digest('hex'),canon=x=>x.toString().replaceAll('\r\n','\n');
+const fail=code=>{throw Error('HEALTH_SAME_SEPARATE_TYPE_'+code);};
+const includes=(body,...parts)=>parts.every(p=>body.includes(p));
+const column=(schema,table,name,type)=>schema[table]?.columns.some(c=>c.name===name&&c.type===type)===true;
+export function reverseLiteralHunks(source,hunks){
+ for(const h of [...hunks].reverse()){
+  const after=canon(h.after),before=canon(h.before),count=h.occurrences??1;
+  if(!Number.isSafeInteger(count)||count<1||count>2||source.split(after).length!==count+1)fail('EXACT_REVERSE_ANCHOR');
+  source=source.replaceAll(after,()=>before);
+ }
+ return source;
+}
+export function provesMigrationIdentifier(body){
+ return includes(body,'declare v_name text;v_count integer;v_keys smallint[];',
+  "from unnest(array['final_revision_id','work_event_id']) with ordinality key(name,ord)",
+  "a.attrelid='public.weekly_source_final_snapshot_lines'::regclass",
+  'and a.attname=key.name and not a.attisdropped;',
+  'select count(*),min(conname::text) into v_count,v_name from pg_catalog.pg_constraint',
+  "where conrelid='public.weekly_source_final_snapshot_lines'::regclass and contype='u' and conkey=v_keys;",
+  'if v_count<>1 or cardinality(v_keys)<>2 then',
+  "raise exception 'WEEKLY_SOURCE_PAYABLE_SNAPSHOT_UNIQUE_UNBOUND' using errcode='55000';end if;",
+  "execute format('alter table public.weekly_source_final_snapshot_lines drop constraint %I',v_name);")
+  &&body.indexOf('if v_count<>1')<body.indexOf('execute format(')
+  &&body.split('execute format(').length===2;
+}
+export function provesExpenseJson(body,producer,schema){
+ return column(schema,'public.weekly_source_row_expense_policy_snapshots','source_expense_pence','bigint')
+  &&/\bv_values jsonb;v_pay jsonb;/.test(body)
+  &&includes(body,'v_values:=private.weekly_source_fixed_expense_invoice_values_v1(p.id);',
+   "v_pay:=v_values->'pay_vector'||jsonb_build_object('source_expense_pence',0);")
+  &&includes(producer,'returns jsonb language plpgsql','v_replacement_pay_vector jsonb;',
+   'v_replacement_pay_vector:=pg_catalog.jsonb_build_object(',
+   "'schema_version','WEEKLY_SOURCE_FIXED_EXPENSE_VECTOR_V1','kind','PAY',",
+   "'source_expense_pence',v_new_pence,",'v_new_pence:=v_expense_policy.source_expense_pence;',
+   "return jsonb_build_object('schema_version','WEEKLY_SOURCE_FIXED_EXPENSE_INVOICE_VALUES_V1',",
+   "'pay_vector',v_replacement_pay_vector,'charge_vector',v_replacement_charge_vector,");
+}
+export function provesInvoiceCompanions(sql,schema){
+ return column(schema,'public.weekly_source_invoice_presentation_lines','id','uuid')
+  &&sql.split('select pg_catalog.min(shift_line.id::text)::uuid').length===3
+  &&includes(sql,"case when v_is_expense and v_movement.invoice_only_snapshot_line_id is not null then (",
+   'from public.weekly_source_invoice_presentation_lines shift_line',
+   'join public.weekly_source_invoice_line_bindings hours_binding on hours_binding.presentation_line_id=shift_line.id',
+   "and hours_binding.state='CURRENT' and hours_binding.invoice_id=v_invoice_id",
+   'hours_movement.invoice_only_snapshot_line_id=v_movement.invoice_only_snapshot_line_id',
+   "hours_movement.source_line_kind='SOURCE_REBILL_LINE' and hours_movement.pay_effect='NONE'",
+   'having count(*)=1',') when v_is_expense then (',
+   'shift_line.work_event_id=v_movement.work_event_id',
+   'shift_line.correction_role is not distinct from v_correction_role','having pg_catalog.count(*)=1');
+}
+export function provesNewScalar(signature,sql,body,schema){
+ if(signature==='public.weekly_source_invoice_admit_atomic_v1(jsonb)')return provesInvoiceCompanions(sql,schema);
+ if(signature==='private.weekly_source_paid_overlap_current_snapshot_v1(uuid,uuid,uuid,uuid,uuid,uuid,uuid[])')
+  return column(schema,'public.weekly_source_final_snapshot_lines','id','uuid')
+   &&includes(sql,'select s.id,scope.id as scope_id,','join public.weekly_source_final_snapshot_lines s on s.id=',
+    ') select count(distinct id),max(id::text)::uuid,','into v_count,v_snapshot,v_rows from actual;')
+   &&includes(body,'declare v_count integer;v_snapshot uuid;v_rows jsonb;',
+    "if v_count>1 then raise exception 'WEEKLY_SOURCE_PAID_OVERLAP_CURRENT_SNAPSHOT_AMBIGUOUS' using errcode='55000';end if;",
+    "'state',case when v_count=1 then 'CURRENT' else 'UNAVAILABLE' end,'snapshot_line_id',v_snapshot,");
+ if(signature==='private.weekly_source_paid_match_retained_transition_assert_v1(uuid)')
+  return column(schema,'public.weekly_source_billing_movements','id','uuid')
+   &&includes(sql,"select count(*),max(value->>'current_pay_head_movement_id')::uuid into counted,movement_id",
+    "from jsonb_array_elements(proof#>'{inputs,overlaps}') value where value->>'work_event_id'=t.work_event_id::text;")
+   &&includes(body,'counted integer;movement_id uuid;',
+    "if counted<>1 then raise exception 'WEEKLY_SOURCE_PAID_MATCH_PRIOR_PAY_BASIS_CHANGED' using errcode='55000';end if;",
+    'select * into strict m from public.weekly_source_billing_movements where id=movement_id;',
+    "item->>'movement_economic_hash' is distinct from encode(m.movement_economic_hash,'hex')")
+   &&body.indexOf('if counted<>1')<body.indexOf('where id=movement_id;');
+ if(signature==='private.weekly_source_nhsp_paid_overlap_basis_v1(uuid,uuid,uuid)')
+  return column(schema,'private.bpay_next_source_current_scopes','id','uuid')
+   &&includes(sql,'select count(*),min(scope.id::text)::uuid into v_scope_count,v_scope',
+    'from private.bpay_next_source_current_scopes scope where scope.root_timesheet_id=v_root_id;')
+   &&includes(body,'v_scope uuid;v_scope_count integer;',"if v_scope_count>1 then\n      raise exception 'WEEKLY_SOURCE_NHSP_PAID_BASIS_SCOPE_AMBIGUOUS'",
+    'if v_scope_count=0 or not exists(',"'state','UNAVAILABLE','reason','NATIVE_CURRENT_UNCAPTURED','native_current_event',null));\n      continue;",
+    'scope.id=v_scope','scope.root_timesheet_id=v_root_id');
+ if(signature==='private.weekly_source_nhsp_negative_population_v1(uuid,uuid,uuid,uuid)')
+  // This is deliberately INCOMPLETE evidence for count != 1. Its minimum
+  // is never certified as a unique/current selector or writer authority.
+  return column(schema,'public.weekly_source_projection_publications','id','uuid')
+   &&includes(sql,'select count(*),min(x.id::text)::uuid into counted,p.id from public.weekly_source_projection_publications x',
+    "x.authority_scope_kind='NHSP_REPORT_SCOPE' and x.authority_scope_version=scope.version")
+   &&includes(body,'complete boolean:=true;',
+    'if counted<>1 then complete:=false;\n  else\n    select * into strict p from public.weekly_source_projection_publications where id=p.id;',
+    "'negative_population_complete',complete,'current_position_available',current_available,",
+    "'no_reversal_proved',case when complete and current_available then to_jsonb(not matching) else 'null'::jsonb end,",
+    "'paid_writer_permission',null);");
+ if(signature==='private.weekly_source_known_source_key_v1(uuid,uuid,uuid)')
+  return column(schema,'public.weekly_work_events','id','uuid')
+   &&includes(sql,'select count(distinct event.id),min(event.id::text)::uuid,',
+    'join public.weekly_work_events event on event.id=link.work_event_id',
+    'into v_count,v_event,v_foreign_owner',"link.link_hash=private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_WORK_EVENT_LINK_V1'")
+   &&includes(body,'v_count integer;v_event uuid;',
+    "if v_count>1 then raise exception 'WEEKLY_SOURCE_SOURCE_KEY_ALIAS_AMBIGUOUS' using errcode='55000';end if;",
+    'if v_count=0 then return null;end if;',
+    "if v_foreign_owner then raise exception 'WEEKLY_SOURCE_SOURCE_KEY_ALIAS_OWNER_CONFLICT' using errcode='55000';end if;",
+    'return v_event;');
+ return false;
+}
+export function createReviewedSameSeparateClassifier(root,{tupleProof,classifyPrior,hazardCensus,statementScan,readFile}={}){
+ const read=file=>canon(readFile?readFile(file):fs.readFileSync(path.join(root,file)));
+ const statements=source=>{if(typeof statementScan!=='function')fail('STATEMENT_SCANNER_REQUIRED');const p=statementScan(source);return p.statements.map(s=>p.source.slice(s.start,s.end).trim());};
+ function load(){
+  const raw=readFile?readFile(reviewPath):fs.readFileSync(path.join(root,reviewPath));if(sha(raw)!==reviewSha256)fail('REVIEW_CHANGED');const d=JSON.parse(raw);
+  if(d.version!=='HEALTH_SAME_SEPARATE_FINITE_TYPE_PROPOSAL_V1'||d.native!=='NOT_RUN'||d.qualification!=='SOURCE_TYPES_AND_CONSTRUCTION_ONLY'
+   ||d.counts.files!==78||d.counts.rawOccurrences!==458||d.counts.uniquePoints!==445||d.owners.length!==71||d.owners.filter(o=>o.priorFile).length!==37)fail('SCOPE_CHANGED');
+  for(const pin of d.dependencies)if(sha(read(pin.path))!==pin.sha256)fail('DEPENDENCY_CHANGED');
+  const schema=JSON.parse(read(d.schema.path));for(const[name,proof]of Object.entries(d.schema.relations)){
+   if(proof.ddl){if(!statements(read(proof.ddlPath)).includes(proof.ddl))fail('CURRENT_DDL_CHANGED');}
+   else{const actual=schema.relations.find(r=>r.schema+'.'+r.name===name);if(!actual||actual.kind!==proof.kind||JSON.stringify(actual.columns)!==JSON.stringify(proof.columns))fail('CATALOGUE_TYPE_CHANGED');}
+  }
+  for(const o of d.owners){const whole=statements(read(o.file)).filter(s=>s.startsWith('create or replace function '+o.signature.split('(')[0]+'('));
+   if(whole.length!==1||sha(whole[0])!==o.successorStatementSha256)fail('COMPLETE_OWNER_CHANGED');if(!o.priorFile)continue;
+   const prior=read(o.priorFile).trimEnd();if(sha(prior)!==o.priorStatementSha256||reverseLiteralHunks(whole[0]+'\n',o.hunks).trimEnd()!==prior)fail('FULL_OWNER_REVERSE_CHANGED');
+   const parent=o.parentOwnerFile??o.currentFile??o.current?.physical;if(!parent||!statements(read(parent)).includes(prior))fail('ACTUAL_PARENT_CHANGED');
+  }
+  if(reverseLiteralHunks(read(d.classifier.target),d.classifier.hunks)!==read(d.classifier.inputTarget))fail('CLASSIFIER_REVERSE_CHANGED');
+  // The entire new schema producer is source-pinned and its thirteen actual
+  // ADD COLUMN types are independently proved in the PG17 AST receipt.
+  if(sha(read(d.migration.file))!==d.migration.sha256||d.schema.addedColumns.length!==13)fail('SCHEMA_PRODUCER_CHANGED');
+  return d;
+ }
+ return function reviewedSameSeparateHazards(source,file,baseline,violations,parts){
+  if(!/^supabase\/(?:migrations\/17102026_0231_weekly_source_paid_same_separate_|repeatable\/17102026_(?:0231_weekly_source_paid_same_separate_health(?:\/|_v1\.sql$)|0335_weekly_source_paid_match_correction_receipt(?:\/|_v1\.sql$)))/.test(file))return baseline;
+  const d=load(),entry=d.files.find(f=>f.file===file);if(!entry)return baseline;if(sha(canon(source))!==entry.sha256)fail('CURRENT_SOURCE_CHANGED');
+  const actual=new Map();for(const p of violations){const old=actual.get(p.key);actual.set(p.key,{...p,count:(old?.count??0)+1});}if(actual.size!==entry.points.length)fail('POINT_CENSUS_CHANGED');
+  const result=new Map(baseline);for(const p of entry.points){const found=actual.get(p.key);if(!found||found.hazard!==p.hazard||found.count!==p.count)fail('POINT_CHANGED');
+   const[sig,hazard,sql]=JSON.parse(p.key),matching=parts.filter(b=>b.signature===sig&&b.text.includes(sql)),body=matching.length===1&&!matching[0].unclassified?matching[0].text:null;let proved=false;
+   if(file===d.classifier.target){if(!classifyPrior)fail('PRIOR_CLASSIFIER_REQUIRED');const oldKey=JSON.stringify([sig.startsWith('outer:')?'outer:'+d.classifier.inputTarget:sig,hazard,sql]);proved=(classifyPrior(read(d.classifier.inputTarget),d.classifier.inputTarget,baseline).get(oldKey)??0)>=p.count;}
+   else if(hazard.startsWith('ROWTYPE_SELECT:')){const[,variable,relationText]=hazard.split(':'),relation=relationText.replaceAll(' ','').toLowerCase();
+    proved=!!body&&!!d.schema.relations[relation]&&typeof tupleProof==='function'&&tupleProof(found)&&new RegExp('\\b'+variable+'\\s+'+relation.replaceAll('.','\\.')+'\\s*%\\s*rowtype\\b','i').test(body);}
+   else if(file===d.migration.file&&hazard==='DYNAMIC_SQL_UNCLASSIFIED')proved=provesMigrationIdentifier(source);
+   else if(body&&hazard==='JSON_CONCAT')proved=provesExpenseJson(body,read(d.expenseProducer),d.schema.relations);
+   else if(body&&(hazard==='UUID_CARDINALITY_UNCLASSIFIED'||hazard==='AGGREGATE_TYPE_UNCLASSIFIED'))proved=provesNewScalar(sig,sql,body,d.schema.relations);
+   if(!proved){const t=d.transfers.find(t=>t.file===file&&t.key===p.key);if(t&&hazardCensus&&classifyPrior){const prior=read(t.currentFile);proved=hazardCensus(prior,t.currentFile).filter(x=>x.key===p.key).length>=p.count&&(classifyPrior(prior,t.currentFile,baseline).get(p.key)??0)>=p.count;}}
+   if(!proved)fail('UNPROVED_'+hazard+':'+file+':'+sig);result.set(p.key,Math.max(result.get(p.key)??0,p.count));
+  }
+  return result;
+ };
+}

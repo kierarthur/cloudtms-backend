@@ -1,0 +1,50 @@
+create or replace function private.weekly_source_nhsp_none_write_admit_v1(p_basis jsonb,p_revision uuid)
+returns void language plpgsql stable security definer set search_path='pg_catalog','pg_temp' as $function$
+declare revision public.weekly_source_final_revisions%rowtype;u public.weekly_source_uploads%rowtype;
+  session public.weekly_final_source_correction_sessions%rowtype;scope public.weekly_source_report_scopes%rowtype;
+  saved jsonb;current_basis jsonb;target uuid;counted integer;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  select * into strict revision from public.weekly_source_final_revisions where id=p_revision;
+  select * into strict u from public.weekly_source_uploads where id=revision.upload_id;
+  select * into strict scope from public.weekly_source_report_scopes where id=revision.report_scope_id;
+  if p_basis is distinct from private.weekly_source_nhsp_none_invoice_basis_v1(
+    (p_basis->>'row_resolution_id')::uuid,p_revision) then
+    raise exception 'WEEKLY_SOURCE_NHSP_NONE_WRITE_BASIS_UNBOUND' using errcode='55000';end if;
+  select value->'nhsp_negative_population'->'native_current_basis' into strict saved
+    from jsonb_array_elements(p_basis#>'{paid_overlap_choice_proof,inputs,overlaps}')
+    where value->>'work_event_id'=p_basis->>'work_event_id';
+  current_basis:=private.weekly_source_nhsp_paid_overlap_basis_v1((p_basis->>'work_event_id')::uuid,
+    revision.finalised_by_user_id,revision.source_cycle_id);
+  if current_basis is distinct from saved or current_basis->>'state' is distinct from 'NATIVE_POSITION_INPUTS' then
+    raise exception 'WEEKLY_SOURCE_PAID_OVERLAP_FACTS_CHANGED' using errcode='40001';end if;
+  target:=(p_basis->>'normal_pay_movement_id')::uuid;
+  if u.purpose='ORDINARY' then
+    if revision.state<>'CURRENT' or revision.reason<>'INITIAL_FINALISATION' or revision.predecessor_revision_id is not null
+      or p_basis->>'normal_pay_report_scope_id'=scope.id::text
+      or not exists(select 1 from public.weekly_source_final_revisions normal_revision
+        join public.weekly_source_report_scopes normal_scope on normal_scope.id=normal_revision.report_scope_id
+        where normal_revision.id=(p_basis->>'normal_pay_final_revision_id')::uuid and normal_revision.state='CURRENT'
+          and normal_scope.current_final_revision_id=normal_revision.id) then
+      raise exception 'WEEKLY_SOURCE_NHSP_NONE_NORMAL_WITNESS_NOT_CURRENT' using errcode='55000';end if;
+  elsif u.purpose='FINAL_SOURCE_CORRECTION' then
+    perform private.weekly_source_paid_match_correction_scope_v1(u.id,revision.finalised_by_user_id,false);
+    select * into strict session from public.weekly_final_source_correction_sessions where id=u.correction_session_id;
+    if revision.state<>'PREPARED' or revision.reason<>'CORRECT_FINAL_SOURCE' or session.state<>'PREPARING'
+      or revision.predecessor_revision_id is distinct from session.expected_current_final_revision_id then
+      raise exception 'WEEKLY_SOURCE_NHSP_NONE_CORRECTION_WRITE_UNBOUND' using errcode='55000';end if;
+    if p_basis->>'normal_pay_report_scope_id'=scope.id::text then
+      -- An actual prior pay origin is required; a cash receipt or historical
+      -- NORMAL row alone cannot become current correction authority.
+      select count(*) into counted from private.bpay_next_source_current_origins origin
+        join private.bpay_next_source_current_magnitudes magnitude on magnitude.scope_id=origin.scope_id
+          and magnitude.work_event_id=origin.work_event_id and magnitude.magnitude_hash=origin.magnitude_hash
+        where origin.origin_kind='MOVEMENT' and origin.final_revision_id=revision.predecessor_revision_id
+          and origin.work_event_id=(p_basis->>'work_event_id')::uuid and origin.active and origin.contribution=1
+          and coalesce(origin.selected_movement_id,origin.movement_id)=target and magnitude.selected_movement_id=target
+          and magnitude.surviving_order_key=origin.order_key;
+      if counted<>1 then raise exception 'WEEKLY_SOURCE_NHSP_NONE_RETAINED_ORIGIN_UNBOUND' using errcode='55000';end if;
+    end if;
+  else raise exception 'WEEKLY_SOURCE_NHSP_NONE_WRITE_SCOPE_UNBOUND' using errcode='55000';end if;
+end;
+$function$;

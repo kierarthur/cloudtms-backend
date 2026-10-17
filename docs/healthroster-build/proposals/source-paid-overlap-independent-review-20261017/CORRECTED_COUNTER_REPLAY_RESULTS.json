@@ -1,0 +1,88 @@
+{
+  "correctedCommit": "a7e4522cb87ae6961cb40efcb83e4e69b12fbd6c",
+  "counterProgramSha256": "2b5b2b4ce6fcff2a9fbc4a918ff37c0040d5fc66109f1f840b7db8a38f98c1ac",
+  "actualCounterRouteVectors": {
+    "passed": 25,
+    "failed": 0,
+    "checks": [
+      "actual-route-CYCLE-fresh-3",
+      "actual-route-CYCLE-fresh-9007199254740993",
+      "actual-route-CYCLE-exact-replay-3",
+      "actual-route-CYCLE-exact-replay-9007199254740993",
+      "actual-route-NHSP_REPORT_SCOPE-fresh-3",
+      "actual-route-NHSP_REPORT_SCOPE-fresh-9007199254740993",
+      "actual-route-NHSP_REPORT_SCOPE-exact-replay-3",
+      "actual-route-NHSP_REPORT_SCOPE-exact-replay-9007199254740993",
+      "callback-rejects-malformed-or-unsafe-ready-0",
+      "callback-rejects-malformed-or-unsafe-ready-01",
+      "callback-rejects-malformed-or-unsafe-ready-9223372036854775808",
+      "callback-rejects-malformed-or-unsafe-ready-1.0",
+      "callback-rejects-malformed-or-unsafe-ready-+1",
+      "callback-rejects-malformed-or-unsafe-ready-9007199254740992",
+      "callback-rejects-malformed-or-unsafe-ready-null",
+      "safe-legacy-native-scope-number-normalises-without-rounding",
+      "closed-native-scope-frame-refusal-16",
+      "closed-native-scope-frame-refusal-17",
+      "closed-native-scope-frame-refusal-18",
+      "closed-native-scope-frame-refusal-19",
+      "native-ready-frame-cannot-retarget-saved-report",
+      "actual-rebuild-native-context-preserves-large-session-CYCLE",
+      "actual-rebuild-native-context-preserves-large-session-NHSP_REPORT_SCOPE",
+      "ordinary-non-paid-text-session-preview-rebuild-prepare-apply-3",
+      "ordinary-non-paid-text-session-preview-rebuild-prepare-apply-9007199254740993"
+    ],
+    "actualCurrentRouter": true,
+    "actualCandidateOwners": true,
+    "scopeKinds": [
+      "CYCLE",
+      "NHSP_REPORT_SCOPE"
+    ],
+    "native": "NOT_RUN",
+    "API": "NOT_RUN",
+    "dbConnections": 0
+  },
+  "additionalActualUploadContextConsumerVectors": [
+    {
+      "consumer": "actual stageReplacementSource from actual009 header",
+      "value": "3",
+      "valid": true,
+      "pass": true
+    },
+    {
+      "consumer": "actual stageReplacementSource from actual009 header",
+      "value": "9007199254740993",
+      "valid": true,
+      "pass": true
+    },
+    {
+      "consumer": "actual stageReplacementSource from actual009 header",
+      "value": "9223372036854775807",
+      "valid": true,
+      "pass": true
+    },
+    {
+      "consumer": "actual stageReplacementSource from actual009 header",
+      "value": "01",
+      "valid": false,
+      "pass": true
+    },
+    {
+      "consumer": "actual stageReplacementSource from actual009 header",
+      "value": 9007199254740992,
+      "valid": false,
+      "pass": true
+    },
+    {
+      "consumer": "actual stageReplacementSource from actual009 header",
+      "value": null,
+      "valid": false,
+      "pass": true
+    }
+  ],
+  "originalRuntimePinnedModules": 31,
+  "authorWritesSuppressed": 1,
+  "foreignWrites": 0,
+  "databaseConnections": 0,
+  "native": "NOT_RUN",
+  "API": "NOT_RUN"
+}

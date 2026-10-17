@@ -1,0 +1,159 @@
+create or replace function private.weekly_source_legacy_signed_source_membership_v1(
+  p_root_timesheet_id uuid,p_work_event_id uuid,p_actor_user_id uuid,p_source_cycle_id uuid
+) returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare
+  event public.weekly_work_events%rowtype;cycle public.weekly_source_cycles%rowtype;
+  snapshot public.pay_batch_timesheet_snapshots%rowtype;history public.timesheet_pay_state_history%rowtype;
+  native_allocation jsonb;native_census jsonb;settlement jsonb;component jsonb;segment jsonb;
+  roots uuid[];native_items uuid[];signed_items uuid[];proofs jsonb:='[]'::jsonb;
+  component_row record;item public.pay_batch_items%rowtype;v_count integer;v_members jsonb;
+  v_result jsonb;v_reason text;v_current_financial jsonb;v_member jsonb;v_member_event uuid;v_member_movement uuid;v_module jsonb;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  select * into strict event from public.weekly_work_events where id=p_work_event_id;
+  select * into strict cycle from public.weekly_source_cycles where id=p_source_cycle_id;
+  if p_actor_user_id is null or cycle.source_group_id is distinct from event.first_source_group_id
+    or (cycle.scope_client_id is not null and cycle.scope_client_id is distinct from event.client_id)
+    or not exists(select 1 from public.weekly_source_groups g where g.id=cycle.source_group_id and g.source_family='ROSTER') then
+    raise exception 'WEEKLY_SOURCE_LEGACY_MEMBERSHIP_SCOPE_INVALID' using errcode='42501';end if;
+  perform private.weekly_source_office_authority_v1(p_actor_user_id,'VIEW_PAY_WORK',
+    event.first_source_group_id,event.client_id,cycle.finalisation_week_ending);
+  select coalesce(array_agg(distinct s.family_timesheet_id order by s.family_timesheet_id),'{}'::uuid[]) into roots
+    from public._pay_timesheet_rotation_scope(array[p_root_timesheet_id]) s;
+  if cardinality(roots)=0 or cardinality(roots)>200 or not exists(
+    select 1 from public.weekly_source_row_timesheet_lineages l join public.contracts c on c.id=l.contract_id
+      join public.timesheets ts on ts.timesheet_id=l.timesheet_id
+    where l.timesheet_id=any(roots) and l.work_event_id=event.id
+      and (l.candidate_id,l.client_id)=(event.candidate_id,event.client_id)
+      and (c.candidate_id,c.client_id)=(event.candidate_id,event.client_id)
+      and ts.contract_id=c.id and ts.booking_id=l.family_booking_id) then
+    raise exception 'WEEKLY_SOURCE_LEGACY_MEMBERSHIP_LINEAGE_UNBOUND' using errcode='55000';end if;
+  native_allocation:=private.weekly_source_settlement_allocation_v1(p_root_timesheet_id);
+  native_census:=private.weekly_source_freeze_census_v1(event.candidate_id,roots);
+  select to_jsonb(m) into v_module from private.bpay_next_module_control m where m.id=1;
+  if v_module->>'active_owner' is distinct from 'LEGACY'
+    or native_allocation->>'state' is distinct from 'AVAILABLE'
+    or native_allocation->'settlement_count' is distinct from '1'::jsonb
+    or native_census->>'result' is distinct from 'RELEASABLE'
+    or native_census->'errors' is distinct from '[]'::jsonb
+    or native_census->'member_candidate_unknown_timesheet_ids' is distinct from '[]'::jsonb
+    or array(select value::uuid from jsonb_array_elements_text(native_allocation->'member_timesheet_ids') value order by value::uuid)
+      is distinct from roots
+    or array(select value::uuid from jsonb_array_elements_text(native_census->'member_timesheet_ids') value order by value::uuid)
+      is distinct from roots then
+    v_reason:='NATIVE_SETTLEMENT_SCOPE_UNAVAILABLE';
+  else
+    select value into strict settlement from jsonb_array_elements(native_allocation->'settlements');
+    select * into strict snapshot from public.pay_batch_timesheet_snapshots where id=(settlement->>'snapshot_id')::uuid;
+    select * into strict history from public.timesheet_pay_state_history where id=(settlement->>'history_id')::uuid;
+    if snapshot.pay_batch_id::text is distinct from settlement->>'pay_batch_id'
+      or snapshot.timesheet_id::text is distinct from settlement->>'timesheet_id'
+      or snapshot.candidate_id is distinct from event.candidate_id
+      or history.pay_batch_id is distinct from snapshot.pay_batch_id or history.timesheet_id is distinct from snapshot.timesheet_id
+      or snapshot.signature is distinct from history.signature or snapshot.target_snapshot_json is distinct from history.snapshot_json
+      or snapshot.signature is distinct from md5(snapshot.target_snapshot_json::text)
+      or jsonb_typeof(snapshot.target_snapshot_json->'resolved_components') is distinct from 'array' then
+      v_reason:='SIGNED_COMPONENT_CENSUS_UNAVAILABLE';
+    else
+      select coalesce(array_agg(i.id order by i.id),'{}'::uuid[]) into native_items
+        from public.pay_batch_items i join public.pay_batch_candidates c on c.id=i.pay_batch_candidate_id
+        where c.pay_batch_id=snapshot.pay_batch_id and c.candidate_id=event.candidate_id
+          and i.timesheet_id=snapshot.timesheet_id and i.pay_channel=snapshot.pay_channel and not coalesce(i.is_voided,false);
+      select coalesce(array_agg((x->>'pay_batch_item_id')::uuid order by (x->>'pay_batch_item_id')::uuid),'{}'::uuid[]) into signed_items
+        from jsonb_array_elements(snapshot.target_snapshot_json->'resolved_components') x;
+      if cardinality(native_items)=0 or cardinality(native_items)>500 or native_items is distinct from signed_items
+        or exists(select 1 from unnest(native_items) id where not exists(
+          select 1 from jsonb_array_elements(native_census->'items') x where x->>'pay_batch_item_id'=id::text
+            and x->>'class'='SETTLED_TERMINAL' and x->>'timesheet_id'=snapshot.timesheet_id::text
+            and x->>'pay_batch_id'=snapshot.pay_batch_id::text)) then
+        v_reason:='SIGNED_NATIVE_ITEM_CENSUS_CHANGED';
+      else
+        for component in select value from jsonb_array_elements(snapshot.target_snapshot_json->'resolved_components') loop
+          select * into strict item from public.pay_batch_items where id=(component->>'pay_batch_item_id')::uuid;
+          if component->'frozen_component_snapshot_json' is distinct from item.frozen_component_snapshot_json
+            or component->'frozen_source_basis_json' is distinct from item.frozen_source_basis_json
+            or component->>'component_key_type' is distinct from item.frozen_component_key_type
+            or component->>'component_key_value' is distinct from item.frozen_component_key_value
+            or component->'frozen_target_amount_ex_vat' is distinct from to_jsonb(item.frozen_target_amount_ex_vat) then
+            v_reason:='SIGNED_NATIVE_COMPONENT_CHANGED';exit;end if;
+          -- Native monetary/key semantics are read from the existing kernel.
+          for component_row in select * from public._pay_batch_item_economic_components(null,array[item.id]) loop
+            if component_row.key_resolution_failure_reason is not null then
+              v_reason:='NATIVE_COMPONENT_KEY_UNAVAILABLE';exit;end if;
+            if component_row.key_type='TS_DAY' and component_row.key_value=event.work_date::text then
+              v_members:=component#>'{frozen_component_snapshot_json,segments}';
+              if jsonb_typeof(v_members) is distinct from 'array' or jsonb_array_length(v_members)=0 then
+                v_reason:='NATIVE_DAY_SOURCE_MEMBERSHIP_UNAVAILABLE';exit;end if;
+              -- The actual frozen component's entire Source member set is
+              -- checked, including other Source shifts on this same native day.
+              -- Missing/mixed/duplicate identity never becomes coverage proof.
+              if jsonb_array_length(v_members)>1000 or exists(
+                select 1 from jsonb_array_elements(v_members) s group by s->>'segment_id' having count(*)<>1) then
+                v_reason:='NATIVE_DAY_SOURCE_MEMBER_CENSUS_INVALID';exit;end if;
+              for v_member in select value from jsonb_array_elements(v_members) loop
+                if jsonb_typeof(v_member) is distinct from 'object'
+                  or v_member->>'date' is distinct from component_row.key_value
+                  or coalesce(v_member#>>'{weekly_source,work_event_id}','') !~* '^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$'
+                  or coalesce(v_member#>>'{weekly_source,movement_id}','') !~* '^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$'
+                  or v_member->>'segment_id' is distinct from 'weekly-source-event:'||(v_member#>>'{weekly_source,work_event_id}') then
+                  v_reason:='NATIVE_DAY_SOURCE_MEMBER_CENSUS_UNBOUND';exit;end if;
+                v_member_event:=(v_member#>>'{weekly_source,work_event_id}')::uuid;
+                v_member_movement:=(v_member#>>'{weekly_source,movement_id}')::uuid;
+                if not exists(select 1 from public.weekly_work_events e
+                  join public.weekly_source_billing_movements m on m.work_event_id=e.id and m.id=v_member_movement
+                  join public.weekly_source_row_timesheet_lineages l on l.work_event_id=e.id
+                    and l.row_resolution_id=(m.source_facts_json->>'row_resolution_id')::uuid
+                  where e.id=v_member_event and e.first_source_group_id=event.first_source_group_id
+                    and e.work_date=event.work_date and (e.candidate_id,e.client_id)=(event.candidate_id,event.client_id)
+                    and (m.candidate_id,m.actual_client_id)=(event.candidate_id,event.client_id)
+                    and (l.candidate_id,l.client_id,l.contract_id)=(m.candidate_id,m.actual_client_id,m.contract_id)
+                    and l.timesheet_id=any(roots) and m.pay_effect='NORMAL'
+                    and m.source_profile_kind<>'SELF_BILL_REPORT'
+                    and m.source_line_kind not in ('SELF_BILL_REPORT_LINE','INVOICE_VAT_ROUNDING','SOURCE_REBILL_LINE','SOURCE_INVOICE_CORRECTION')
+                    and m.movement_role in ('POSITIVE','REPLACEMENT')) then
+                  v_reason:='NATIVE_DAY_SOURCE_MEMBER_LINEAGE_UNBOUND';exit;end if;
+              end loop;
+              if v_reason is not null then exit;end if;
+              select count(*) into v_count from jsonb_array_elements(v_members) s
+                where s->>'segment_id'='weekly-source-event:'||event.id::text
+                  and s->>'date'=event.work_date::text
+                  and s#>>'{weekly_source,work_event_id}'=event.id::text;
+              if v_count=1 then
+                select value into strict segment from jsonb_array_elements(v_members) where value->>'segment_id'='weekly-source-event:'||event.id::text;
+                if segment->'exclude_from_pay'='true'::jsonb or segment#>>'{weekly_source,movement_id}' is null
+                  or not exists(select 1 from public.weekly_source_billing_movements m
+                    where m.id=(segment#>>'{weekly_source,movement_id}')::uuid and m.work_event_id=event.id
+                      and (m.candidate_id,m.actual_client_id)=(event.candidate_id,event.client_id)
+                      and m.source_profile_kind<>'SELF_BILL_REPORT'
+                      and m.source_line_kind not in ('SELF_BILL_REPORT_LINE','INVOICE_VAT_ROUNDING','SOURCE_REBILL_LINE','SOURCE_INVOICE_CORRECTION')
+                      and m.pay_effect='NORMAL' and m.movement_role in ('POSITIVE','REPLACEMENT')) then
+                  v_reason:='NATIVE_SOURCE_MEMBER_UNBOUND';exit;end if;
+                select coalesce(jsonb_agg(to_jsonb(c) order by c.timesheet_id,c.key_type,c.key_value),'[]'::jsonb)
+                  into v_current_financial from public._pay_active_settled_components(array[p_root_timesheet_id]) c
+                  where c.timesheet_id=p_root_timesheet_id and c.key_type=component_row.key_type and c.key_value=component_row.key_value;
+                proofs:=proofs||jsonb_build_array(jsonb_build_object('pay_batch_item_id',item.id,
+                  'native_component',to_jsonb(component_row),'signed_component',component,'signed_member',segment,
+                  'complete_signed_source_members',v_members,'native_current_financial_components',v_current_financial));
+              elsif v_count>1 then v_reason:='NATIVE_SOURCE_MEMBER_AMBIGUOUS';exit;end if;
+            end if;
+          end loop;
+          if v_reason is not null then exit;end if;
+        end loop;
+      end if;
+    end if;
+  end if;
+  if v_reason is null and jsonb_array_length(proofs)=0 then v_reason:='NATIVE_SOURCE_MEMBERSHIP_ABSENT';end if;
+  v_result:=jsonb_build_object('schema_version','WEEKLY_SOURCE_LEGACY_SIGNED_SOURCE_MEMBERSHIP_INPUT_V1',
+    'work_event_id',event.id,'source_cycle_id',cycle.id,'source_group_id',cycle.source_group_id,
+    'candidate_id',event.candidate_id,'client_id',event.client_id,'actor_user_id',p_actor_user_id,
+    'root_timesheet_id',p_root_timesheet_id,'member_timesheet_ids',to_jsonb(roots),
+    'state',case when v_reason is null then 'MEMBERSHIP_PRESENT' else 'UNAVAILABLE' end,'reason',v_reason,
+    'native_module',v_module,'native_allocation',native_allocation,'native_terminal_census',native_census-'evaluated_at_utc',
+    'signed_native_memberships',proofs,'paid_writer_permission',null,'paid',null,'paid_quantity_known',false,
+    'withheld_amount_known',false);
+  return v_result||jsonb_build_object('inputs_sha256',encode(private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_SOURCE_LEGACY_SIGNED_SOURCE_MEMBERSHIP_INPUT_V1',v_result),'hex'));
+end;
+$function$;

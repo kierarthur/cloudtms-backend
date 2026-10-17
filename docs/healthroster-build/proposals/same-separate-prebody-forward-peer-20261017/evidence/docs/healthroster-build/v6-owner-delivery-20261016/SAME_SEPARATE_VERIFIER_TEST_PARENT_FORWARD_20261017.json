@@ -1,0 +1,12 @@
+{
+  "file": "tests/healthroster-kept-entry-verifier.test.mjs",
+  "beforeSha256": "cd4673b310232efd457ee771a674b6d28ec33ed268861ed996076001520ffd5a",
+  "afterSha256": "785601b4cb3daa4f962adcdf324a2fa860fefb0bfb3d00993b9380d0b4ba535e",
+  "hunk": {
+    "before": " let value=fs.readFileSync(proof.target,'utf8');assert.equal(hash(value),successor.outputSha256);",
+    "after": " const same=JSON.parse(fs.readFileSync('docs/healthroster-build/v6-owner-delivery-20261016/SAME_SEPARATE_SECURITY_EXPECTED_SET_FORWARD_20261017.json'));\n let value=fs.readFileSync(proof.target,'utf8');assert.equal(hash(value),same.afterSha256);\n assert.equal(value.split(same.hunk.after).length,2);value=value.replace(same.hunk.after,()=>same.hunk.before);\n assert.equal(hash(value),same.beforeSha256);assert.equal(hash(value),successor.outputSha256);"
+  },
+  "allOriginalAssertionsUnchanged": true,
+  "newMandatoryLiteralReversedBeforeOriginalKeptEntryAndLaterKeepReversals": true,
+  "native": "NOT_RUN"
+}

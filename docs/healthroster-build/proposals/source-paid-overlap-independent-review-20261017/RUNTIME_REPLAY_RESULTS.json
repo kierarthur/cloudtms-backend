@@ -1,0 +1,235 @@
+{
+  "functionalCommit": "9c791fa971c97a198c09c4e3579c01b589486c14",
+  "currentParent": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+  "counts": {
+    "tests": 40,
+    "pass": 40,
+    "fail": 0,
+    "skipped": 0
+  },
+  "pins": [
+    {
+      "commit": "9c791fa971c97a198c09c4e3579c01b589486c14",
+      "path": "docs/healthroster-build/proposals/same-separate-health-current-successor-20261017/test-runtime/weekly-source-upload-publication-owner.test.mjs",
+      "gitSha256": "85bd7a0e92fbbd76d3d2f1f3b7e6de2ec90e932a031467731bc0c9a2d9ed79a8",
+      "diskSha256": "85bd7a0e92fbbd76d3d2f1f3b7e6de2ec90e932a031467731bc0c9a2d9ed79a8",
+      "translation": "NONE"
+    },
+    {
+      "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "path": "broker/src/weekly-source/index.js",
+      "gitSha256": "f3eef7ac7d8e7f2acce28ff2d68fa396f976d56d3e12d45d8f50d6c57f81b662",
+      "diskSha256": "f3eef7ac7d8e7f2acce28ff2d68fa396f976d56d3e12d45d8f50d6c57f81b662",
+      "translation": "NONE"
+    },
+    {
+      "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "path": "broker/src/weekly-source/errors.js",
+      "gitSha256": "9f67b8aea3426bbde866aaeaabc41bd7ae6c60e66e17e3b31ff343f45f00525a",
+      "diskSha256": "9f67b8aea3426bbde866aaeaabc41bd7ae6c60e66e17e3b31ff343f45f00525a",
+      "translation": "NONE"
+    },
+    {
+      "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "path": "broker/src/weekly-source/csv-evidence.js",
+      "gitSha256": "d3104069c96fd052e07b4c14cb72795b2933fd516c4968f78a3a574c14629893",
+      "diskSha256": "d3104069c96fd052e07b4c14cb72795b2933fd516c4968f78a3a574c14629893",
+      "translation": "NONE"
+    },
+    {
+      "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "path": "broker/src/weekly-source/shared.js",
+      "gitSha256": "31fb21e13e49ed5cdf1c482ffa55fc64941cb54267982c5f5fbd1ea0c227c204",
+      "diskSha256": "31fb21e13e49ed5cdf1c482ffa55fc64941cb54267982c5f5fbd1ea0c227c204",
+      "translation": "NONE"
+    },
+    {
+      "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "path": "broker/src/weekly-source/html-evidence.js",
+      "gitSha256": "d3f9cd938392c153dd2bb06ac570c587b95d1917b1c2e2e9cc95c05c90374928",
+      "diskSha256": "d3f9cd938392c153dd2bb06ac570c587b95d1917b1c2e2e9cc95c05c90374928",
+      "translation": "NONE"
+    },
+    {
+      "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "path": "broker/src/weekly-source/healthroster-normalise.js",
+      "gitSha256": "25d3cc6022170afd108abf06f863758a24208eee142daee061aff7be5149b698",
+      "diskSha256": "25d3cc6022170afd108abf06f863758a24208eee142daee061aff7be5149b698",
+      "translation": "NONE"
+    },
+    {
+      "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "path": "broker/src/weekly-source/source-invoice-money.js",
+      "gitSha256": "dedc89b76360b5e3d92fe4845050a3e72ef6f73f1fc32435d14e43821693d9f4",
+      "diskSha256": "dedc89b76360b5e3d92fe4845050a3e72ef6f73f1fc32435d14e43821693d9f4",
+      "translation": "NONE"
+    },
+    {
+      "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "path": "broker/src/weekly-source/money.js",
+      "gitSha256": "e2346efbc7008669d4283d5895c647e909935a07ed702d9b282cbd1b3ecef46c",
+      "diskSha256": "e2346efbc7008669d4283d5895c647e909935a07ed702d9b282cbd1b3ecef46c",
+      "translation": "NONE"
+    },
+    {
+      "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "path": "broker/src/weekly-source/source-finalised-time.js",
+      "gitSha256": "3e64e35b23405f97b2d98f0d3ffeb1041f8065a7cc19a6e6d5ecd8cb9e95b8fa",
+      "diskSha256": "3e64e35b23405f97b2d98f0d3ffeb1041f8065a7cc19a6e6d5ecd8cb9e95b8fa",
+      "translation": "NONE"
+    },
+    {
+      "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "path": "broker/src/weekly-source/nhsp-normalise.js",
+      "gitSha256": "a4b9eb8a15c5f3935d5c3bfed5d417a5d3d2f2650f13dc223ac66af14f92aeb2",
+      "diskSha256": "a4b9eb8a15c5f3935d5c3bfed5d417a5d3d2f2650f13dc223ac66af14f92aeb2",
+      "translation": "NONE"
+    },
+    {
+      "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "path": "broker/src/weekly-source/roster-summary-normalise.js",
+      "gitSha256": "d386d29eb2dee6e2771f2ed04aa74b883daaf08e3473e8f800a8390483eb4c69",
+      "diskSha256": "d386d29eb2dee6e2771f2ed04aa74b883daaf08e3473e8f800a8390483eb4c69",
+      "translation": "NONE"
+    },
+    {
+      "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "path": "broker/src/weekly-source/acacium-report-normalise.js",
+      "gitSha256": "e4dbd43e0b1ff0c2d027410bd0e7fbcbce3e03b8a56445afa5733f2a1a173a88",
+      "diskSha256": "e4dbd43e0b1ff0c2d027410bd0e7fbcbce3e03b8a56445afa5733f2a1a173a88",
+      "translation": "NONE"
+    },
+    {
+      "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "path": "broker/src/weekly-source/rule-set-validation.js",
+      "gitSha256": "e2c0a244f00944515a91325448c1371125cff292d8ea81d059279e0f8b4401c6",
+      "diskSha256": "e2c0a244f00944515a91325448c1371125cff292d8ea81d059279e0f8b4401c6",
+      "translation": "NONE"
+    },
+    {
+      "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "path": "broker/src/weekly-source/profiles.js",
+      "gitSha256": "b45db5dfabfc057ea90823d01792d0f879af0ef8f2ef9a1ccc6121f8adffcaeb",
+      "diskSha256": "b45db5dfabfc057ea90823d01792d0f879af0ef8f2ef9a1ccc6121f8adffcaeb",
+      "translation": "NONE"
+    },
+    {
+      "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "path": "broker/src/weekly-source/xlsx-evidence.js",
+      "gitSha256": "ec5da7239cfdcac5395580f45ba00098c2a6c0f14fe758cdb3bda621f423878a",
+      "diskSha256": "ec5da7239cfdcac5395580f45ba00098c2a6c0f14fe758cdb3bda621f423878a",
+      "translation": "NONE"
+    },
+    {
+      "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "path": "broker/src/weekly-source/weekly-rate-owner.js",
+      "gitSha256": "7b95e0ccd22da57cb6588f1195c03302b55ca8b0c670f2ff266a3fcf375d7e87",
+      "diskSha256": "7b95e0ccd22da57cb6588f1195c03302b55ca8b0c670f2ff266a3fcf375d7e87",
+      "translation": "NONE"
+    },
+    {
+      "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "path": "broker/src/weekly-source/source-price-comparator.js",
+      "gitSha256": "e895359897f340db80b5956a3adc92e250531dd51c31def0468b2a7d3773c7a9",
+      "diskSha256": "e895359897f340db80b5956a3adc92e250531dd51c31def0468b2a7d3773c7a9",
+      "translation": "NONE"
+    },
+    {
+      "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "path": "broker/src/weekly-source/economic-snapshot.js",
+      "gitSha256": "a01bc2bdefb3d64bc46b7d8501cd9fb146b581e90e4e560c54b0b892e2991a00",
+      "diskSha256": "a01bc2bdefb3d64bc46b7d8501cd9fb146b581e90e4e560c54b0b892e2991a00",
+      "translation": "NONE"
+    },
+    {
+      "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "path": "broker/src/weekly-source/protected-target-schedule.js",
+      "gitSha256": "6ce531d16890073068ede7188d250f4e8ee04838a1dfa0336131be472319c84a",
+      "diskSha256": "6ce531d16890073068ede7188d250f4e8ee04838a1dfa0336131be472319c84a",
+      "translation": "NONE"
+    },
+    {
+      "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "path": "broker/src/weekly-source/manager-email.js",
+      "gitSha256": "dcbc13e6d415ebfa52ad0d3a3e91797539b05084468779a94d913fafd11c5b03",
+      "diskSha256": "dcbc13e6d415ebfa52ad0d3a3e91797539b05084468779a94d913fafd11c5b03",
+      "translation": "NONE"
+    },
+    {
+      "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "path": "broker/src/weekly-source/contract-qualification.js",
+      "gitSha256": "7c3a5e894091bb0f0593c6c955c5b069afb604344287b6d091cbef60c9efce9d",
+      "diskSha256": "7c3a5e894091bb0f0593c6c955c5b069afb604344287b6d091cbef60c9efce9d",
+      "translation": "NONE"
+    },
+    {
+      "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "path": "broker/src/weekly-source/upload-staging-adapter.mjs",
+      "gitSha256": "16b56f734d7a9b52b6aca6873dab15368b621da29d26fd34cfcfc847d5571af3",
+      "diskSha256": "16b56f734d7a9b52b6aca6873dab15368b621da29d26fd34cfcfc847d5571af3",
+      "translation": "NONE"
+    },
+    {
+      "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "path": "broker/src/weekly-source/report-upload-provenance.mjs",
+      "gitSha256": "3e20d719bef7954e508f1d66354fe4dce5b965604df25a4437671eba5d308816",
+      "diskSha256": "3e20d719bef7954e508f1d66354fe4dce5b965604df25a4437671eba5d308816",
+      "translation": "NONE"
+    },
+    {
+      "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "path": "broker/src/weekly-source/coverage-warnings.mjs",
+      "gitSha256": "d7b705f4126a3c307d89acf8f8e185e610153fbe11ca1f68fcdbf1a8d84ce143",
+      "diskSha256": "d7b705f4126a3c307d89acf8f8e185e610153fbe11ca1f68fcdbf1a8d84ce143",
+      "translation": "NONE"
+    },
+    {
+      "commit": "9c791fa971c97a198c09c4e3579c01b589486c14",
+      "path": "docs/healthroster-build/proposals/same-separate-health-current-successor-20261017/test-runtime/upload-publication-owner.mjs",
+      "gitSha256": "c7a75dd539503234644c3e269316adc24bd53f300ad206ff0c4f0f2feceb1cef",
+      "diskSha256": "c7a75dd539503234644c3e269316adc24bd53f300ad206ff0c4f0f2feceb1cef",
+      "translation": "NONE"
+    },
+    {
+      "commit": "9c791fa971c97a198c09c4e3579c01b589486c14",
+      "path": "docs/healthroster-build/proposals/same-separate-health-current-successor-20261017/test-runtime/correct-final-source-orchestrator.mjs",
+      "gitSha256": "b37f8faaed2a46808a157e21f00203913f86ec1cf17233aff6824618ccfafa9e",
+      "diskSha256": "b37f8faaed2a46808a157e21f00203913f86ec1cf17233aff6824618ccfafa9e",
+      "translation": "NONE"
+    },
+    {
+      "commit": "9c791fa971c97a198c09c4e3579c01b589486c14",
+      "path": "docs/healthroster-build/proposals/same-separate-health-current-successor-20261017/test-runtime/same-separate-command.mjs",
+      "gitSha256": "5d78d6990754fe761d464a93a70d460780bf5c79df82846056b1194770198c68",
+      "diskSha256": "5d78d6990754fe761d464a93a70d460780bf5c79df82846056b1194770198c68",
+      "translation": "NONE"
+    },
+    {
+      "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "path": "broker/src/weekly-source/push-timing-office.mjs",
+      "gitSha256": "afc586c62b4222a01361559b4d7ad2f8532651d8105cd1c3bba5e4bc58bc98aa",
+      "diskSha256": "afc586c62b4222a01361559b4d7ad2f8532651d8105cd1c3bba5e4bc58bc98aa",
+      "translation": "NONE"
+    },
+    {
+      "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "path": "broker/src/weekly-source/magnit-contract-price-admission.js",
+      "gitSha256": "1789247dc14558069018590ade9cc77b8b67ac4608b5d3ed75bd94b33b676b57",
+      "diskSha256": "1789247dc14558069018590ade9cc77b8b67ac4608b5d3ed75bd94b33b676b57",
+      "translation": "NONE"
+    },
+    {
+      "commit": "9c791fa971c97a198c09c4e3579c01b589486c14",
+      "path": "docs/healthroster-build/proposals/same-separate-health-current-successor-20261017/test-runtime/weekly-source-correct-final-source-orchestrator.test.mjs",
+      "gitSha256": "7f1d609761401b7ff8559a2e55956c6bcca2f0badbf2915eaca6c886fd73f49a",
+      "diskSha256": "7f1d609761401b7ff8559a2e55956c6bcca2f0badbf2915eaca6c886fd73f49a",
+      "translation": "NONE"
+    }
+  ],
+  "unitOnly": true,
+  "sourceGuardTarget": "docs/healthroster-build/proposals/same-separate-health-current-successor-20261017/forward/broker/src/weekly-source/correct-final-source-orchestrator.mjs",
+  "authorHarnessWrites": 0,
+  "native": "NOT_RUN",
+  "API": "NOT_RUN",
+  "databaseConnections": 0
+}

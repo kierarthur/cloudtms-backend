@@ -1,0 +1,40 @@
+{
+  "input": {
+    "commit": "9c791fa971c97a198c09c4e3579c01b589486c14",
+    "path": "docs/healthroster-build/proposals/same-separate-health-current-successor-20261017/source-check.mjs",
+    "sha256": "810e767e9fad3dc2801723aff494e287ffb6a161366fa923073968b995b4a090"
+  },
+  "outputSha256": "72c2279b01b585e6ddf5d9b02f64bf1e2011b304036ad366d53222f2c50114f1",
+  "finiteEdits": [
+    {
+      "before": "checkpoint='ef64f43909db9811efaf1021d19f2fddc4bd44e6'",
+      "after": "checkpoint='ef3d20f4513a6f9fd1aa5e4cf6a69d258f6cd87c'"
+    },
+    {
+      "before": "const manifest=JSON.parse(read(here,'PAYLOAD_MANIFEST.json')),overrides=new Map();for(const file of manifest.files){const raw=fs.readFileSync(path.join(here,'payload',file.target));",
+      "after": "const manifest=JSON.parse(read(here,'COMPOSED_SELECTION.json')),overrides=new Map();for(const file of manifest.files){const raw=file.sourceCommit?Buffer.from(blob(file.sourceCommit,file.sourcePath)):fs.readFileSync(path.join(here,file.sourcePath));"
+    },
+    {
+      "before": "// Exact immutable ef64 SQL snapshot in memory.",
+      "after": "// Exact immutable ef3d SQL snapshot in memory."
+    },
+    {
+      "before": "payloadManifestSha256:sha(read(here,'PAYLOAD_MANIFEST.json'))",
+      "after": "composedSelectionSha256:sha(read(here,'COMPOSED_SELECTION.json'))"
+    },
+    {
+      "before": "This successor checks the complete ef64 committed423/1090 parent",
+      "after": "This successor checks the complete ef3d committed424/1091 parent"
+    },
+    {
+      "before": "rootWrites:0,dbConnections:0,native:'NOT_RUN'",
+      "after": "metadataForwardOnly:true,preservedDailyChains:6,rootWrites:0,dbConnections:0,native:'NOT_RUN'"
+    }
+  ],
+  "additionalTests": [
+    "PHANTOM_0126_CLOSURE",
+    "MISSING_SAME_NATIVE_OWNER",
+    "OLD_EF64_METADATA_PRESERVATION"
+  ],
+  "rootWrites": 0
+}

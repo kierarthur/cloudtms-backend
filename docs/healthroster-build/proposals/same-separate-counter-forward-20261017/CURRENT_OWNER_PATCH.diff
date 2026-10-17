@@ -1,0 +1,556 @@
+--- a/broker/src/weekly-source/correct-final-source-orchestrator.mjs
++++ b/broker/src/weekly-source/correct-final-source-orchestrator.mjs
+@@ -1,4 +1,4 @@
+-import{decodePaidMatchQuestion}from'./same-separate-command.mjs';
++import{decodePaidMatchQuestion,positivePaidCounter}from'./same-separate-command.mjs';
+ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+ const SHA256_PATTERN = /^[0-9a-f]{64}$/i;
+ 
+@@ -102,6 +102,17 @@
+   return result;
+ }
+ 
++// The new paid context uses canonical decimal strings. Legacy native numeric
++// receipts are accepted only while exactly representable; no unsafe Number is
++// converted into an apparently exact bigint token.
++function counterToken(value,code,label,status=409){
++  if(typeof value==='number'){if(!Number.isSafeInteger(value)||value<1)fail(code,`${label} is invalid.`,status);return String(value);}
++  if(!positivePaidCounter(value))fail(code,`${label} is invalid.`,status);return value;
++}
++function counterValue(value,code,label,status=409){const token=counterToken(value,code,label,status);return typeof value==='number'?value:token;}
++function counterEqual(a,b){return counterToken(a,'WEEKLY_SOURCE_CORRECTION_VERSION_INVALID','Correction version',502)===counterToken(b,'WEEKLY_SOURCE_CORRECTION_VERSION_INVALID','Correction version',502);}
++function counterOffsetEqual(actual,expected,offset){const a=counterToken(actual,'WEEKLY_SOURCE_CORRECTION_VERSION_INVALID','Correction version',502),e=counterToken(expected,'WEEKLY_SOURCE_CORRECTION_VERSION_INVALID','Correction version',502),next=BigInt(e)+BigInt(offset);return next<=9223372036854775807n&&BigInt(a)===next;}
++
+ function jsonClone(value, code, label) {
+   try {
+     const encoded = JSON.stringify(value);
+@@ -238,7 +249,7 @@
+       'WEEKLY_SOURCE_CORRECTION_REQUEST_INVALID',
+       'Replacement comparison',
+     ),
+-    expectedAuthorityScopeVersion: integer(
++    expectedAuthorityScopeVersion: counterValue(
+       context.expected_authority_scope_version,
+       'WEEKLY_SOURCE_CORRECTION_REQUEST_INVALID',
+       'Authority version',
+@@ -265,14 +276,14 @@
+       'WEEKLY_SOURCE_CORRECTION_REQUEST_INVALID',
+       'Correction review proof',
+     ),
+-    expectedSessionVersion: integer(
++    expectedSessionVersion: counterValue(
+       context.expected_session_version,
+       'WEEKLY_SOURCE_CORRECTION_REQUEST_INVALID',
+       'Correction version',
+       400,
+       1,
+     ),
+-    reviewExpectedSessionVersion: integer(
++    reviewExpectedSessionVersion: counterValue(
+       context.review_expected_session_version,
+       'WEEKLY_SOURCE_CORRECTION_REQUEST_INVALID',
+       'Correction review version',
+@@ -411,7 +422,7 @@
+       'Correction session',
+       502,
+     ),
+-    version: integer(
++    version: counterValue(
+       opened.version,
+       'WEEKLY_SOURCE_CORRECTION_OPEN_RESULT_INVALID',
+       'Correction session version',
+@@ -455,7 +466,7 @@
+       'Replacement comparison',
+       502,
+     ),
+-    expected_authority_scope_version: integer(
++    expected_authority_scope_version: counterValue(
+       staged.expected_authority_scope_version,
+       'WEEKLY_SOURCE_CORRECTION_STAGE_RESULT_INVALID',
+       'Authority scope version',
+@@ -480,7 +491,7 @@
+       'Replacement issue proof',
+       502,
+     ),
+-    version: integer(
++    version: counterValue(
+       staged.version,
+       'WEEKLY_SOURCE_CORRECTION_STAGE_RESULT_INVALID',
+       'Staged correction version',
+@@ -573,7 +584,7 @@
+       'Prepared final source',
+       502,
+     ),
+-    version: integer(
++    version: counterValue(
+       prepared.version,
+       'WEEKLY_SOURCE_CORRECTION_PREPARE_RESULT_INVALID',
+       'Prepared correction version',
+@@ -621,22 +632,25 @@
+   const frame = plainObject(begun?.correction_review_identity,
+     'WEEKLY_SOURCE_CORRECTION_REBUILD_IDENTITY_MISMATCH', 'Saved correction scope', 502);
+   const fields = ['schema_version','correction_session_id','source_cycle_id',
+-    'expected_current_final_revision_id','expected_final_manifest_hash'];
++    'expected_current_final_revision_id','expected_final_manifest_hash','authority_scope_kind','report_scope_id'];
+   if (!sameJson(Object.keys(frame).sort(), fields.sort())
+     || frame.schema_version !== 'WEEKLY_SOURCE_PAID_MATCH_CORRECTION_RECHECK_CONTEXT_V1'
++    || !['CYCLE','NHSP_REPORT_SCOPE'].includes(frame.authority_scope_kind)
++    || (frame.authority_scope_kind==='CYCLE'?frame.report_scope_id!==null:typeof frame.report_scope_id!=='string'||!UUID_PATTERN.test(frame.report_scope_id))
++    || !sameJson(published.correction_review_identity,frame)
+     || begun.purpose !== 'FINAL_SOURCE_CORRECTION'
+     || frame.correction_session_id !== request.correction_session_id
+     || begun.correction_session_id !== frame.correction_session_id
+     || begun.upload_id !== request.upload_id || published.upload_id !== request.upload_id
+     || published.status !== 'CORRECTION_READY' || published.ok !== true
+     || published.publication_id !== begun.publication_id
+-    || published.authority_scope_version !== request.expected_authority_scope_version) {
++    || !counterEqual(published.authority_scope_version,request.expected_authority_scope_version)) {
+     fail('WEEKLY_SOURCE_CORRECTION_REBUILD_IDENTITY_MISMATCH', 'The saved correction scope changed.', 409);
+   }
+   const actorUserId = uuid(request.actor_user_id,'WEEKLY_SOURCE_ACTOR_REQUIRED','Office user');
+   const identity = Object.freeze({
+     sourceCycleId: uuid(frame.source_cycle_id,'WEEKLY_SOURCE_CORRECTION_REQUEST_INVALID','Source cycle'),
+-    scopeKind: 'CYCLE', reportScopeId: null,
++    scopeKind: frame.authority_scope_kind, reportScopeId: frame.report_scope_id,
+     correctionSessionId: uuid(frame.correction_session_id,'WEEKLY_SOURCE_CORRECTION_REQUEST_INVALID','Correction session'),
+     expectedCurrentFinalRevisionId: uuid(frame.expected_current_final_revision_id,
+       'WEEKLY_SOURCE_CORRECTION_REQUEST_INVALID','Current final source'),
+@@ -645,7 +659,7 @@
+     replacementUploadId: uuid(published.upload_id,'WEEKLY_SOURCE_CORRECTION_REQUEST_INVALID','Replacement upload'),
+     replacementProjectionPublicationId: uuid(published.publication_id,
+       'WEEKLY_SOURCE_CORRECTION_REQUEST_INVALID','Replacement comparison'),
+-    expectedAuthorityScopeVersion: integer(published.authority_scope_version,
++    expectedAuthorityScopeVersion: counterToken(published.authority_scope_version,
+       'WEEKLY_SOURCE_CORRECTION_REQUEST_INVALID','Authority version',502,1),
+     expectedRowManifestHash: sha256(request.expected_row_manifest_hash,
+       'WEEKLY_SOURCE_CORRECTION_REQUEST_INVALID','Replacement row proof'),
+@@ -654,10 +668,10 @@
+     expectedIssueSetHash: sha256(published.issue_set_hash,
+       'WEEKLY_SOURCE_CORRECTION_REQUEST_INVALID','Replacement issue proof'),
+   });
+-  const version=integer(published.ready_session_version,
++  const version=counterToken(published.ready_session_version,
+     'WEEKLY_SOURCE_CORRECTION_VERSION_INVALID','Saved correction version',502,1);
+   const reviewKey=uuid(request.request_id,'WEEKLY_SOURCE_CORRECTION_REQUEST_INVALID','Saved recheck reference')+':review';
+-  const reviewed=validateReviewed(await rpc(dependencies,'weekly_source_correct_final_review_atomic_v1',
++  const reviewed=validateReviewed(await rpc({...dependencies,dataRpc:dependencies.dataRpc??dependencies.rpc},'weekly_source_correct_final_review_atomic_v1',
+     reviewRequest(actorUserId,identity,version,reviewKey)),identity,version);
+   const context=correctionContext(identity,version,reviewKey,reviewed);
+   return Object.freeze({ok:true,status:reviewed.status,correction_session_id:identity.correctionSessionId,
+@@ -740,14 +754,14 @@
+       ) !== identity.replacementUploadId) {
+     fail('WEEKLY_SOURCE_CORRECTION_PREVIEW_RESULT_INVALID', 'The correction review changed.', 409);
+   }
+-  const version = integer(
++  const version = (typeof expectedRequestVersion==='string'?counterToken:counterValue)(
+     reviewed.version,
+     'WEEKLY_SOURCE_CORRECTION_PREVIEW_RESULT_INVALID',
+     'Correction version',
+     502,
+     1,
+   );
+-  if (version !== expectedRequestVersion + 1) {
++  if (!counterOffsetEqual(version,expectedRequestVersion,1)) {
+     fail('WEEKLY_SOURCE_CORRECTION_PREVIEW_RESULT_INVALID', 'The correction review version changed.', 409);
+   }
+   const officePreview = normaliseOfficePreview(reviewed.office_preview);
+@@ -962,7 +976,7 @@
+       ctx: input.ctx,
+     }), priorIdentity.correctionSessionId);
+     if (rebuilt.replacement_upload_id !== priorIdentity.replacementUploadId
+-        || rebuilt.expected_authority_scope_version !== priorIdentity.expectedAuthorityScopeVersion
++        || !counterEqual(rebuilt.expected_authority_scope_version,priorIdentity.expectedAuthorityScopeVersion)
+         || rebuilt.expected_row_manifest_hash !== priorIdentity.expectedRowManifestHash
+         || rebuilt.replacement_projection_publication_id
+           === priorIdentity.replacementProjectionPublicationId) {
+@@ -1101,7 +1115,7 @@
+       context.reviewIdempotencyKey,
+     ),
+   ), context, context.reviewExpectedSessionVersion);
+-  if (reviewed.version !== context.expectedSessionVersion
++  if (!counterEqual(reviewed.version,context.expectedSessionVersion)
+       || reviewed.office_preview.preview_hash !== context.expectedPreviewHash
+       || reviewed.office_preview.confirmation_text !== normalized.confirmationText
+       || reviewed.office_preview.blockers.length
+@@ -1134,7 +1148,7 @@
+     'weekly_source_correct_final_prepare_atomic_v1',
+     prepareRequest(normalized, context),
+   ), replayNormalized, opened, staged);
+-  if (prepared.version !== context.expectedSessionVersion + 2
++  if (!counterOffsetEqual(prepared.version,context.expectedSessionVersion,2)
+       || prepared.office_preview.preview_hash !== context.expectedPreviewHash
+       || prepared.office_preview.confirmation_text !== normalized.confirmationText
+       || prepared.office_preview.blockers.length) {
+--- a/broker/src/weekly-source/upload-publication-owner.mjs
++++ b/broker/src/weekly-source/upload-publication-owner.mjs
+@@ -72,6 +72,11 @@
+ 
+ function optionalUuid(value, label) {
+   return value == null || value === '' ? null : requiredUuid(value, label);
++}
++
++function requiredCorrectionCounter(value,label){
++  if(typeof value==='number'){if(!Number.isSafeInteger(value)||value<1)fail('WEEKLY_SOURCE_CORRECTION_VERSION_INVALID',`${label} is invalid.`,502);return value;}
++  if(typeof value!=='string'||!/^([1-9][0-9]*)$/.test(value)||value.length>19||(value.length===19&&value>'9223372036854775807'))fail('WEEKLY_SOURCE_CORRECTION_VERSION_INVALID',`${label} is invalid.`,502);return value;
+ }
+ 
+ function requiredPositiveInteger(value, label) {
+@@ -931,7 +936,7 @@
+ 
+     async stageReplacementSource(input = {}) {
+       const actorUserId = requiredUuid(input.actor_user_id, 'Office user');
+-      const expectedSessionVersion = requiredPositiveInteger(
++      const expectedSessionVersion = requiredCorrectionCounter(
+         input.expected_session_version,
+         'Correction version',
+       );
+@@ -970,10 +975,7 @@
+           || publishedContext.projection_state !== 'CORRECTION_READY') {
+         fail('WEEKLY_SOURCE_CORRECTION_PUBLICATION_STALE', 'The replacement source changed before it was prepared.');
+       }
+-      const correctionVersion = Number(publishedContext.correction_session_version);
+-      if (!Number.isSafeInteger(correctionVersion) || correctionVersion < 1) {
+-        fail('WEEKLY_SOURCE_CORRECTION_VERSION_INVALID', 'The replacement source version is invalid.', 502);
+-      }
++      const correctionVersion = requiredCorrectionCounter(publishedContext.correction_session_version,'Replacement source version');
+       return {
+         ok: true,
+         status: 'CORRECTION_READY',
+@@ -1023,7 +1025,9 @@
+         }));
+         if (correction && (context.upload_id !== begun.upload_id
+           || context.correction_session_id !== begun.correction_session_id
+-          || context.source_cycle_id !== begun.correction_review_identity?.source_cycle_id)) {
++          || context.source_cycle_id !== begun.correction_review_identity?.source_cycle_id
++          || context.authority_scope_kind !== begun.correction_review_identity?.authority_scope_kind
++          || context.report_scope_id !== begun.correction_review_identity?.report_scope_id)) {
+           fail('WEEKLY_SOURCE_CORRECTION_REBUILD_IDENTITY_MISMATCH','The saved correction context changed.',409);
+         }
+         const reportRecheckRowsReceipt = await rpc(dependencies, 'weekly_source_projection_rows_apply_atomic_v1', {
+@@ -1038,9 +1042,11 @@
+         if (!result?.ok || result.status !== (correction ? 'CORRECTION_READY' : 'CURRENT')) {
+           fail(result?.reason_code ?? 'WEEKLY_SOURCE_RECHECK_FAILED', 'The saved source comparison is still incomplete. Retry this recheck.', 409);
+         }
+-        return correction ? { ...result,
+-          correction_review: await reviewWeeklyCorrectFinalPaidMatchRecheck(dependencies,request,begun,result),
+-        } : result;
++        if(!correction)return result;
++        // The same immutable native request re-reads its genuine typed ready
++        // receipt. Ordinary publish receipts retain their existing numeric ABI.
++        const ready=await rpc(dependencies,'weekly_source_office_recheck_begin_v1',request);
++        return{...result,correction_review:await reviewWeeklyCorrectFinalPaidMatchRecheck(dependencies,request,begun,ready)};
+       } catch {
+         // Begin is a separate committed transaction. A later failure must not
+         // tell Office that its saved choice was rejected or invite a new key.
+@@ -1060,11 +1066,11 @@
+         input.replacement_projection_publication_id,
+         'Replacement comparison',
+       );
+-      const expectedSessionVersion = requiredPositiveInteger(
++      const expectedSessionVersion = requiredCorrectionCounter(
+         input.expected_session_version,
+         'Correction version',
+       );
+-      const expectedAuthorityScopeVersion = requiredPositiveInteger(
++      const expectedAuthorityScopeVersion = requiredCorrectionCounter(
+         input.expected_authority_scope_version,
+         'Authority scope version',
+       );
+@@ -1116,8 +1122,8 @@
+           'The rebuilt replacement comparison changed before review.',
+         );
+       }
+-      const readySessionVersion = requiredPositiveInteger(
+-        published.ready_session_version,
++      const readySessionVersion = requiredCorrectionCounter(
++        publishedContext.correction_session_version,
+         'Rebuilt correction version',
+       );
+       return {
+--- a/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/006_public_weekly_source_office_recheck_begin_v1.sqlinc
++++ b/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/006_public_weekly_source_office_recheck_begin_v1.sqlinc
+@@ -108,6 +108,9 @@
+       raise exception 'WEEKLY_SOURCE_RECHECK_REPLAY_CONFLICT' using errcode='23505';
+     end if;
+     select * into strict v_publication from public.weekly_source_projection_publications where id=v_prior.publication_id;
++    if v_correct and (v_publication.authority_scope_kind is distinct from v_correction.authority_scope_kind
++      or v_publication.report_scope_id is distinct from v_correction.report_scope_id) then
++      raise exception 'WEEKLY_SOURCE_PAID_MATCH_CORRECTION_SCOPE_STALE' using errcode='40001';end if;
+     if v_publication.authority_scope_version<>v_version
+       or (not v_correct and v_publication.state not in ('BUILDING','CURRENT'))
+       or (v_correct and (v_publication.state not in ('BUILDING','CORRECTION_READY')
+@@ -116,13 +119,14 @@
+       raise exception 'WEEKLY_SOURCE_RECHECK_NOT_CURRENT' using errcode='55000';
+     end if;
+     return pg_catalog.jsonb_build_object('ok',true,'status',v_publication.state,
+-      'publication_id',v_publication.id,'upload_id',v_upload.id,'authority_scope_version',v_version,'idempotent',true)
++      'publication_id',v_publication.id,'upload_id',v_upload.id,'authority_scope_version',case when p_request ? 'pay_effect' then to_jsonb(v_version::text) else to_jsonb(v_version) end,'idempotent',true)
+       ||case when not v_correct then '{}'::jsonb else jsonb_build_object('purpose','FINAL_SOURCE_CORRECTION',
+-        'correction_session_id',v_correction.id,'ready_session_version',v_publication.ready_session_version,
++        'correction_session_id',v_correction.id,'ready_session_version',case when p_request ? 'pay_effect' then to_jsonb(v_publication.ready_session_version::text) else to_jsonb(v_publication.ready_session_version) end,
+         'comparison_manifest_hash',encode(v_publication.comparison_manifest_hash,'hex'),
+         'issue_set_hash',encode(v_publication.issue_set_hash,'hex'),
+         'correction_review_identity',jsonb_build_object('schema_version','WEEKLY_SOURCE_PAID_MATCH_CORRECTION_RECHECK_CONTEXT_V1',
+           'correction_session_id',v_correction.id,'source_cycle_id',v_cycle.id,
++          'authority_scope_kind',v_correction.authority_scope_kind,'report_scope_id',v_correction.report_scope_id,
+           'expected_current_final_revision_id',v_correction.expected_current_final_revision_id,
+           'expected_final_manifest_hash',encode(v_correction.expected_final_manifest_hash,'hex'))) end;
+   end if;
+@@ -266,6 +270,7 @@
+     return v_begin||jsonb_build_object('purpose','FINAL_SOURCE_CORRECTION','correction_session_id',v_correction.id,
+       'correction_review_identity',jsonb_build_object('schema_version','WEEKLY_SOURCE_PAID_MATCH_CORRECTION_RECHECK_CONTEXT_V1',
+           'correction_session_id',v_correction.id,'source_cycle_id',v_cycle.id,
++          'authority_scope_kind',v_correction.authority_scope_kind,'report_scope_id',v_correction.report_scope_id,
+           'expected_current_final_revision_id',v_correction.expected_current_final_revision_id,
+           'expected_final_manifest_hash',encode(v_correction.expected_final_manifest_hash,'hex')));
+   end if;
+--- a/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/009_public_weekly_source_upload_context_v1.sqlinc
++++ b/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/009_public_weekly_source_upload_context_v1.sqlinc
+@@ -579,7 +579,7 @@
+       else pg_catalog.encode(v_publication.issue_set_hash,'hex') end,
+     'correction_session_id',v_upload.correction_session_id,
+     'correction_session_version',case when v_upload.correction_session_id is null then null else (
+-      select correction.version
++      select correction.version::text
+       from public.weekly_final_source_correction_sessions correction
+       where correction.id=v_upload.correction_session_id
+     ) end,
+--- a/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/011_private_weekly_source_finalise_engine_v1.sqlinc
++++ b/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/011_private_weekly_source_finalise_engine_v1.sqlinc
+@@ -406,8 +406,23 @@
+        from public.weekly_source_row_resolutions resolution
+        join public.weekly_source_upload_rows source_row on source_row.id=resolution.upload_row_id
+        where source_row.upload_id=v_upload.id and resolution.generation=v_generation
++         and resolution.pay_effect='NORMAL'
+        group by resolution.work_event_id having pg_catalog.count(*)<>1
+-     )) then
++     ))
++     or exists(
++       select 1 from public.weekly_source_row_resolutions companion
++       join public.weekly_source_upload_rows source_row on source_row.id=companion.upload_row_id
++       where source_row.upload_id=v_upload.id and companion.generation=v_generation
++         and companion.pay_effect='NONE' and not exists(
++           select 1 from private.weekly_source_office_row_choices choice
++           where choice.id=companion.paid_overlap_choice_id and choice.upload_row_id=source_row.id
++             and choice.pay_effect='NONE' and not choice.separate_shift
++             and choice.work_event_id=companion.work_event_id
++             and choice.paid_overlap_target_work_event_id=companion.work_event_id
++             and choice.candidate_id=companion.candidate_id and choice.client_id=companion.client_id
++             and choice.contract_id=companion.contract_id
++         )
++     ) then
+     raise exception 'WEEKLY_SOURCE_RESOLUTION_CENSUS_NOT_FINALISABLE' using errcode='55000';
+   end if;
+   if v_scope_kind='CYCLE' then
+--- a/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/018_public_weekly_source_invoice_admit_atomic_v1.sqlinc
++++ b/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/018_public_weekly_source_invoice_admit_atomic_v1.sqlinc
+@@ -173,7 +173,14 @@
+            or movement.finalisation_cycle_id is distinct from v_cycle.id
+            or movement.actual_client_id is distinct from v_manifest.client_id
+            or private.weekly_source_invoice_movement_window_id_v1(movement.id)<>v_invoice_window.id
+-           or (v_invoice_window.id<>v_cycle.id and (movement.source_line_kind not in ('SOURCE_INVOICE_CORRECTION','INVOICE_VAT_ROUNDING')
++           or (v_invoice_window.id<>v_cycle.id and (not (movement.source_line_kind in ('SOURCE_INVOICE_CORRECTION','INVOICE_VAT_ROUNDING')
++             or case when movement.pay_effect='NONE' and movement.invoice_only_snapshot_line_id is not null
++                 and movement.source_line_kind='SOURCE_REBILL_LINE' then
++               private.weekly_source_paid_match_invoice_origin_assert_v1(movement.id)->>'schema_version'='WEEKLY_SOURCE_PAID_MATCH_INVOICE_ORIGIN_V1'
++               when movement.pay_effect='NONE' and movement.invoice_only_snapshot_line_id is not null
++                 and movement.source_line_kind='SOURCE_FIXED_EXPENSE' then
++               private.weekly_source_paid_match_expense_invoice_origin_assert_v1(movement.id)->>'schema_version'='WEEKLY_SOURCE_PAID_MATCH_FIXED_EXPENSE_ORIGIN_V1'
++               else false end)
+              or movement.total_pay_ex_vat<>0 or exists(select 1 from jsonb_each_text(movement.canonical_pay_vector_json->'minutes') v where v.value::numeric<>0)
+              or exists(select 1 from jsonb_each_text(movement.canonical_pay_vector_json->'hours') v where v.value::numeric<>0))))
+      ) then
+@@ -461,13 +468,7 @@
+         where snapshot.id=v_movement.invoice_only_snapshot_line_id and snapshot.final_revision_id=v_revision.id;
+       v_work_date:=v_snapshot.work_date;v_start:=v_snapshot.start_at_local;v_end:=v_snapshot.end_at_local;
+       v_break:=v_snapshot.break_minutes;v_reference:=v_snapshot.external_event_identity;
+-      -- Genuine Source hours are presentation evidence. Native pay rates and
+-      -- total remain zero; no payable position is minted from these hours.
+-      v_hours_day:=(v_snapshot.pay_vector_json#>>'{hours,day}')::numeric;
+-      v_hours_night:=(v_snapshot.pay_vector_json#>>'{hours,night}')::numeric;
+-      v_hours_sat:=(v_snapshot.pay_vector_json#>>'{hours,sat}')::numeric;
+-      v_hours_sun:=(v_snapshot.pay_vector_json#>>'{hours,sun}')::numeric;
+-      v_hours_bh:=(v_snapshot.pay_vector_json#>>'{hours,bh}')::numeric;
++      -- NONE hours are projected after the native aggregate below.
+     elsif v_is_expense then
+       select source_row.* into strict v_source_row
+       from public.weekly_expense_authority_generations expense_authority
+@@ -498,12 +499,7 @@
+       v_end:=v_source_row.end_at_local;
+       v_break:=v_source_row.break_minutes;
+       v_reference:=v_source_row.external_source_key;
+-      if v_movement.pay_effect='NONE' then
+-        select e.hours_day,e.hours_night,e.hours_sat,e.hours_sun,e.hours_bh
+-          into strict v_hours_day,v_hours_night,v_hours_sat,v_hours_sun,v_hours_bh
+-          from public.weekly_source_row_economic_snapshots e
+-          where e.row_resolution_id=(v_movement.source_facts_json->>'bound_row_resolution_id')::uuid;
+-      end if;
++      -- NHSP NONE hours are projected after the native aggregate below.
+     else
+       select snapshot.* into strict v_snapshot
+       from public.weekly_source_state_transitions transition_row
+@@ -545,6 +541,23 @@
+          v_total_pay,v_total_charge,v_calc_pence,v_source_pence,v_vat,v_total,
+          v_vat_rate,v_price_result,v_source_hash
+     from public.weekly_source_billing_movements movement where movement.id=any(v_ids);
++    -- The aggregate above deliberately retains the native zero pay vector.
++    -- Only the already validated exact NONE hours origin supplies presentation
++    -- hours afterwards; fixed expenses continue through the zero-hours arm.
++    if v_movement.pay_effect='NONE' and not v_is_expense then
++      if v_movement.invoice_only_snapshot_line_id is not null then
++        v_hours_day:=(v_snapshot.pay_vector_json#>>'{hours,day}')::numeric;
++        v_hours_night:=(v_snapshot.pay_vector_json#>>'{hours,night}')::numeric;
++        v_hours_sat:=(v_snapshot.pay_vector_json#>>'{hours,sat}')::numeric;
++        v_hours_sun:=(v_snapshot.pay_vector_json#>>'{hours,sun}')::numeric;
++        v_hours_bh:=(v_snapshot.pay_vector_json#>>'{hours,bh}')::numeric;
++      elsif v_movement.source_profile_kind='NHSP_TRUST_BACKING_REPORT' then
++        select e.hours_day,e.hours_night,e.hours_sat,e.hours_sun,e.hours_bh
++          into strict v_hours_day,v_hours_night,v_hours_sat,v_hours_sun,v_hours_bh
++          from public.weekly_source_row_economic_snapshots e
++          where e.row_resolution_id=(v_movement.source_facts_json->>'bound_row_resolution_id')::uuid;
++      else raise exception 'WEEKLY_SOURCE_PAID_MATCH_INVOICE_PRESENTATION_UNBOUND' using errcode='55000';end if;
++    end if;
+     select receipt.id,m.id into v_release_id,v_release_member from public.weekly_source_billing_movements m
+       join public.weekly_source_invoice_hold_releases receipt on receipt.upload_row_id::text=m.source_facts_json->>'upload_row_id' and receipt.hold_kind='VAT_FIT'
+       where m.id=any(v_ids) and m.movement_role in ('POSITIVE','REPLACEMENT')
+--- a/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/019_private_weekly_source_shift_on_self_bill_v1.sqlinc
++++ b/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/019_private_weekly_source_shift_on_self_bill_v1.sqlinc
+@@ -101,7 +101,7 @@
+       and companion.contract_id=choice.contract_id and item->>'work_event_id'=event_fact.id::text
+       and current_row.row_finalisation_state='SOURCE_WORKED' and current_row.work_date=event_fact.work_date
+       and item#>'{native_payment_facts,paid}'='true'::jsonb
+-      and item#>>'{native_payment_facts,paid_evidence_state}'='SETTLED_ORIGINAL'
++      and item#>>'{native_payment_facts,paid_evidence_state}' in ('SETTLED_ORIGINAL','SETTLED_LEGACY_SOURCE_COMPONENT')
+       and item->>'snapshot_line_hash'=encode(prior_snapshot.snapshot_line_hash,'hex')
+       and item->>'movement_economic_hash'=encode(prior_movement.movement_economic_hash,'hex')
+       and exists(select 1 from public.audit_events a where a.object_type='weekly_source_office_row_choices'
+--- a/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/026_private_weekly_source_paid_match_question_v1.sqlinc
++++ b/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/026_private_weekly_source_paid_match_question_v1.sqlinc
+@@ -42,7 +42,19 @@
+           join public.weekly_source_format_profiles profile on profile.id=v_upload.source_format_profile_id
+           where scope.id=v_upload.report_scope_id and scope.source_cycle_id=v_cycle.id
+             and scope.client_id=v_resolution.client_id and scope.self_bill_report_id is null
+-            and scope.current_projection_publication_id=v_publication.id and profile.profile_code='NHSP_FINAL_BACKING_V1')))
++            and profile.profile_code='NHSP_FINAL_BACKING_V1'
++            and ((v_upload.purpose='ORDINARY' and scope.current_projection_publication_id=v_publication.id)
++              or (v_upload.purpose='FINAL_SOURCE_CORRECTION' and exists(
++                select 1 from public.weekly_final_source_correction_sessions correction
++                where correction.id=v_upload.correction_session_id and correction.actor_user_id=p_actor_user_id
++                  and correction.state in ('READY','REVIEWED')
++                  and correction.authority_scope_kind='NHSP_REPORT_SCOPE' and correction.report_scope_id=scope.id
++                  and correction.source_cycle_id=v_cycle.id
++                  and correction.replacement_correction_upload_id=v_upload.id
++                  and correction.replacement_projection_publication_id=v_publication.id
++                  and scope.current_final_revision_id=correction.expected_current_final_revision_id
++                  and scope.current_projection_publication_id is not null
++                  and scope.current_projection_publication_id<>v_publication.id))))))
+     or v_upload.purpose not in ('ORDINARY','FINAL_SOURCE_CORRECTION')
+     or (v_upload.purpose='ORDINARY' and v_cycle.state<>'OPEN')
+     or (v_upload.purpose='FINAL_SOURCE_CORRECTION' and not exists(select 1
+--- a/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/034_public_weekly_source_correct_final_prepare_atomic_v1.sqlinc
++++ b/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/034_public_weekly_source_correct_final_prepare_atomic_v1.sqlinc
+@@ -71,6 +71,10 @@
+      or p_request->>'schema_version'<>'WEEKLY_SOURCE_CORRECT_FINAL_PREPARE_V1' then
+     raise exception 'WEEKLY_SOURCE_CORRECTION_PREPARE_REQUEST_INVALID' using errcode='22023';
+   end if;
++  if exists(select 1 from unnest(array['expected_session_version','expected_authority_scope_version']) field
++    where jsonb_typeof(p_request->field)='string' and (p_request->>field !~ '^[1-9][0-9]*$'
++      or length(p_request->>field)>19 or (length(p_request->>field)=19 and p_request->>field>'9223372036854775807'))) then
++    raise exception 'WEEKLY_SOURCE_CORRECTION_COUNTER_INVALID' using errcode='22023';end if;
+   begin
+     v_actor:=(p_request->>'actor_user_id')::uuid;
+     v_session_id:=(p_request->>'correction_session_id')::uuid;
+@@ -256,7 +260,7 @@
+     'prior_final_revision_id',v_prior_revision.id,
+     'root_contexts',v_context->'root_contexts',
+     'office_preview',v_office_preview,
+-    'version',v_prepared_session_version,
++    'version',case when jsonb_typeof(p_request->'expected_session_version')='string' then to_jsonb(v_prepared_session_version::text) else to_jsonb(v_prepared_session_version) end,
+     'idempotent_replay',false
+   )||case when v_context ? 'missing_cancel_basis_census' then jsonb_build_object(
+     'missing_cancel_basis_census',v_context->'missing_cancel_basis_census') else '{}'::jsonb end
+--- a/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/035_public_weekly_source_correct_final_apply_atomic_v1.sqlinc
++++ b/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/035_public_weekly_source_correct_final_apply_atomic_v1.sqlinc
+@@ -87,6 +87,10 @@
+      or pg_catalog.jsonb_typeof(p_request->'root_service_snapshots')<>'array' then
+     raise exception 'WEEKLY_SOURCE_CORRECTION_APPLY_REQUEST_INVALID' using errcode='22023';
+   end if;
++  if exists(select 1 from unnest(array['expected_session_version','expected_authority_scope_version']) field
++    where jsonb_typeof(p_request->field)='string' and (p_request->>field !~ '^[1-9][0-9]*$'
++      or length(p_request->>field)>19 or (length(p_request->>field)=19 and p_request->>field>'9223372036854775807'))) then
++    raise exception 'WEEKLY_SOURCE_CORRECTION_COUNTER_INVALID' using errcode='22023';end if;
+   begin
+     v_actor:=(p_request->>'actor_user_id')::uuid;
+     v_session_id:=(p_request->>'correction_session_id')::uuid;
+@@ -671,7 +675,7 @@
+     'status','CORRECTED','correction_session_id',v_session.id,
+     'prior_final_revision_id',v_prior_revision.id,
+     'affected_root_count',pg_catalog.jsonb_array_length(v_server_roots),
+-    'version',v_expected_session_version+2,
++    'version',case when jsonb_typeof(p_request->'expected_session_version')='string' then to_jsonb((v_expected_session_version+2)::text) else to_jsonb(v_expected_session_version+2) end,
+     'idempotent_replay',false
+   );
+   v_result_hash:=private.weekly_source_sha256_jsonb_v1(
+--- a/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/039_private_weekly_source_correct_final_office_preview_v1.sqlinc
++++ b/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/039_private_weekly_source_correct_final_office_preview_v1.sqlinc
+@@ -84,10 +84,22 @@
+       or charge.phase_severity='FINALISATION_BLOCKER'
+     );
+ 
+-  if v_session.authority_scope_kind='CYCLE' and v_session.state in ('READY','REVIEWED')
+-    and exists(select 1 from public.weekly_source_cycles cycle join public.weekly_source_groups source_group
+-      on source_group.id=cycle.source_group_id and source_group.source_family='ROSTER'
+-      where cycle.id=v_session.source_cycle_id) then
++  if v_session.state in ('READY','REVIEWED') and (
++    (v_session.authority_scope_kind='CYCLE' and exists(
++      select 1 from public.weekly_source_cycles cycle join public.weekly_source_groups source_group
++        on source_group.id=cycle.source_group_id and source_group.source_family='ROSTER'
++      where cycle.id=v_session.source_cycle_id))
++    or (v_session.authority_scope_kind='NHSP_REPORT_SCOPE' and exists(
++      select 1 from public.weekly_source_report_scopes scope
++      join public.weekly_source_cycles cycle on cycle.id=scope.source_cycle_id
++      join public.weekly_source_groups source_group on source_group.id=cycle.source_group_id
++      where scope.id=v_session.report_scope_id and scope.source_cycle_id=v_session.source_cycle_id
++        and source_group.source_family='NHSP' and scope.self_bill_report_id is null
++        and scope.current_final_revision_id=v_session.expected_current_final_revision_id
++        and v_publication.authority_scope_kind='NHSP_REPORT_SCOPE'
++        and v_publication.report_scope_id=scope.id
++        and v_publication.correction_session_id=v_session.id
++        and v_publication.state='CORRECTION_READY'))) then
+     select coalesce(jsonb_agg(jsonb_build_object(
+       'candidate',coalesce(candidate.display_name,source_row.source_candidate_identity,'Candidate'),
+       'client',coalesce(client.name,'Client'),'shift',to_char(source_row.work_date,'Dy FMDD Mon YYYY'),
+--- a/native/04_complete_current_review.sqlinc
++++ b/native/04_complete_current_review.sqlinc
+@@ -63,6 +63,10 @@
+      or p_request->>'schema_version'<>'WEEKLY_SOURCE_CORRECT_FINAL_REVIEW_V1' then
+     raise exception 'WEEKLY_SOURCE_CORRECTION_REVIEW_REQUEST_INVALID' using errcode='22023';
+   end if;
++  if exists(select 1 from unnest(array['expected_session_version','expected_authority_scope_version']) field
++    where jsonb_typeof(p_request->field)='string' and (p_request->>field !~ '^[1-9][0-9]*$'
++      or length(p_request->>field)>19 or (length(p_request->>field)=19 and p_request->>field>'9223372036854775807'))) then
++    raise exception 'WEEKLY_SOURCE_CORRECTION_COUNTER_INVALID' using errcode='22023';end if;
+   begin
+     v_actor:=(p_request->>'actor_user_id')::uuid;
+     v_session_id:=(p_request->>'correction_session_id')::uuid;
+@@ -194,7 +198,7 @@
+     'correction_session_id',v_session.id,
+     'prior_final_revision_id',v_prior_revision.id,
+     'upload_id',v_replacement_upload.id,
+-    'version',v_expected_session_version+1,
++    'version',case when jsonb_typeof(p_request->'expected_session_version')='string' then to_jsonb((v_expected_session_version+1)::text) else to_jsonb(v_expected_session_version+1) end,
+     'office_preview',v_office_preview,
+     'idempotent_replay',false
+   );
+@@ -218,9 +222,9 @@
+   select pg_catalog.statement_timestamp(),v_actor,actor.display_name,actor.role,
+          'weekly_final_source_correction_sessions',v_session.id::text,
+          'WEEKLY_SOURCE_CORRECT_FINAL_REVIEWED',
+-         pg_catalog.jsonb_build_object('state',v_session.state,'version',v_expected_session_version),
++         pg_catalog.jsonb_build_object('state',v_session.state,'version',case when jsonb_typeof(p_request->'expected_session_version')='string' then to_jsonb((v_expected_session_version)::text) else to_jsonb(v_expected_session_version) end),
+          pg_catalog.jsonb_build_object(
+-           'state','REVIEWED','version',v_expected_session_version+1,
++           'state','REVIEWED','version',case when jsonb_typeof(p_request->'expected_session_version')='string' then to_jsonb((v_expected_session_version+1)::text) else to_jsonb(v_expected_session_version+1) end,
+            'status',v_result->>'status',
+            'change_count',pg_catalog.jsonb_array_length(v_office_preview->'changes'),
+            'blocker_count',pg_catalog.jsonb_array_length(v_office_preview->'blockers'),

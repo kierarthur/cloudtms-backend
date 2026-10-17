@@ -1,0 +1,3282 @@
+{
+  "checkpoint": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+  "moduleCommit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+  "oldRoot": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+  "publicCommit": "eb0aa9633fa284c088da6e7c12196974619cd48b",
+  "laterCommit": "b6922e27c18312cd4f285e31c6ad99489612d577",
+  "pins": [
+    {
+      "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+      "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/001_private_weekly_source_work_event_payment_facts_v1.sqlinc",
+      "sha256": "2a5f8c1dbdc9c5bce8a4e6653b62e812f15744431e62733752e95840c62110f4"
+    },
+    {
+      "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+      "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/002_private_weekly_source_kept_as_paid_context_for_publication_v1.sqlinc",
+      "sha256": "e7448dd5f3d333b0aaa6ecb72c7203a9d22177a7768f2640b03ddaeafd58e208"
+    },
+    {
+      "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "path": "supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/03_complete_canonical_context.sqlinc",
+      "sha256": "ea10aeb0cd3ba623399dd05f07c7a3e68e1a13c3c1a2e1f7324a367319027e70"
+    },
+    {
+      "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+      "path": "docs/healthroster-build/proposals/paid-shift-overlap-native-facts-construction-20261014/before/02_complete_keep_context.sqlinc",
+      "sha256": "33be64afc12c627db61902a92d511e9db41886d497d949fba05ac7c374dc6d51"
+    },
+    {
+      "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+      "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/003_private_weekly_source_kept_as_paid_context_v1.sqlinc",
+      "sha256": "a211cfda94ac1068b3139a3f2088780a8e72edd777423c7c9d6395a27c6938ed"
+    },
+    {
+      "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "path": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_03_private_weekly_source_kept_as_paid_context_v1.sqlinc",
+      "sha256": "a211cfda94ac1068b3139a3f2088780a8e72edd777423c7c9d6395a27c6938ed"
+    },
+    {
+      "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+      "path": "docs/healthroster-build/proposals/paid-shift-overlap-native-facts-construction-20261014/before/02_complete_keep_context.sqlinc",
+      "sha256": "33be64afc12c627db61902a92d511e9db41886d497d949fba05ac7c374dc6d51"
+    },
+    {
+      "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+      "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/004_private_weekly_source_paid_overlap_candidates_v1.sqlinc",
+      "sha256": "49a727d6ecc6ed0ca92e4721a526fab524f879169ef4f6e5613051c2d22be113"
+    },
+    {
+      "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+      "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/005_private_weekly_source_paid_overlap_choice_admit_v1.sqlinc",
+      "sha256": "f785290f20d64fad394428db8973d88d3f87249d8d13b7d6751c29dc19c66bde"
+    },
+    {
+      "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+      "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/006_public_weekly_source_office_recheck_begin_v1.sqlinc",
+      "sha256": "227096c70be7f4da78277d1fdb921db39844167c7d1c54dbfa96b0f25ddb65db"
+    },
+    {
+      "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "path": "supabase/repeatable/08102026_1635_weekly_source_released_client_eligibility_v1.sql",
+      "sha256": "d3d64cbcc9950372d81b27088abd39f5b9263cd5b327090d3f4ea26e38ce0ef2"
+    },
+    {
+      "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+      "path": "supabase/repeatable/08102026_1635_weekly_source_released_client_eligibility_v1.sql",
+      "sha256": "d3d64cbcc9950372d81b27088abd39f5b9263cd5b327090d3f4ea26e38ce0ef2"
+    },
+    {
+      "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+      "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/007_private_weekly_source_paid_overlap_choice_current_v1.sqlinc",
+      "sha256": "6ae76bfbf9a461d92b7f85705731df617548aac0014c3d7b1b3477a39df5c9a6"
+    },
+    {
+      "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+      "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/008_private_weekly_source_paid_overlap_projection_lock_v1.sqlinc",
+      "sha256": "779c3b533151f4c7846bf1d7acf16c03738343fa19db211c7a0c15783c1197c1"
+    },
+    {
+      "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+      "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/009_public_weekly_source_upload_context_v1.sqlinc",
+      "sha256": "1a059e07f2d2e44245b6625290df1ccd3ca29e48cd549acd582413b0b5e15824"
+    },
+    {
+      "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "path": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/02_complete_upload_context.sqlinc",
+      "sha256": "a9149686b3aa1456603550dfa8eb93af1936606e498113286110a4f900274902"
+    },
+    {
+      "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+      "path": "supabase/repeatable/13102026_2110_healthroster_report_native_fin_worker/08_complete_upload_context.sqlinc",
+      "sha256": "a02bb2c4a5e75502c3206c5d71af2452a6354aac9a77868fa43ca6f6a1385561"
+    },
+    {
+      "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+      "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/010_public_weekly_source_projection_rows_apply_atomic_v1.sqlinc",
+      "sha256": "1fededa8f39494a786a82a3dd47058b7ca983620ae88ce952221359c0fb024aa"
+    },
+    {
+      "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "path": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/03_complete_projection_rows.sqlinc",
+      "sha256": "0cd140692ed4a5d7b2f539d7f86ff2876ceebb51d1f19e1c221b39926453fc35"
+    },
+    {
+      "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+      "path": "supabase/repeatable/13102026_1561_weekly_source_magnit_contract_price_v1.sql",
+      "sha256": "517ec09509d02ffcbfbf3451162ce011fc5e2bacc411590d9db7166902a59b4d"
+    },
+    {
+      "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+      "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/011_private_weekly_source_finalise_engine_v1.sqlinc",
+      "sha256": "b7d1832b6ef81406c6f551f62225cbc98aa4425d9884287ee8eadc1b81a05bae"
+    },
+    {
+      "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "path": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_08_private_weekly_source_finalise_engine_v1.sqlinc",
+      "sha256": "f99a6448dc8e3534768fa8742ca6b1a0b71a79507bee30f09e39e33afe71e9b5"
+    },
+    {
+      "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+      "path": "supabase/repeatable/14102026_0821_healthroster_fin4_rebill_record_fields/01_complete_fin4.sqlinc",
+      "sha256": "762454575b7a6844dba087fb4a76e7c46a374a863e5eac77af13645fd4f5af62"
+    },
+    {
+      "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+      "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/012_private_weekly_source_paid_choice_revision_guard_v1.sqlinc",
+      "sha256": "b0c8e197d981ca3d274d45fe15de35e9e3fbfd572322492028a1fe4880c6fa1e"
+    },
+    {
+      "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+      "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/013_private_weekly_source_paid_match_invoice_movement_insert_v1.sqlinc",
+      "sha256": "67db5aa7251fadb4413c1adb429b92242ce324fd0b9c0e55da4c01039635db2d"
+    },
+    {
+      "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+      "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/014_private_weekly_source_paid_match_invoice_origin_assert_v1.sqlinc",
+      "sha256": "1966aa68f6279f8123e0b3240a5a9bd020846e94435f96cc0505307fbb18a484"
+    },
+    {
+      "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+      "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/015_private_weekly_source_billing_movement_hash_v1.sqlinc",
+      "sha256": "c66d603f1de2795e08b64ac5c44fa4754a971badf7ec1f823b0a1145c4c32c32"
+    },
+    {
+      "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/02_money_origins.sqlinc",
+      "sha256": "ce037919515fcea4f7c4105ae59b0fcecc20258df0325b89904236d92b1cdd0f"
+    },
+    {
+      "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+      "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/02_money_origins.sqlinc",
+      "sha256": "ce037919515fcea4f7c4105ae59b0fcecc20258df0325b89904236d92b1cdd0f"
+    },
+    {
+      "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+      "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/016_private_weekly_source_invoice_movement_window_id_v1.sqlinc",
+      "sha256": "ca8101ac55f379c4f5f2e5614f065aea3321823b139ffd34fdc868443b7283b9"
+    },
+    {
+      "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/02_money_origins.sqlinc",
+      "sha256": "ce037919515fcea4f7c4105ae59b0fcecc20258df0325b89904236d92b1cdd0f"
+    },
+    {
+      "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+      "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/02_money_origins.sqlinc",
+      "sha256": "ce037919515fcea4f7c4105ae59b0fcecc20258df0325b89904236d92b1cdd0f"
+    },
+    {
+      "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+      "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/017_private_weekly_source_invoice_source_amount_movement_valid_v1.sqlinc",
+      "sha256": "e85ad2ca84877e65d342c2b52da77bba45f1fff49820a865e079dfb1a0ff0945"
+    },
+    {
+      "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "path": "supabase/repeatable/13102026_1431_weekly_source_invoice_money_owners_v1.sql",
+      "sha256": "95be6da9570c983cd9444d02b5eebcc861e3aeb6b39c92b529190d6902cb9afd"
+    },
+    {
+      "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+      "path": "supabase/repeatable/13102026_1431_weekly_source_invoice_money_owners_v1.sql",
+      "sha256": "95be6da9570c983cd9444d02b5eebcc861e3aeb6b39c92b529190d6902cb9afd"
+    },
+    {
+      "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+      "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/018_public_weekly_source_invoice_admit_atomic_v1.sqlinc",
+      "sha256": "666d5bb06ab35c59652b200897045ff730776a71c07cc34a940a5325a9249c27"
+    },
+    {
+      "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "path": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority/01_complete_invoice_authorities.sqlinc",
+      "sha256": "e03acb39db8cc2441cde46125ad9b38e8594b3790c772b247cea76a052cb2044"
+    },
+    {
+      "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+      "path": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition/15_complete_native_report_admission.sqlinc",
+      "sha256": "4bbeb4e8fd67e85ae8d50e3365ebd54df11cd7c0c7ca515318723866e14eb46e"
+    },
+    {
+      "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+      "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/019_private_weekly_source_shift_on_self_bill_v1.sqlinc",
+      "sha256": "45a0082e962f6805c390f3d685150a6797eca21806efc3f35ccc810a3264ae48"
+    },
+    {
+      "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "path": "supabase/repeatable/13102026_1431_weekly_source_invoice_money_owners_v1.sql",
+      "sha256": "95be6da9570c983cd9444d02b5eebcc861e3aeb6b39c92b529190d6902cb9afd"
+    },
+    {
+      "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+      "path": "supabase/repeatable/13102026_1431_weekly_source_invoice_money_owners_v1.sql",
+      "sha256": "95be6da9570c983cd9444d02b5eebcc861e3aeb6b39c92b529190d6902cb9afd"
+    },
+    {
+      "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+      "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/020_private_weekly_source_ordinary_projection_source_units_v1.sqlinc",
+      "sha256": "c99441f5988c527986756ddecdb58a41c13b0f562ed1c06f016a532e7f9771b5"
+    },
+    {
+      "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/09_complete_pay_consumers.sqlinc",
+      "sha256": "5603f94895d38050db2be6873443effb7275700678ce88fcb67dbb86c43b90d2"
+    },
+    {
+      "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+      "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/09_complete_pay_consumers.sqlinc",
+      "sha256": "5603f94895d38050db2be6873443effb7275700678ce88fcb67dbb86c43b90d2"
+    },
+    {
+      "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+      "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/021_private_weekly_source_selected_source_witness_v1.sqlinc",
+      "sha256": "175b4d9c57f762e8d47a6e7a87383122213e55abcf0e1760bdd0973fe7408136"
+    },
+    {
+      "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/09_complete_pay_consumers.sqlinc",
+      "sha256": "5603f94895d38050db2be6873443effb7275700678ce88fcb67dbb86c43b90d2"
+    },
+    {
+      "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+      "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/09_complete_pay_consumers.sqlinc",
+      "sha256": "5603f94895d38050db2be6873443effb7275700678ce88fcb67dbb86c43b90d2"
+    },
+    {
+      "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+      "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/022_public_weekly_source_finalisation_pay_open_atomic_v1.sqlinc",
+      "sha256": "ade426e9b7acf1927cd235a02c806ee09fc7cfd70cd68c16f95ff15b7fb41423"
+    },
+    {
+      "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/09_complete_pay_consumers.sqlinc",
+      "sha256": "5603f94895d38050db2be6873443effb7275700678ce88fcb67dbb86c43b90d2"
+    },
+    {
+      "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+      "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/09_complete_pay_consumers.sqlinc",
+      "sha256": "5603f94895d38050db2be6873443effb7275700678ce88fcb67dbb86c43b90d2"
+    },
+    {
+      "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+      "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/023_private_weekly_source_invoice_allocation_assert_v1.sqlinc",
+      "sha256": "6889c47fd2e8ce8259175c9289962ea0fbe2228a9b03bfffc9af23a458e95fee"
+    },
+    {
+      "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "path": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/02_invoice_allocation_assert.sqlinc",
+      "sha256": "b3b13a9054c131c8a1e5de1a04e578dd53c1e9335d96bf38015af6a5dfe7f693"
+    },
+    {
+      "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+      "path": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/02_invoice_allocation_assert.sqlinc",
+      "sha256": "b3b13a9054c131c8a1e5de1a04e578dd53c1e9335d96bf38015af6a5dfe7f693"
+    },
+    {
+      "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+      "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/024_private_weekly_source_paid_overlap_current_snapshot_v1.sqlinc",
+      "sha256": "f2f7e11b60c9034ee882e7fda21b406c2776a4dc1d0c5f2046caefdf85064ee4"
+    },
+    {
+      "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+      "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/025_private_weekly_source_paid_match_retained_transition_assert_v1.sqlinc",
+      "sha256": "dbf78419762289b74586018476f9a4b0ccb4513772fa2aa91810c2c4721fc9c2"
+    },
+    {
+      "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+      "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/026_private_weekly_source_paid_match_question_v1.sqlinc",
+      "sha256": "7d3fd7db7f37089c0b2b3567f37dc794cecfc16f11f7b2f7d472c3d6a0ff38ff"
+    },
+    {
+      "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+      "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/028_private_weekly_source_fixed_expense_invoice_values_v1.sqlinc",
+      "sha256": "7fc8b42c2b7146fb0b06483620d4d1c59e3e75e734518a09519f1d386a9f0767"
+    },
+    {
+      "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+      "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/029_private_weekly_source_finalisation_materialise_expense_invoice_v1.sqlinc",
+      "sha256": "dae86101e77cb40e2802f84ef6295b0a62234594bd6bf6d02887103465707a80"
+    },
+    {
+      "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "path": "supabase/repeatable/13102026_1433_weekly_source_invoice_money_finalisation_v1.sql",
+      "sha256": "dbd56620eaf009f61acb4dc0ac5a988e03e9e4ecdaa54fcf0fdd60992a2c851f"
+    },
+    {
+      "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+      "path": "supabase/repeatable/13102026_1433_weekly_source_invoice_money_finalisation_v1.sql",
+      "sha256": "dbd56620eaf009f61acb4dc0ac5a988e03e9e4ecdaa54fcf0fdd60992a2c851f"
+    },
+    {
+      "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+      "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/030_private_weekly_source_paid_match_expense_invoice_origin_assert_v1.sqlinc",
+      "sha256": "478f74412ecc6012d9d91804b5a108a628b396c652e965f0bf8cf001522a641e"
+    },
+    {
+      "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+      "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/031_private_weekly_source_paid_match_expense_invoice_insert_v1.sqlinc",
+      "sha256": "b457f582a218d300894254f539768923cc88f2f6b4dc7a4b8babcc3c1bb6039b"
+    },
+    {
+      "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+      "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/032_private_weekly_source_paid_match_prepared_census_recheck_v1.sqlinc",
+      "sha256": "51979cd31560deab0ab2f1b9c44b836b0dd779cd5204270002fd5c43a1196a07"
+    },
+    {
+      "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+      "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/033_private_weekly_source_correct_final_prepared_context_v1.sqlinc",
+      "sha256": "aba24a3b9b979c0445722b652161f8cc498ac0c6f7dd9208f9d8c7bae16ab844"
+    },
+    {
+      "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "path": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_14_private_weekly_source_correct_final_prepared_context_v1.sqlinc",
+      "sha256": "23a0681163e4942f71fac7c9ff3eb275719cf1dafb39c2b817f0c3dba8d6a711"
+    },
+    {
+      "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+      "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/09_complete_pay_consumers.sqlinc",
+      "sha256": "5603f94895d38050db2be6873443effb7275700678ce88fcb67dbb86c43b90d2"
+    },
+    {
+      "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+      "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/034_public_weekly_source_correct_final_prepare_atomic_v1.sqlinc",
+      "sha256": "c7823e594e609cc76e8cff59c6f508072050d667898538ebd7d5e506ad80ec41"
+    },
+    {
+      "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "path": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_15_public_weekly_source_correct_final_prepare_atomic_v1.sqlinc",
+      "sha256": "264922d32b47818ae8ad289d9b822bb4e9514803d35e409c977dfec8cac38125"
+    },
+    {
+      "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+      "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10c_complete_root_report_consumer_union.sqlinc",
+      "sha256": "798fddd1dc4c243d9c8a2fd01cab0bd8a8ef6b85148a6145dba523cf7cdab920"
+    },
+    {
+      "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+      "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/035_public_weekly_source_correct_final_apply_atomic_v1.sqlinc",
+      "sha256": "49bf701bcd0f2cc8693d1a84a8e3418f0840a5b63638ef3a6f8534f4a560d251"
+    },
+    {
+      "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "path": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_16_public_weekly_source_correct_final_apply_atomic_v1.sqlinc",
+      "sha256": "cca64fd3d0f21814b5c7fa57f9c8958486b2d20740a4170d5e75c4be4d92925d"
+    },
+    {
+      "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+      "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10c_complete_root_report_consumer_union.sqlinc",
+      "sha256": "798fddd1dc4c243d9c8a2fd01cab0bd8a8ef6b85148a6145dba523cf7cdab920"
+    },
+    {
+      "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+      "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/036_private_weekly_source_ordinary_projection_current_expenses_v1.sqlinc",
+      "sha256": "643813415d9dd4feba83f22bdd98eae901fb258a7826be90a1d6e2c683cdedaa"
+    },
+    {
+      "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "path": "supabase/repeatable/15092026_1534_weekly_source_ordinary_pay_projection_v1.sql",
+      "sha256": "665ddd27108a867f92e1f04dd346130736df27031a577f108b7f9c1bf6807900"
+    },
+    {
+      "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+      "path": "supabase/repeatable/15092026_1534_weekly_source_ordinary_pay_projection_v1.sql",
+      "sha256": "665ddd27108a867f92e1f04dd346130736df27031a577f108b7f9c1bf6807900"
+    },
+    {
+      "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+      "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/037_public_weekly_source_office_workspace_v1.sqlinc",
+      "sha256": "b60146dc2cc3adc665be3a0a2d42534b14d794e0e1d50afe97fd1e36a6875e0c"
+    },
+    {
+      "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "path": "supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/04_complete_office_workspace.sqlinc",
+      "sha256": "97df46e0db21c7a232c0368ad6da2a7cbc6f16f4743328757fa37a433c1ea9c3"
+    },
+    {
+      "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+      "path": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "sha256": "8f65ee0c9cf46b5465c920057212e6d2499b119e05c4c1dedd2f0cfecb89eea7"
+    },
+    {
+      "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+      "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/038_private_weekly_source_paid_match_correction_scope_v1.sqlinc",
+      "sha256": "987c10e66a0f47f8346eef084e16b1bc0a04b11a40c0e198b5e99370339d3f1d"
+    },
+    {
+      "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+      "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/039_private_weekly_source_correct_final_office_preview_v1.sqlinc",
+      "sha256": "954a8288e2fed8880e7df06d427cf34646b263250fa1ff4c75d181ad991d4f71"
+    },
+    {
+      "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10c_complete_root_report_consumer_union.sqlinc",
+      "sha256": "798fddd1dc4c243d9c8a2fd01cab0bd8a8ef6b85148a6145dba523cf7cdab920"
+    },
+    {
+      "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+      "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10c_complete_root_report_consumer_union.sqlinc",
+      "sha256": "798fddd1dc4c243d9c8a2fd01cab0bd8a8ef6b85148a6145dba523cf7cdab920"
+    },
+    {
+      "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+      "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/040_private_weekly_source_roster_prior_states_v1.sqlinc",
+      "sha256": "047e7768185a851e778d61983c0291d1bc7944627f34ab1fce06804993971c15"
+    },
+    {
+      "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+      "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/041_private_weekly_source_legacy_signed_source_membership_v1.sqlinc",
+      "sha256": "2102fd11a92dec40b85f336cbe10b5e73ac660fbfa2ae523c0e3e8ed31c64341"
+    },
+    {
+      "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+      "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/042_private_weekly_source_paid_overlap_current_snapshot_for_cycle_v1.sqlinc",
+      "sha256": "5310dc64c6e54380d2c0fceb5fb744a1bd1bbc6feda1d6df3ab2478e85e307eb"
+    },
+    {
+      "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+      "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/043_private_weekly_source_off_rule_setup_shape_assert_v1.sqlinc",
+      "sha256": "5accea5e9e2870cc281f1374af5fe2634af7f70c83456557e5474cff1b1a2f59"
+    },
+    {
+      "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "path": "supabase/repeatable/16102026_0802_healthroster_f5_native_fixture_participants/030_off_rule_shape.sqlinc",
+      "sha256": "15dbe990cfe6792c01d0775c956cf41c2fa88e44b16ccda58400c0e5a9d2d79a"
+    },
+    {
+      "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+      "path": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/21_SETUP_STATIC_SHAPE_ASSERT.sqlinc",
+      "sha256": "b400d184f791415db84c1badc31e9aee82fad7601512bfcbd78c267479dc468e"
+    },
+    {
+      "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+      "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/044_private_weekly_source_off_rule_native_parent_scope_v1.sqlinc",
+      "sha256": "da19c30f7b269f94a1c44187d63eea95abb21fafb5e240876cad0e7e5afbfd8c"
+    },
+    {
+      "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "path": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/05_OFF_RULE_NATIVE_PARENT_SCOPE.sqlinc",
+      "sha256": "f7f598f2fb9c9e997742482f8fedeee1709f7fe129c82cad9a4527d0043d1585"
+    },
+    {
+      "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+      "path": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/05_OFF_RULE_NATIVE_PARENT_SCOPE.sqlinc",
+      "sha256": "f7f598f2fb9c9e997742482f8fedeee1709f7fe129c82cad9a4527d0043d1585"
+    },
+    {
+      "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+      "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/045_private_weekly_source_rule_qualification_setup_atomic_v1.sqlinc",
+      "sha256": "df48d0951eb3bffb2a33e9722c9c7258be4e159f78197423f7bf15e3352f6951"
+    },
+    {
+      "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "path": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/06_OFF_RULE_COMMAND.sqlinc",
+      "sha256": "7daf9acc89cc8cfbb387524d180fd55e2482326e51b4fee6eadccb6a6ee434a8"
+    },
+    {
+      "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+      "path": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/06_OFF_RULE_COMMAND.sqlinc",
+      "sha256": "94e4fb4a1c4644a8001abbdc88b4c8d285943406666fb908c91be5347d007360"
+    },
+    {
+      "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+      "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/046_private_weekly_source_rule_qualification_execute_v1.sqlinc",
+      "sha256": "b101adf2b28f517c900f4aa0752bb846611c7d9b91c99f6174d4a908eb2bd673"
+    },
+    {
+      "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "path": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/06_OFF_RULE_COMMAND.sqlinc",
+      "sha256": "7daf9acc89cc8cfbb387524d180fd55e2482326e51b4fee6eadccb6a6ee434a8"
+    },
+    {
+      "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+      "path": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/06_OFF_RULE_COMMAND.sqlinc",
+      "sha256": "94e4fb4a1c4644a8001abbdc88b4c8d285943406666fb908c91be5347d007360"
+    },
+    {
+      "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+      "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/047_private_weekly_source_rule_qualification_transport_status_v1.sqlinc",
+      "sha256": "861a220460f1406b4b50514a5aab78ef54cac578f801426b812c57c923e779dc"
+    },
+    {
+      "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "path": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/08_OFF_RULE_TRANSPORT_STATUS.sqlinc",
+      "sha256": "08242ac91fd3f1a715e4ea40cd09cdd5e56351c498fce48c76f0dea7b0ace4c8"
+    },
+    {
+      "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+      "path": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/08_OFF_RULE_TRANSPORT_STATUS.sqlinc",
+      "sha256": "08242ac91fd3f1a715e4ea40cd09cdd5e56351c498fce48c76f0dea7b0ace4c8"
+    },
+    {
+      "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+      "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/048_private_weekly_source_nhsp_paid_overlap_basis_v1.sqlinc",
+      "sha256": "c8b9e9e4b35199b9d5808a239de36cc2bfd1495cefe5b3e72b32ae329d0b2700"
+    },
+    {
+      "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+      "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/051_private_weekly_source_nhsp_negative_population_v1.sqlinc",
+      "sha256": "3a0842fd0a135e6da5ad0da42af8e1bf6d165596d080aca4ca798addd135b40e"
+    },
+    {
+      "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+      "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/052_private_weekly_source_native_line_vat_v1.sqlinc",
+      "sha256": "2088caa8c5f137932b075b288e0783e06231a5415b03ccbd2b73dc4b14204691"
+    },
+    {
+      "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+      "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/053_private_weekly_source_finalisation_insert_current_movement_v1.sqlinc",
+      "sha256": "3b4cf69d26a09ba31155c1abcad4c51d0609a4743c4740cf5aadccd8874a0cce"
+    },
+    {
+      "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "path": "supabase/repeatable/13102026_1433_weekly_source_invoice_money_finalisation_v1.sql",
+      "sha256": "dbd56620eaf009f61acb4dc0ac5a988e03e9e4ecdaa54fcf0fdd60992a2c851f"
+    },
+    {
+      "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+      "path": "supabase/repeatable/13102026_1433_weekly_source_invoice_money_finalisation_v1.sql",
+      "sha256": "dbd56620eaf009f61acb4dc0ac5a988e03e9e4ecdaa54fcf0fdd60992a2c851f"
+    },
+    {
+      "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+      "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/054_private_weekly_source_nhsp_price_admission_v1.sqlinc",
+      "sha256": "fec2aa10512e7fb5068fb297a9d6dc54dc25c718486d7a16a63f08be51c14a0b"
+    },
+    {
+      "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+      "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/055_private_weekly_source_nhsp_invoice_values_v1.sqlinc",
+      "sha256": "7e4a0813218f069e3313871afc33fa4641b4ab486d3b8c434d9180312712773f"
+    },
+    {
+      "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+      "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/056_private_weekly_source_nhsp_negative_comparison_v1.sqlinc",
+      "sha256": "815749bde9aed68615915acabd8b23c50fc430255f16614620201de6648c32cb"
+    },
+    {
+      "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+      "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/057_private_weekly_source_paid_choice_immutable_v1.sqlinc",
+      "sha256": "c4df9d8555d19d92d111e5939fadec7ae1c9c135bdef9b75c62f612cfb751578"
+    },
+    {
+      "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+      "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/058_private_weekly_source_nhsp_projection_lock_input_v1.sqlinc",
+      "sha256": "5862d03d5b9ed9e73c9aed3f55541677ed884d525988c9c9e232c4b5c29d4bf6"
+    },
+    {
+      "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+      "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/059_private_weekly_source_nhsp_projection_choice_recheck_v1.sqlinc",
+      "sha256": "b7658061f910e1de352e8525ef87fc290be58a02090751edaa2b0f83fd808668"
+    },
+    {
+      "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+      "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/060_private_weekly_source_nhsp_invoice_only_vector_v1.sqlinc",
+      "sha256": "5234d843a9ca2f486dc6a2c641c25174876d401d2c1d643a349bb5159c4e1560"
+    },
+    {
+      "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+      "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/061_private_weekly_source_nhsp_none_invoice_basis_v1.sqlinc",
+      "sha256": "23507141adce49de4a4e8aeb26a5ca49e1c288e7c819bbc6c2c40b42876dcb71"
+    },
+    {
+      "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+      "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/062_private_weekly_source_nhsp_none_invoice_origin_assert_v1.sqlinc",
+      "sha256": "ad72b39970de73118116ebed7455bfc4e2a265fa88cf8c68fd6f19ae9bc74b7a"
+    },
+    {
+      "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+      "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/064_public_weekly_source_workspace_scopes_v1.sqlinc",
+      "sha256": "4daf7a2983e5fc1e806f65ef5a292e9a7d0264db6e7bee6f5c216ed4e2602684"
+    },
+    {
+      "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "path": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "sha256": "8f65ee0c9cf46b5465c920057212e6d2499b119e05c4c1dedd2f0cfecb89eea7"
+    },
+    {
+      "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+      "path": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+      "sha256": "8f65ee0c9cf46b5465c920057212e6d2499b119e05c4c1dedd2f0cfecb89eea7"
+    },
+    {
+      "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+      "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/066_private_weekly_source_nhsp_none_write_admit_v1.sqlinc",
+      "sha256": "d914506dcea9c83f39a7b8d069d431845c47755f19e5b7659ef40e58f796d5f2"
+    },
+    {
+      "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+      "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/068_private_weekly_source_nhsp_selected_pay_origin_v1.sqlinc",
+      "sha256": "a2bf00613f96862b0848d031009536e53d0d3dd284893b039285c7e2f65b3ba0"
+    },
+    {
+      "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+      "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/070_private_weekly_source_ordinary_projection_active_movements_v1.sqlinc",
+      "sha256": "45ea5c8a9d8e08f3831dfe03fb6402bcd7dba19fc00e9ecc3eaddeeabb30e142"
+    },
+    {
+      "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/09_complete_pay_consumers.sqlinc",
+      "sha256": "5603f94895d38050db2be6873443effb7275700678ce88fcb67dbb86c43b90d2"
+    },
+    {
+      "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+      "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/09_complete_pay_consumers.sqlinc",
+      "sha256": "5603f94895d38050db2be6873443effb7275700678ce88fcb67dbb86c43b90d2"
+    }
+  ],
+  "owners": [
+    {
+      "signature": "private.weekly_source_work_event_payment_facts_v1(uuid,uuid,uuid)",
+      "leaf": "001_private_weekly_source_work_event_payment_facts_v1.sqlinc",
+      "current": null,
+      "oldBase": null,
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/001_private_weekly_source_work_event_payment_facts_v1.sqlinc",
+        "definitionSha256": "ca1618f56cd2d89a1e421271157e80402e89b8f56d5546ac3ecc6ac6ad021427"
+      },
+      "status": "NEW_HEALTH_DEFINITION",
+      "scalarEdits": [],
+      "outputSha256": "ca1618f56cd2d89a1e421271157e80402e89b8f56d5546ac3ecc6ac6ad021427"
+    },
+    {
+      "signature": "private.weekly_source_kept_as_paid_context_for_publication_v1(uuid,uuid,uuid)",
+      "leaf": "002_private_weekly_source_kept_as_paid_context_for_publication_v1.sqlinc",
+      "current": {
+        "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+        "path": "supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/03_complete_canonical_context.sqlinc",
+        "physical": "supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/03_complete_canonical_context.sqlinc",
+        "definitionSha256": "4906c26998ff9123144b61a7a163aab1dc95c718b70477c8109517fc463adac1"
+      },
+      "oldBase": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-shift-overlap-native-facts-construction-20261014/before/02_complete_keep_context.sqlinc",
+        "definitionSha256": "4efbcc57dd61dd6c714a71ce0beb1a5b9c69169dd9451f4cb8241ee295077645"
+      },
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/002_private_weekly_source_kept_as_paid_context_for_publication_v1.sqlinc",
+        "definitionSha256": "af606e111da8b6232890cc3b04b16367085ef1e11deee33855d476ce9ed1ab7e"
+      },
+      "status": "PRESERVED_CURRENT_KEEP_PUBLIC_ENUM_ACK_AND_BASIS",
+      "scalarEdits": [],
+      "outputSha256": "4906c26998ff9123144b61a7a163aab1dc95c718b70477c8109517fc463adac1"
+    },
+    {
+      "signature": "private.weekly_source_kept_as_paid_context_v1(uuid,uuid)",
+      "leaf": "003_private_weekly_source_kept_as_paid_context_v1.sqlinc",
+      "current": {
+        "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+        "path": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_03_private_weekly_source_kept_as_paid_context_v1.sqlinc",
+        "physical": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_03_private_weekly_source_kept_as_paid_context_v1.sqlinc",
+        "definitionSha256": "8e344bf103661150f1d63e2aa929c936f2db0d40796d3274c9b7ab9ad8d3f4d4"
+      },
+      "oldBase": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-shift-overlap-native-facts-construction-20261014/before/02_complete_keep_context.sqlinc",
+        "definitionSha256": "8e344bf103661150f1d63e2aa929c936f2db0d40796d3274c9b7ab9ad8d3f4d4"
+      },
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/003_private_weekly_source_kept_as_paid_context_v1.sqlinc",
+        "definitionSha256": "8e344bf103661150f1d63e2aa929c936f2db0d40796d3274c9b7ab9ad8d3f4d4"
+      },
+      "status": "PRESERVED_CURRENT_NO_NEW_HUNK",
+      "scalarEdits": [],
+      "outputSha256": "8e344bf103661150f1d63e2aa929c936f2db0d40796d3274c9b7ab9ad8d3f4d4"
+    },
+    {
+      "signature": "private.weekly_source_paid_overlap_candidates_v1(uuid,uuid,uuid,uuid)",
+      "leaf": "004_private_weekly_source_paid_overlap_candidates_v1.sqlinc",
+      "current": null,
+      "oldBase": null,
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/004_private_weekly_source_paid_overlap_candidates_v1.sqlinc",
+        "definitionSha256": "f7917d2001dbba53fea6c35c10b20ea98e623591b65c881f330eb374e3e9b891"
+      },
+      "status": "NEW_HEALTH_DEFINITION",
+      "scalarEdits": [],
+      "outputSha256": "f7917d2001dbba53fea6c35c10b20ea98e623591b65c881f330eb374e3e9b891"
+    },
+    {
+      "signature": "private.weekly_source_paid_overlap_choice_admit_v1(jsonb,jsonb)",
+      "leaf": "005_private_weekly_source_paid_overlap_choice_admit_v1.sqlinc",
+      "current": null,
+      "oldBase": null,
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/005_private_weekly_source_paid_overlap_choice_admit_v1.sqlinc",
+        "definitionSha256": "94ced00a3c96bf194075e75804e176b8a1fc37360a32e2014708b187963a6775"
+      },
+      "status": "NEW_HEALTH_DEFINITION",
+      "scalarEdits": [],
+      "outputSha256": "32d62217540e3aa677501f982175a007d7d6553519a142cf2b2db282c76e9d3e"
+    },
+    {
+      "signature": "public.weekly_source_office_recheck_begin_v1(jsonb)",
+      "leaf": "006_public_weekly_source_office_recheck_begin_v1.sqlinc",
+      "current": {
+        "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+        "path": "supabase/repeatable/08102026_1635_weekly_source_released_client_eligibility_v1.sql",
+        "physical": "supabase/repeatable/08102026_1635_weekly_source_released_client_eligibility_v1.sql",
+        "definitionSha256": "dcb2f4fb5e4e62b71a9b3ae9eac3a0c47be89ed42ddd11a782b232481144ab35"
+      },
+      "oldBase": {
+        "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "supabase/repeatable/08102026_1635_weekly_source_released_client_eligibility_v1.sql",
+        "definitionSha256": "dcb2f4fb5e4e62b71a9b3ae9eac3a0c47be89ed42ddd11a782b232481144ab35"
+      },
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/006_public_weekly_source_office_recheck_begin_v1.sqlinc",
+        "definitionSha256": "080f545a2d854f0e63fa04da6bb4becb12889bffccb26626a1863c0b1a60a78b"
+      },
+      "status": "EXACT_CURRENT_BASE_APPLY",
+      "scalarEdits": [
+        {
+          "before": "to_jsonb(v_choice)",
+          "after": "(to_jsonb(v_choice)||jsonb_build_object('id',v_choice.id::text))",
+          "reason": "New paid-choice audit/immutable typed proof serialises the existing bigint identity losslessly; writer and every comparison use the same bytes."
+        }
+      ],
+      "outputSha256": "a194c595de36b023388b4a5595074524658a0bf4eeac2520dda1a6b2234f1115"
+    },
+    {
+      "signature": "private.weekly_source_paid_overlap_choice_current_v1(uuid,uuid)",
+      "leaf": "007_private_weekly_source_paid_overlap_choice_current_v1.sqlinc",
+      "current": null,
+      "oldBase": null,
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/007_private_weekly_source_paid_overlap_choice_current_v1.sqlinc",
+        "definitionSha256": "7c4dd3806fe515ac7ac55b4282aaea5d5b80f9333d4876f9747b1b06605c044a"
+      },
+      "status": "NEW_HEALTH_DEFINITION",
+      "scalarEdits": [
+        {
+          "before": "'choice_id',v_choice.id",
+          "after": "'choice_id',v_choice.id::text",
+          "reason": "New bigint choice counter is canonical decimal text in typed projection/hash."
+        },
+        {
+          "before": "'choice_id',v_choice.id",
+          "after": "'choice_id',v_choice.id::text",
+          "reason": "New bigint choice counter is canonical decimal text in typed projection/hash."
+        }
+      ],
+      "outputSha256": "c5f9ef339af2907dc454a5d5a4bb027a49814b89d61754429bb09231e55fc345"
+    },
+    {
+      "signature": "private.weekly_source_paid_overlap_projection_lock_v1(uuid,uuid,uuid)",
+      "leaf": "008_private_weekly_source_paid_overlap_projection_lock_v1.sqlinc",
+      "current": null,
+      "oldBase": null,
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/008_private_weekly_source_paid_overlap_projection_lock_v1.sqlinc",
+        "definitionSha256": "e7847e002325e1669233e3dc9c77a7fcf37fe53ab91eb673a52b8a5aa15ca2de"
+      },
+      "status": "NEW_HEALTH_DEFINITION",
+      "scalarEdits": [],
+      "outputSha256": "e7847e002325e1669233e3dc9c77a7fcf37fe53ab91eb673a52b8a5aa15ca2de"
+    },
+    {
+      "signature": "public.weekly_source_upload_context_v1(jsonb)",
+      "leaf": "009_public_weekly_source_upload_context_v1.sqlinc",
+      "current": {
+        "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+        "path": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/02_complete_upload_context.sqlinc",
+        "physical": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/02_complete_upload_context.sqlinc",
+        "definitionSha256": "2c573e24d53d21e30672c4328cd539c2209e661a2bbaa07ff9f2fd320965e9aa"
+      },
+      "oldBase": {
+        "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "supabase/repeatable/13102026_2110_healthroster_report_native_fin_worker/08_complete_upload_context.sqlinc",
+        "definitionSha256": "37355a64d3472dea5f2010f154925a548c3c4d8177c55a9dc9ff2dbea9ebcf57"
+      },
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/009_public_weekly_source_upload_context_v1.sqlinc",
+        "definitionSha256": "43668bb2f85b3a0f9102fe3439bcdc0cbb91beb207eb691a25d3ecc821320008"
+      },
+      "status": "EXPLICIT_HEALTH_RECONCILIATION",
+      "scalarEdits": [],
+      "outputSha256": "a64f79d3c3fecaf647f95b1bd5bebc6d62a26c514c379af264dbbfd964f34a1f"
+    },
+    {
+      "signature": "public.weekly_source_projection_rows_apply_atomic_v1(uuid,uuid,jsonb)",
+      "leaf": "010_public_weekly_source_projection_rows_apply_atomic_v1.sqlinc",
+      "current": {
+        "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+        "path": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/03_complete_projection_rows.sqlinc",
+        "physical": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/03_complete_projection_rows.sqlinc",
+        "definitionSha256": "fd5857ec2b864ff479989901fa93febf8ac2fe590f5e6e1d96a97ce99134cd14"
+      },
+      "oldBase": {
+        "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "supabase/repeatable/13102026_1561_weekly_source_magnit_contract_price_v1.sql",
+        "definitionSha256": "b3fe796d797bd130bc55caaf858b7bf578fe3be25b3194bd5801e766086d27fc"
+      },
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/010_public_weekly_source_projection_rows_apply_atomic_v1.sqlinc",
+        "definitionSha256": "af0dcb77e2ae4abe0a62ad6f5c474f72be21e7d32f7be886db5994e95d2ae19d"
+      },
+      "status": "EXPLICIT_HEALTH_RECONCILIATION",
+      "scalarEdits": [
+        {
+          "before": "'office_separate_choice_id',v_paid_choice_id",
+          "after": "'office_separate_choice_id',v_paid_choice_id::text",
+          "reason": "New bigint choice counter is canonical decimal text in typed projection/hash."
+        }
+      ],
+      "outputSha256": "debaadeecab26a4d70df8520438e440eaf504646969d826d915ece1b2e92a14d"
+    },
+    {
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "leaf": "011_private_weekly_source_finalise_engine_v1.sqlinc",
+      "current": {
+        "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+        "path": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_08_private_weekly_source_finalise_engine_v1.sqlinc",
+        "physical": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_08_private_weekly_source_finalise_engine_v1.sqlinc",
+        "definitionSha256": "e7bd8ea7fafdee9f9dc6a0b26b1eb88cd52c3e03082fa0dfee9d0dd010591fdf"
+      },
+      "oldBase": {
+        "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "supabase/repeatable/14102026_0821_healthroster_fin4_rebill_record_fields/01_complete_fin4.sqlinc",
+        "definitionSha256": "11d8521f9e0d0526eef2bf0484e037a115978bde63c9f3b5011fddb46a80094c"
+      },
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/011_private_weekly_source_finalise_engine_v1.sqlinc",
+        "definitionSha256": "f8b82163a56af483e30e4d1a03f31df124bb97abc6073fe473374ee632035e45"
+      },
+      "status": "EXPLICIT_HEALTH_RECONCILIATION",
+      "scalarEdits": [
+        {
+          "before": "'paid_overlap_choice_id',v_row.paid_overlap_choice_id",
+          "after": "'paid_overlap_choice_id',v_row.paid_overlap_choice_id::text",
+          "reason": "New bigint choice counter is canonical decimal text in typed projection/hash."
+        },
+        {
+          "before": "'paid_overlap_choice_id',companion.paid_overlap_choice_id",
+          "after": "'paid_overlap_choice_id',companion.paid_overlap_choice_id::text",
+          "reason": "New bigint choice counter is canonical decimal text in typed projection/hash."
+        }
+      ],
+      "outputSha256": "d983af54c5a28db29d002e9efe76cc0ceeaca76c219a767a8177a3ae987b9a07"
+    },
+    {
+      "signature": "private.weekly_source_paid_choice_revision_guard_v1()",
+      "leaf": "012_private_weekly_source_paid_choice_revision_guard_v1.sqlinc",
+      "current": null,
+      "oldBase": null,
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/012_private_weekly_source_paid_choice_revision_guard_v1.sqlinc",
+        "definitionSha256": "d80c92afde82248de112f4092999040b3d72df18c915481c2398b813d68b9d31"
+      },
+      "status": "NEW_HEALTH_DEFINITION",
+      "scalarEdits": [],
+      "outputSha256": "d80c92afde82248de112f4092999040b3d72df18c915481c2398b813d68b9d31"
+    },
+    {
+      "signature": "private.weekly_source_paid_match_invoice_movement_insert_v1(uuid,uuid)",
+      "leaf": "013_private_weekly_source_paid_match_invoice_movement_insert_v1.sqlinc",
+      "current": null,
+      "oldBase": null,
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/013_private_weekly_source_paid_match_invoice_movement_insert_v1.sqlinc",
+        "definitionSha256": "51db47d57c908e6da251e7d457dc5e30a833dbb2371626455ea4c969c2e55bac"
+      },
+      "status": "NEW_HEALTH_DEFINITION",
+      "scalarEdits": [
+        {
+          "before": "'paid_overlap_choice_id',choice.id",
+          "after": "'paid_overlap_choice_id',choice.id::text",
+          "reason": "New bigint choice counter is canonical decimal text in typed projection/hash."
+        }
+      ],
+      "outputSha256": "f9b6d5b411097eed84ae347acfeab622a9b092747377e8b1663b90791e87d979"
+    },
+    {
+      "signature": "private.weekly_source_paid_match_invoice_origin_assert_v1(uuid)",
+      "leaf": "014_private_weekly_source_paid_match_invoice_origin_assert_v1.sqlinc",
+      "current": null,
+      "oldBase": null,
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/014_private_weekly_source_paid_match_invoice_origin_assert_v1.sqlinc",
+        "definitionSha256": "68045b8b6b0323b2ce115ee510e4b67b6c4feb1f0bf0f70e5e1ce33fe1a4c37c"
+      },
+      "status": "NEW_HEALTH_DEFINITION",
+      "scalarEdits": [
+        {
+          "before": "'paid_overlap_choice_id',s.paid_overlap_choice_id",
+          "after": "'paid_overlap_choice_id',s.paid_overlap_choice_id::text",
+          "reason": "New bigint choice counter is canonical decimal text in typed projection/hash."
+        },
+        {
+          "before": "'paid_overlap_choice_id',choice.id",
+          "after": "'paid_overlap_choice_id',choice.id::text",
+          "reason": "New bigint choice counter is canonical decimal text in typed projection/hash."
+        },
+        {
+          "before": "to_jsonb(choice)",
+          "after": "(to_jsonb(choice)||jsonb_build_object('id',choice.id::text))",
+          "reason": "New paid-choice audit/immutable typed proof serialises the existing bigint identity losslessly; writer and every comparison use the same bytes."
+        }
+      ],
+      "outputSha256": "126274d6a4c3d05ae586cb5faa860e784d7f7181f35c6682a50632af5a311d7a"
+    },
+    {
+      "signature": "private.weekly_source_billing_movement_hash_v1(jsonb)",
+      "leaf": "015_private_weekly_source_billing_movement_hash_v1.sqlinc",
+      "current": {
+        "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+        "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/02_money_origins.sqlinc",
+        "physical": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/02_money_origins.sqlinc",
+        "definitionSha256": "04ad7e4819dba0a1d78728e47dc6e13325ff31c48ea128f2ae70bb2ab6bb4782"
+      },
+      "oldBase": {
+        "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/02_money_origins.sqlinc",
+        "definitionSha256": "04ad7e4819dba0a1d78728e47dc6e13325ff31c48ea128f2ae70bb2ab6bb4782"
+      },
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/015_private_weekly_source_billing_movement_hash_v1.sqlinc",
+        "definitionSha256": "59497510f7ec3ebac89d00af1dfecf83cec96a0c02f08640dcb61efab2d24306"
+      },
+      "status": "EXACT_CURRENT_BASE_APPLY",
+      "scalarEdits": [],
+      "outputSha256": "59497510f7ec3ebac89d00af1dfecf83cec96a0c02f08640dcb61efab2d24306"
+    },
+    {
+      "signature": "private.weekly_source_invoice_movement_window_id_v1(uuid)",
+      "leaf": "016_private_weekly_source_invoice_movement_window_id_v1.sqlinc",
+      "current": {
+        "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+        "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/02_money_origins.sqlinc",
+        "physical": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/02_money_origins.sqlinc",
+        "definitionSha256": "4ac1dc27b1ec9cef2c0ca1a66599234ef780d4650817b6d057897dfab335e24b"
+      },
+      "oldBase": {
+        "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/02_money_origins.sqlinc",
+        "definitionSha256": "4ac1dc27b1ec9cef2c0ca1a66599234ef780d4650817b6d057897dfab335e24b"
+      },
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/016_private_weekly_source_invoice_movement_window_id_v1.sqlinc",
+        "definitionSha256": "1014216a2b0724d43c3065a223877b20b8a33b3e628821cc8830b1dad44e0da7"
+      },
+      "status": "EXACT_CURRENT_BASE_APPLY",
+      "scalarEdits": [],
+      "outputSha256": "1014216a2b0724d43c3065a223877b20b8a33b3e628821cc8830b1dad44e0da7"
+    },
+    {
+      "signature": "private.weekly_source_invoice_source_amount_movement_valid_v1(uuid)",
+      "leaf": "017_private_weekly_source_invoice_source_amount_movement_valid_v1.sqlinc",
+      "current": {
+        "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+        "path": "supabase/repeatable/13102026_1431_weekly_source_invoice_money_owners_v1.sql",
+        "physical": "supabase/repeatable/13102026_1431_weekly_source_invoice_money_owners_v1.sql",
+        "definitionSha256": "fdac487a96b1bfb34936ecb650921d5580440819e61d2aee7f27b32eb6bfcc39"
+      },
+      "oldBase": {
+        "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "supabase/repeatable/13102026_1431_weekly_source_invoice_money_owners_v1.sql",
+        "definitionSha256": "fdac487a96b1bfb34936ecb650921d5580440819e61d2aee7f27b32eb6bfcc39"
+      },
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/017_private_weekly_source_invoice_source_amount_movement_valid_v1.sqlinc",
+        "definitionSha256": "912ec45cf6a34830067d882d33b1230110e248d2a981a6d2abfcfa47ad94d580"
+      },
+      "status": "EXACT_CURRENT_BASE_APPLY",
+      "scalarEdits": [],
+      "outputSha256": "912ec45cf6a34830067d882d33b1230110e248d2a981a6d2abfcfa47ad94d580"
+    },
+    {
+      "signature": "public.weekly_source_invoice_admit_atomic_v1(jsonb)",
+      "leaf": "018_public_weekly_source_invoice_admit_atomic_v1.sqlinc",
+      "current": {
+        "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+        "path": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority/01_complete_invoice_authorities.sqlinc",
+        "physical": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority/01_complete_invoice_authorities.sqlinc",
+        "definitionSha256": "49e4f533f41134b00e7826a90e9787b726b3b56bef4611859a0ab344dcbbf78a"
+      },
+      "oldBase": {
+        "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition/15_complete_native_report_admission.sqlinc",
+        "definitionSha256": "6e92047a29a0b08ad3cdb41edf1695956172c4379b48ee7b192153a3a33a7ec0"
+      },
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/018_public_weekly_source_invoice_admit_atomic_v1.sqlinc",
+        "definitionSha256": "98ed85cdacec920cc52830d1abb54880ebc0c4e554076f8b00a2a2bdc2e43b94"
+      },
+      "status": "CURRENT_3WAY_COMPOSED",
+      "scalarEdits": [
+        {
+          "before": "'paid_overlap_choice_id',snapshot.paid_overlap_choice_id",
+          "after": "'paid_overlap_choice_id',snapshot.paid_overlap_choice_id::text",
+          "reason": "New bigint choice counter is canonical decimal text in typed projection/hash."
+        },
+        {
+          "before": "'paid_overlap_choice_id',snapshot.paid_overlap_choice_id",
+          "after": "'paid_overlap_choice_id',snapshot.paid_overlap_choice_id::text",
+          "reason": "New bigint choice counter is canonical decimal text in typed projection/hash."
+        }
+      ],
+      "outputSha256": "d4f199a8bfa3007ecac4bae45aa1c81e6a5e64dac274885c2f67839c3bdd9dc4"
+    },
+    {
+      "signature": "private.weekly_source_shift_on_self_bill_v1(uuid,uuid)",
+      "leaf": "019_private_weekly_source_shift_on_self_bill_v1.sqlinc",
+      "current": {
+        "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+        "path": "supabase/repeatable/13102026_1431_weekly_source_invoice_money_owners_v1.sql",
+        "physical": "supabase/repeatable/13102026_1431_weekly_source_invoice_money_owners_v1.sql",
+        "definitionSha256": "04e8d3ca4268324616ef9cd7cd47ee6fe7de8bf7a236e278f8e88838c4c83788"
+      },
+      "oldBase": {
+        "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "supabase/repeatable/13102026_1431_weekly_source_invoice_money_owners_v1.sql",
+        "definitionSha256": "04e8d3ca4268324616ef9cd7cd47ee6fe7de8bf7a236e278f8e88838c4c83788"
+      },
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/019_private_weekly_source_shift_on_self_bill_v1.sqlinc",
+        "definitionSha256": "f6ba7106876fe2a1899823cf6bbda51e41561b5385b69d4fe5368923a45b9669"
+      },
+      "status": "EXACT_CURRENT_BASE_APPLY",
+      "scalarEdits": [
+        {
+          "before": "to_jsonb(choice)",
+          "after": "(to_jsonb(choice)||jsonb_build_object('id',choice.id::text))",
+          "reason": "New paid-choice audit/immutable typed proof serialises the existing bigint identity losslessly; writer and every comparison use the same bytes."
+        }
+      ],
+      "outputSha256": "8630d62e4085dc0fb762523ba9c408214ee809d7153a604920128f741b058ae4"
+    },
+    {
+      "signature": "private.weekly_source_ordinary_projection_source_units_v1(uuid,uuid)",
+      "leaf": "020_private_weekly_source_ordinary_projection_source_units_v1.sqlinc",
+      "current": {
+        "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+        "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/09_complete_pay_consumers.sqlinc",
+        "physical": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/09_complete_pay_consumers.sqlinc",
+        "definitionSha256": "dfa04b63145d7316cbf90e7b180220cbb4a4632f9544f16a86b5e69c129d3fce"
+      },
+      "oldBase": {
+        "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/09_complete_pay_consumers.sqlinc",
+        "definitionSha256": "dfa04b63145d7316cbf90e7b180220cbb4a4632f9544f16a86b5e69c129d3fce"
+      },
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/020_private_weekly_source_ordinary_projection_source_units_v1.sqlinc",
+        "definitionSha256": "5b9aed03d8d9c27929f2f426ee4aadde0ec7cab1b269e18a7356efeeac5406c5"
+      },
+      "status": "EXACT_CURRENT_BASE_APPLY",
+      "scalarEdits": [],
+      "outputSha256": "5b9aed03d8d9c27929f2f426ee4aadde0ec7cab1b269e18a7356efeeac5406c5"
+    },
+    {
+      "signature": "private.weekly_source_selected_source_witness_v1(uuid,uuid,uuid)",
+      "leaf": "021_private_weekly_source_selected_source_witness_v1.sqlinc",
+      "current": {
+        "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+        "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/09_complete_pay_consumers.sqlinc",
+        "physical": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/09_complete_pay_consumers.sqlinc",
+        "definitionSha256": "191ea5e4d18e861af194be3937003148eef0abe523a37c0f3c4f51a599f3675a"
+      },
+      "oldBase": {
+        "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/09_complete_pay_consumers.sqlinc",
+        "definitionSha256": "191ea5e4d18e861af194be3937003148eef0abe523a37c0f3c4f51a599f3675a"
+      },
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/021_private_weekly_source_selected_source_witness_v1.sqlinc",
+        "definitionSha256": "fd73ccc6394266ab048a559cc1022463aba0723ab17fb880fd9fd71d15f097e6"
+      },
+      "status": "EXACT_CURRENT_BASE_APPLY",
+      "scalarEdits": [],
+      "outputSha256": "fd73ccc6394266ab048a559cc1022463aba0723ab17fb880fd9fd71d15f097e6"
+    },
+    {
+      "signature": "public.weekly_source_finalisation_pay_open_atomic_v1(jsonb)",
+      "leaf": "022_public_weekly_source_finalisation_pay_open_atomic_v1.sqlinc",
+      "current": {
+        "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+        "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/09_complete_pay_consumers.sqlinc",
+        "physical": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/09_complete_pay_consumers.sqlinc",
+        "definitionSha256": "fbbfd7a2bef70cfd74cf479dd344338b71b8eec21129443242a0594cee1ec666"
+      },
+      "oldBase": {
+        "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/09_complete_pay_consumers.sqlinc",
+        "definitionSha256": "fbbfd7a2bef70cfd74cf479dd344338b71b8eec21129443242a0594cee1ec666"
+      },
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/022_public_weekly_source_finalisation_pay_open_atomic_v1.sqlinc",
+        "definitionSha256": "83ffec5357504a5e361aec1ef37d00f3bcc5e676b75b106a429ae1d4bc16e804"
+      },
+      "status": "EXACT_CURRENT_BASE_APPLY",
+      "scalarEdits": [],
+      "outputSha256": "83ffec5357504a5e361aec1ef37d00f3bcc5e676b75b106a429ae1d4bc16e804"
+    },
+    {
+      "signature": "private.weekly_source_invoice_allocation_assert_v1(uuid)",
+      "leaf": "023_private_weekly_source_invoice_allocation_assert_v1.sqlinc",
+      "current": {
+        "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+        "path": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/02_invoice_allocation_assert.sqlinc",
+        "physical": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/02_invoice_allocation_assert.sqlinc",
+        "definitionSha256": "19514a02b4a2c50ad5124b26333b483ee917415400a2f760d8fa991033b063b0"
+      },
+      "oldBase": {
+        "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/02_invoice_allocation_assert.sqlinc",
+        "definitionSha256": "19514a02b4a2c50ad5124b26333b483ee917415400a2f760d8fa991033b063b0"
+      },
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/023_private_weekly_source_invoice_allocation_assert_v1.sqlinc",
+        "definitionSha256": "de761f19799bb080677c42fffcebbc6ed14a01583110451a3a520b33ca1cb7be"
+      },
+      "status": "EXACT_CURRENT_BASE_APPLY",
+      "scalarEdits": [],
+      "outputSha256": "de761f19799bb080677c42fffcebbc6ed14a01583110451a3a520b33ca1cb7be"
+    },
+    {
+      "signature": "private.weekly_source_paid_overlap_current_snapshot_v1(uuid,uuid,uuid,uuid,uuid,uuid,uuid[])",
+      "leaf": "024_private_weekly_source_paid_overlap_current_snapshot_v1.sqlinc",
+      "current": null,
+      "oldBase": null,
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/024_private_weekly_source_paid_overlap_current_snapshot_v1.sqlinc",
+        "definitionSha256": "4d2de23b2ffd54ff17e5addcf7b7980bb128feece3aee2354783a72ffa7465f2"
+      },
+      "status": "NEW_HEALTH_DEFINITION",
+      "scalarEdits": [],
+      "outputSha256": "4d2de23b2ffd54ff17e5addcf7b7980bb128feece3aee2354783a72ffa7465f2"
+    },
+    {
+      "signature": "private.weekly_source_paid_match_retained_transition_assert_v1(uuid)",
+      "leaf": "025_private_weekly_source_paid_match_retained_transition_assert_v1.sqlinc",
+      "current": null,
+      "oldBase": null,
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/025_private_weekly_source_paid_match_retained_transition_assert_v1.sqlinc",
+        "definitionSha256": "66f4f50a76855da26d87ae0c6087dd5c964bc06a7fa1c3884148195e01fcdd0c"
+      },
+      "status": "NEW_HEALTH_DEFINITION",
+      "scalarEdits": [
+        {
+          "before": "'paid_overlap_choice_id',s.paid_overlap_choice_id",
+          "after": "'paid_overlap_choice_id',s.paid_overlap_choice_id::text",
+          "reason": "New bigint choice counter is canonical decimal text in typed projection/hash."
+        },
+        {
+          "before": "to_jsonb(choice)",
+          "after": "(to_jsonb(choice)||jsonb_build_object('id',choice.id::text))",
+          "reason": "New paid-choice audit/immutable typed proof serialises the existing bigint identity losslessly; writer and every comparison use the same bytes."
+        }
+      ],
+      "outputSha256": "eb5be0156e1914817a1695c5a598e8d2be57b7edca1f1c26165b4626fb7040f4"
+    },
+    {
+      "signature": "private.weekly_source_paid_match_question_v1(uuid,uuid,uuid)",
+      "leaf": "026_private_weekly_source_paid_match_question_v1.sqlinc",
+      "current": null,
+      "oldBase": null,
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/026_private_weekly_source_paid_match_question_v1.sqlinc",
+        "definitionSha256": "7246cae44d4a67b904efc12c08702d437b55583e3b341755b6df9c1070461c1b"
+      },
+      "status": "NEW_HEALTH_DEFINITION",
+      "scalarEdits": [],
+      "outputSha256": "133992e08f27d9b1e187ce3406fb18135af78559edc7788fc8ed34b832b7166c"
+    },
+    {
+      "signature": "private.weekly_source_fixed_expense_invoice_values_v1(uuid)",
+      "leaf": "028_private_weekly_source_fixed_expense_invoice_values_v1.sqlinc",
+      "current": null,
+      "oldBase": null,
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/028_private_weekly_source_fixed_expense_invoice_values_v1.sqlinc",
+        "definitionSha256": "0949ccddb26a5bf9360965f5a20b933f5cc485bf152d8b1be826b22c4febaf6d"
+      },
+      "status": "NEW_HEALTH_DEFINITION",
+      "scalarEdits": [],
+      "outputSha256": "0949ccddb26a5bf9360965f5a20b933f5cc485bf152d8b1be826b22c4febaf6d"
+    },
+    {
+      "signature": "private.weekly_source_finalisation_materialise_expense_invoice_v1(uuid,uuid,text,uuid,uuid,uuid,uuid,text)",
+      "leaf": "029_private_weekly_source_finalisation_materialise_expense_invoice_v1.sqlinc",
+      "current": {
+        "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+        "path": "supabase/repeatable/13102026_1433_weekly_source_invoice_money_finalisation_v1.sql",
+        "physical": "supabase/repeatable/13102026_1433_weekly_source_invoice_money_finalisation_v1.sql",
+        "definitionSha256": "6bc61bd4db5b0e43cd526dac4dda41220680a33f924146db3e5eb2b2f902bd4a"
+      },
+      "oldBase": {
+        "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "supabase/repeatable/13102026_1433_weekly_source_invoice_money_finalisation_v1.sql",
+        "definitionSha256": "6bc61bd4db5b0e43cd526dac4dda41220680a33f924146db3e5eb2b2f902bd4a"
+      },
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/029_private_weekly_source_finalisation_materialise_expense_invoice_v1.sqlinc",
+        "definitionSha256": "f7b9e81d4b16cfe7be4c7fcb0051b6643d3e5b79dca0803ad695a08a382c83c1"
+      },
+      "status": "EXACT_CURRENT_BASE_APPLY",
+      "scalarEdits": [],
+      "outputSha256": "f7b9e81d4b16cfe7be4c7fcb0051b6643d3e5b79dca0803ad695a08a382c83c1"
+    },
+    {
+      "signature": "private.weekly_source_paid_match_expense_invoice_origin_assert_v1(uuid)",
+      "leaf": "030_private_weekly_source_paid_match_expense_invoice_origin_assert_v1.sqlinc",
+      "current": null,
+      "oldBase": null,
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/030_private_weekly_source_paid_match_expense_invoice_origin_assert_v1.sqlinc",
+        "definitionSha256": "eed3f2fa8ec6bbf829019fab4fcf4c0cf0b7a862c6cdf5161639ea40816e745b"
+      },
+      "status": "NEW_HEALTH_DEFINITION",
+      "scalarEdits": [
+        {
+          "before": "'paid_overlap_choice_id',s.paid_overlap_choice_id",
+          "after": "'paid_overlap_choice_id',s.paid_overlap_choice_id::text",
+          "reason": "New bigint choice counter is canonical decimal text in typed projection/hash."
+        },
+        {
+          "before": "'paid_overlap_choice_id',s.paid_overlap_choice_id",
+          "after": "'paid_overlap_choice_id',s.paid_overlap_choice_id::text",
+          "reason": "New bigint choice counter is canonical decimal text in typed projection/hash."
+        }
+      ],
+      "outputSha256": "fdb058665f00bfe61fc85977235507606ef5f2a18bb1c4cb593ce9d5ff646c36"
+    },
+    {
+      "signature": "private.weekly_source_paid_match_expense_invoice_insert_v1(uuid,uuid)",
+      "leaf": "031_private_weekly_source_paid_match_expense_invoice_insert_v1.sqlinc",
+      "current": null,
+      "oldBase": null,
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/031_private_weekly_source_paid_match_expense_invoice_insert_v1.sqlinc",
+        "definitionSha256": "90ab0047ebf8ed86f2588da1bb69cb506ef3214661424c8a2e5a4faf00f6f8ab"
+      },
+      "status": "NEW_HEALTH_DEFINITION",
+      "scalarEdits": [
+        {
+          "before": "'paid_overlap_choice_id',s.paid_overlap_choice_id",
+          "after": "'paid_overlap_choice_id',s.paid_overlap_choice_id::text",
+          "reason": "New bigint choice counter is canonical decimal text in typed projection/hash."
+        },
+        {
+          "before": "'paid_overlap_choice_id',s.paid_overlap_choice_id",
+          "after": "'paid_overlap_choice_id',s.paid_overlap_choice_id::text",
+          "reason": "New bigint choice counter is canonical decimal text in typed projection/hash."
+        }
+      ],
+      "outputSha256": "ca74ce24397a4e3c7c7b79feb6562108608b1028af7470ed1b06cf30139234a9"
+    },
+    {
+      "signature": "private.weekly_source_paid_match_prepared_census_recheck_v1(uuid,uuid)",
+      "leaf": "032_private_weekly_source_paid_match_prepared_census_recheck_v1.sqlinc",
+      "current": null,
+      "oldBase": null,
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/032_private_weekly_source_paid_match_prepared_census_recheck_v1.sqlinc",
+        "definitionSha256": "4ad0194ca163db8b20a212992389c0ae1124159f0c19fefc7488485e0720f434"
+      },
+      "status": "NEW_HEALTH_DEFINITION",
+      "scalarEdits": [],
+      "outputSha256": "4ad0194ca163db8b20a212992389c0ae1124159f0c19fefc7488485e0720f434"
+    },
+    {
+      "signature": "private.weekly_source_correct_final_prepared_context_v1(uuid)",
+      "leaf": "033_private_weekly_source_correct_final_prepared_context_v1.sqlinc",
+      "current": {
+        "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+        "path": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_14_private_weekly_source_correct_final_prepared_context_v1.sqlinc",
+        "physical": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_14_private_weekly_source_correct_final_prepared_context_v1.sqlinc",
+        "definitionSha256": "c7dda0516ac218f898881bcca9bef0eed3891c8b51784ef484767a47a6b0bca1"
+      },
+      "oldBase": {
+        "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/09_complete_pay_consumers.sqlinc",
+        "definitionSha256": "bf629c7565943e1cb654949f4af34e67b1440527e4fb7120644c06ddb421f9c8"
+      },
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/033_private_weekly_source_correct_final_prepared_context_v1.sqlinc",
+        "definitionSha256": "652bb18e76e7af746be89873a861573edd5a4e5da218ed2c697e9f6e347785b1"
+      },
+      "status": "EXPLICIT_HEALTH_RECONCILIATION",
+      "scalarEdits": [],
+      "outputSha256": "652bb18e76e7af746be89873a861573edd5a4e5da218ed2c697e9f6e347785b1"
+    },
+    {
+      "signature": "public.weekly_source_correct_final_prepare_atomic_v1(jsonb)",
+      "leaf": "034_public_weekly_source_correct_final_prepare_atomic_v1.sqlinc",
+      "current": {
+        "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+        "path": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_15_public_weekly_source_correct_final_prepare_atomic_v1.sqlinc",
+        "physical": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_15_public_weekly_source_correct_final_prepare_atomic_v1.sqlinc",
+        "definitionSha256": "bc3d04fab041800907973faa559a6d2147fb7988b35077b4b0591d82c2c75c9c"
+      },
+      "oldBase": {
+        "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10c_complete_root_report_consumer_union.sqlinc",
+        "definitionSha256": "5c4a1e776f6682efcde73327fd913d2829f0f244f79a3dfd29c0280c3f7b1be7"
+      },
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/034_public_weekly_source_correct_final_prepare_atomic_v1.sqlinc",
+        "definitionSha256": "bbd9cea855495922481248f65ef8497664b96b785cf96622bb54b75b21f2aea9"
+      },
+      "status": "EXPLICIT_HEALTH_RECONCILIATION",
+      "scalarEdits": [],
+      "outputSha256": "bbd9cea855495922481248f65ef8497664b96b785cf96622bb54b75b21f2aea9"
+    },
+    {
+      "signature": "public.weekly_source_correct_final_apply_atomic_v1(jsonb)",
+      "leaf": "035_public_weekly_source_correct_final_apply_atomic_v1.sqlinc",
+      "current": {
+        "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+        "path": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_16_public_weekly_source_correct_final_apply_atomic_v1.sqlinc",
+        "physical": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_16_public_weekly_source_correct_final_apply_atomic_v1.sqlinc",
+        "definitionSha256": "89a579bda0ad9a569e04525a0fe4c1cb57c0cb02cd6a4ed73c83f41c157b5ef9"
+      },
+      "oldBase": {
+        "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10c_complete_root_report_consumer_union.sqlinc",
+        "definitionSha256": "ef469c9579eb0fc4c702ba9718cac942473d9bebf830aa35e457267d4b0a65e1"
+      },
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/035_public_weekly_source_correct_final_apply_atomic_v1.sqlinc",
+        "definitionSha256": "cc0b4d3b8e57894273c29333b91fb2931b3f7ffec7cf1eb580a8cb7393837e55"
+      },
+      "status": "EXPLICIT_HEALTH_RECONCILIATION",
+      "scalarEdits": [],
+      "outputSha256": "cc0b4d3b8e57894273c29333b91fb2931b3f7ffec7cf1eb580a8cb7393837e55"
+    },
+    {
+      "signature": "private.weekly_source_ordinary_projection_current_expenses_v1(uuid,uuid)",
+      "leaf": "036_private_weekly_source_ordinary_projection_current_expenses_v1.sqlinc",
+      "current": {
+        "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+        "path": "supabase/repeatable/15092026_1534_weekly_source_ordinary_pay_projection_v1.sql",
+        "physical": "supabase/repeatable/15092026_1534_weekly_source_ordinary_pay_projection_v1.sql",
+        "definitionSha256": "8359dd8ec61c8bffc1934377324053203ee88604ee8115eb472667bd494a0897"
+      },
+      "oldBase": {
+        "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "supabase/repeatable/15092026_1534_weekly_source_ordinary_pay_projection_v1.sql",
+        "definitionSha256": "8359dd8ec61c8bffc1934377324053203ee88604ee8115eb472667bd494a0897"
+      },
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/036_private_weekly_source_ordinary_projection_current_expenses_v1.sqlinc",
+        "definitionSha256": "1854bbfc924ebae7d1905094589dcfad5ee956e641f28b8eecd5a0ab04d798f4"
+      },
+      "status": "EXACT_CURRENT_BASE_APPLY",
+      "scalarEdits": [],
+      "outputSha256": "1854bbfc924ebae7d1905094589dcfad5ee956e641f28b8eecd5a0ab04d798f4"
+    },
+    {
+      "signature": "public.weekly_source_office_workspace_v1(jsonb)",
+      "leaf": "037_public_weekly_source_office_workspace_v1.sqlinc",
+      "current": {
+        "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+        "path": "supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/04_complete_office_workspace.sqlinc",
+        "physical": "supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/04_complete_office_workspace.sqlinc",
+        "definitionSha256": "8da0e01f60ff15725f1ffc9148d84d1d8dd2d370f892e1416bcfb930f1de7f43"
+      },
+      "oldBase": {
+        "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+        "definitionSha256": "0693663d6e2bec8846e24d610e7a72d84b88f45fbc557595aecde78a733ece44"
+      },
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/037_public_weekly_source_office_workspace_v1.sqlinc",
+        "definitionSha256": "4528658d02b38f8b946e86751b2ec50f5c7b1c0b03d7d3ca3f9deaa1df889fb2"
+      },
+      "status": "EXPLICIT_HEALTH_RECONCILIATION",
+      "scalarEdits": [],
+      "outputSha256": "2390327e99324e44c0de664a7431a806a2318ef75438889b593e3d71a96d1688"
+    },
+    {
+      "signature": "private.weekly_source_paid_match_correction_scope_v1(uuid,uuid,boolean)",
+      "leaf": "038_private_weekly_source_paid_match_correction_scope_v1.sqlinc",
+      "current": null,
+      "oldBase": null,
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/038_private_weekly_source_paid_match_correction_scope_v1.sqlinc",
+        "definitionSha256": "14aee9541cff0847af7f82719415fe9f0c99d3229ecbc05dd8360ad777c9d3a0"
+      },
+      "status": "NEW_HEALTH_DEFINITION",
+      "scalarEdits": [],
+      "outputSha256": "14aee9541cff0847af7f82719415fe9f0c99d3229ecbc05dd8360ad777c9d3a0"
+    },
+    {
+      "signature": "private.weekly_source_correct_final_office_preview_v1(uuid)",
+      "leaf": "039_private_weekly_source_correct_final_office_preview_v1.sqlinc",
+      "current": {
+        "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+        "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10c_complete_root_report_consumer_union.sqlinc",
+        "physical": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10c_complete_root_report_consumer_union.sqlinc",
+        "definitionSha256": "dacb4504312f3899b029d92655a0476033fa7d7f5c0608f6fdb8050b58c5cc13"
+      },
+      "oldBase": {
+        "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10c_complete_root_report_consumer_union.sqlinc",
+        "definitionSha256": "dacb4504312f3899b029d92655a0476033fa7d7f5c0608f6fdb8050b58c5cc13"
+      },
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/039_private_weekly_source_correct_final_office_preview_v1.sqlinc",
+        "definitionSha256": "e225e5c587f3c6961e631fc5d1c13ef27743c2d03a9fecf953a95f808a3e0f4e"
+      },
+      "status": "EXACT_CURRENT_BASE_APPLY",
+      "scalarEdits": [],
+      "outputSha256": "e225e5c587f3c6961e631fc5d1c13ef27743c2d03a9fecf953a95f808a3e0f4e"
+    },
+    {
+      "signature": "private.weekly_source_roster_prior_states_v1(uuid,uuid,text,date)",
+      "leaf": "040_private_weekly_source_roster_prior_states_v1.sqlinc",
+      "current": null,
+      "oldBase": null,
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/040_private_weekly_source_roster_prior_states_v1.sqlinc",
+        "definitionSha256": "6071ea6634d3ae6d7e3ab08ea652aaced40324753fbb15bae8aefe313c645c36"
+      },
+      "status": "NEW_HEALTH_DEFINITION",
+      "scalarEdits": [],
+      "outputSha256": "6071ea6634d3ae6d7e3ab08ea652aaced40324753fbb15bae8aefe313c645c36"
+    },
+    {
+      "signature": "private.weekly_source_legacy_signed_source_membership_v1(uuid,uuid,uuid,uuid)",
+      "leaf": "041_private_weekly_source_legacy_signed_source_membership_v1.sqlinc",
+      "current": null,
+      "oldBase": null,
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/041_private_weekly_source_legacy_signed_source_membership_v1.sqlinc",
+        "definitionSha256": "53bc5cbae2e266d358a05abd34e5392d4b7f0df1d74c23aa95aa16bf1370a63f"
+      },
+      "status": "NEW_HEALTH_DEFINITION",
+      "scalarEdits": [],
+      "outputSha256": "53bc5cbae2e266d358a05abd34e5392d4b7f0df1d74c23aa95aa16bf1370a63f"
+    },
+    {
+      "signature": "private.weekly_source_paid_overlap_current_snapshot_for_cycle_v1(uuid,uuid,uuid,uuid,uuid,uuid,uuid[],uuid)",
+      "leaf": "042_private_weekly_source_paid_overlap_current_snapshot_for_cycle_v1.sqlinc",
+      "current": null,
+      "oldBase": null,
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/042_private_weekly_source_paid_overlap_current_snapshot_for_cycle_v1.sqlinc",
+        "definitionSha256": "af8317c818fa3f20ef3e09c26587a87b074d9c928f97e0b6a921649d8aa2b912"
+      },
+      "status": "NEW_HEALTH_DEFINITION",
+      "scalarEdits": [],
+      "outputSha256": "af8317c818fa3f20ef3e09c26587a87b074d9c928f97e0b6a921649d8aa2b912"
+    },
+    {
+      "signature": "private.weekly_source_off_rule_setup_shape_assert_v1(jsonb)",
+      "leaf": "043_private_weekly_source_off_rule_setup_shape_assert_v1.sqlinc",
+      "current": {
+        "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+        "path": "supabase/repeatable/16102026_0802_healthroster_f5_native_fixture_participants/030_off_rule_shape.sqlinc",
+        "physical": "supabase/repeatable/16102026_0802_healthroster_f5_native_fixture_participants/030_off_rule_shape.sqlinc",
+        "definitionSha256": "752e9faddd28a846181b22b3410b4553d5b80dfec6d1846ed054885d9aa0e54c"
+      },
+      "oldBase": {
+        "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/21_SETUP_STATIC_SHAPE_ASSERT.sqlinc",
+        "definitionSha256": "b1759e40a531812ead0ce8cbf0b7c450aa87210b13e743be162723b9be368b2a"
+      },
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/043_private_weekly_source_off_rule_setup_shape_assert_v1.sqlinc",
+        "definitionSha256": "2ebf0bf8cae7761af01c6c880b3dd358da98d84ec6f0adda10699b56c15c0955"
+      },
+      "status": "EXPLICIT_HEALTH_RECONCILIATION",
+      "scalarEdits": [],
+      "outputSha256": "b4be99799562c0e445e1d4ce13b45d565304f1c6a374f1288403c343b8d68ca7"
+    },
+    {
+      "signature": "private.weekly_source_off_rule_native_parent_scope_v1(jsonb,uuid,jsonb)",
+      "leaf": "044_private_weekly_source_off_rule_native_parent_scope_v1.sqlinc",
+      "current": {
+        "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+        "path": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/05_OFF_RULE_NATIVE_PARENT_SCOPE.sqlinc",
+        "physical": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/05_OFF_RULE_NATIVE_PARENT_SCOPE.sqlinc",
+        "definitionSha256": "7eefac2bbb43ebb7b862878c27f6019bd05941db556365248459fb6c5bf71219"
+      },
+      "oldBase": {
+        "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/05_OFF_RULE_NATIVE_PARENT_SCOPE.sqlinc",
+        "definitionSha256": "7eefac2bbb43ebb7b862878c27f6019bd05941db556365248459fb6c5bf71219"
+      },
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/044_private_weekly_source_off_rule_native_parent_scope_v1.sqlinc",
+        "definitionSha256": "fd4983528597470c6f05b3e977365f0089a39a1dc5fa195df92f79d2954a3dc1"
+      },
+      "status": "EXACT_CURRENT_BASE_APPLY",
+      "scalarEdits": [],
+      "outputSha256": "fd4983528597470c6f05b3e977365f0089a39a1dc5fa195df92f79d2954a3dc1"
+    },
+    {
+      "signature": "private.weekly_source_rule_qualification_setup_atomic_v1(jsonb)",
+      "leaf": "045_private_weekly_source_rule_qualification_setup_atomic_v1.sqlinc",
+      "current": {
+        "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+        "path": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/06_OFF_RULE_COMMAND.sqlinc",
+        "physical": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/06_OFF_RULE_COMMAND.sqlinc",
+        "definitionSha256": "9047b9cbd4f683c85a8978f0d7ffb96bc5cb392bba811e1fe0f014ed4e8090b4"
+      },
+      "oldBase": {
+        "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/06_OFF_RULE_COMMAND.sqlinc",
+        "definitionSha256": "9047b9cbd4f683c85a8978f0d7ffb96bc5cb392bba811e1fe0f014ed4e8090b4"
+      },
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/045_private_weekly_source_rule_qualification_setup_atomic_v1.sqlinc",
+        "definitionSha256": "9047b9cbd4f683c85a8978f0d7ffb96bc5cb392bba811e1fe0f014ed4e8090b4"
+      },
+      "status": "PRESERVED_CURRENT_NO_NEW_HUNK",
+      "scalarEdits": [],
+      "outputSha256": "9047b9cbd4f683c85a8978f0d7ffb96bc5cb392bba811e1fe0f014ed4e8090b4"
+    },
+    {
+      "signature": "private.weekly_source_rule_qualification_execute_v1(jsonb)",
+      "leaf": "046_private_weekly_source_rule_qualification_execute_v1.sqlinc",
+      "current": {
+        "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+        "path": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/06_OFF_RULE_COMMAND.sqlinc",
+        "physical": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/06_OFF_RULE_COMMAND.sqlinc",
+        "definitionSha256": "4817e333cd4d5d3e5866c0886f7a79c0bc5debdd0ba96c97d2d0bbfa374b6f4c"
+      },
+      "oldBase": {
+        "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/06_OFF_RULE_COMMAND.sqlinc",
+        "definitionSha256": "acc8ef0a375f9bca26b55c4157bc63352958caec4e9016eeed6f1b20dbb55402"
+      },
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/046_private_weekly_source_rule_qualification_execute_v1.sqlinc",
+        "definitionSha256": "66602d9cbed9162a55fa6aa26d624eaac312e37795c7375947b3465918e075f5"
+      },
+      "status": "EXPLICIT_HEALTH_RECONCILIATION",
+      "scalarEdits": [],
+      "outputSha256": "c04c8183b9c239fe5c25f887acc45552c425f80f9143c5965315480185fb70c8"
+    },
+    {
+      "signature": "private.weekly_source_rule_qualification_transport_status_v1(jsonb)",
+      "leaf": "047_private_weekly_source_rule_qualification_transport_status_v1.sqlinc",
+      "current": {
+        "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+        "path": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/08_OFF_RULE_TRANSPORT_STATUS.sqlinc",
+        "physical": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/08_OFF_RULE_TRANSPORT_STATUS.sqlinc",
+        "definitionSha256": "d34435edfb2d6c7cb381f7985de6c05281c5d9c5a4741463adeb3097fd38fc1b"
+      },
+      "oldBase": {
+        "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/08_OFF_RULE_TRANSPORT_STATUS.sqlinc",
+        "definitionSha256": "d34435edfb2d6c7cb381f7985de6c05281c5d9c5a4741463adeb3097fd38fc1b"
+      },
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/047_private_weekly_source_rule_qualification_transport_status_v1.sqlinc",
+        "definitionSha256": "909ef470437e334daee44d6b09fdea2ef9d8a812741898be5e25a9d4c45f3ede"
+      },
+      "status": "EXACT_CURRENT_BASE_APPLY",
+      "scalarEdits": [],
+      "outputSha256": "909ef470437e334daee44d6b09fdea2ef9d8a812741898be5e25a9d4c45f3ede"
+    },
+    {
+      "signature": "private.weekly_source_nhsp_paid_overlap_basis_v1(uuid,uuid,uuid)",
+      "leaf": "048_private_weekly_source_nhsp_paid_overlap_basis_v1.sqlinc",
+      "current": null,
+      "oldBase": null,
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/048_private_weekly_source_nhsp_paid_overlap_basis_v1.sqlinc",
+        "definitionSha256": "8d4683d99dc540e6ebc9b1f484b7964e8b43fc171261d3cb0a2ff8eb312f8552"
+      },
+      "status": "NEW_HEALTH_DEFINITION",
+      "scalarEdits": [],
+      "outputSha256": "8d4683d99dc540e6ebc9b1f484b7964e8b43fc171261d3cb0a2ff8eb312f8552"
+    },
+    {
+      "signature": "private.weekly_source_nhsp_negative_population_v1(uuid,uuid,uuid,uuid)",
+      "leaf": "051_private_weekly_source_nhsp_negative_population_v1.sqlinc",
+      "current": null,
+      "oldBase": null,
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/051_private_weekly_source_nhsp_negative_population_v1.sqlinc",
+        "definitionSha256": "16a22d913e7dbea98a068e5ac9b7dbcccf4d07aa7eafc3b8ca89d920edf28d2a"
+      },
+      "status": "NEW_HEALTH_DEFINITION",
+      "scalarEdits": [],
+      "outputSha256": "16a22d913e7dbea98a068e5ac9b7dbcccf4d07aa7eafc3b8ca89d920edf28d2a"
+    },
+    {
+      "signature": "private.weekly_source_native_line_vat_v1(bigint,boolean,numeric)",
+      "leaf": "052_private_weekly_source_native_line_vat_v1.sqlinc",
+      "current": null,
+      "oldBase": null,
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/052_private_weekly_source_native_line_vat_v1.sqlinc",
+        "definitionSha256": "48e46452f287e5cd89f962b017f3f75c9068762ff71311ed21e5aa71903329cd"
+      },
+      "status": "NEW_HEALTH_DEFINITION",
+      "scalarEdits": [],
+      "outputSha256": "48e46452f287e5cd89f962b017f3f75c9068762ff71311ed21e5aa71903329cd"
+    },
+    {
+      "signature": "private.weekly_source_finalisation_insert_current_movement_v1(uuid,uuid,uuid,uuid,text,text,text,uuid,uuid,uuid,bigint,bigint,text,bytea,uuid,jsonb,uuid,uuid)",
+      "leaf": "053_private_weekly_source_finalisation_insert_current_movement_v1.sqlinc",
+      "current": {
+        "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+        "path": "supabase/repeatable/13102026_1433_weekly_source_invoice_money_finalisation_v1.sql",
+        "physical": "supabase/repeatable/13102026_1433_weekly_source_invoice_money_finalisation_v1.sql",
+        "definitionSha256": "80754fb7b5e2f5d08b45bfed1c1594692390fe7131304588d9e28483cea1e3f4"
+      },
+      "oldBase": {
+        "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "supabase/repeatable/13102026_1433_weekly_source_invoice_money_finalisation_v1.sql",
+        "definitionSha256": "80754fb7b5e2f5d08b45bfed1c1594692390fe7131304588d9e28483cea1e3f4"
+      },
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/053_private_weekly_source_finalisation_insert_current_movement_v1.sqlinc",
+        "definitionSha256": "31e4c78ed215afb5c23fe0f6e6b7fd907c0cbf625bcda809aa73f2b23d304658"
+      },
+      "status": "EXACT_CURRENT_BASE_APPLY",
+      "scalarEdits": [],
+      "outputSha256": "31e4c78ed215afb5c23fe0f6e6b7fd907c0cbf625bcda809aa73f2b23d304658"
+    },
+    {
+      "signature": "private.weekly_source_nhsp_price_admission_v1(uuid,uuid)",
+      "leaf": "054_private_weekly_source_nhsp_price_admission_v1.sqlinc",
+      "current": null,
+      "oldBase": null,
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/054_private_weekly_source_nhsp_price_admission_v1.sqlinc",
+        "definitionSha256": "c3ec444d92827f6453bb7ece23d2d63f9ea83f54100a1155c388f339a12daad5"
+      },
+      "status": "NEW_HEALTH_DEFINITION",
+      "scalarEdits": [],
+      "outputSha256": "c3ec444d92827f6453bb7ece23d2d63f9ea83f54100a1155c388f339a12daad5"
+    },
+    {
+      "signature": "private.weekly_source_nhsp_invoice_values_v1(uuid,uuid)",
+      "leaf": "055_private_weekly_source_nhsp_invoice_values_v1.sqlinc",
+      "current": null,
+      "oldBase": null,
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/055_private_weekly_source_nhsp_invoice_values_v1.sqlinc",
+        "definitionSha256": "452c283700cd04e22a2e4ee6ca2b2b7d7a50e09c3d645bedd9ea9cd27ac509cc"
+      },
+      "status": "NEW_HEALTH_DEFINITION",
+      "scalarEdits": [],
+      "outputSha256": "452c283700cd04e22a2e4ee6ca2b2b7d7a50e09c3d645bedd9ea9cd27ac509cc"
+    },
+    {
+      "signature": "private.weekly_source_nhsp_negative_comparison_v1(jsonb)",
+      "leaf": "056_private_weekly_source_nhsp_negative_comparison_v1.sqlinc",
+      "current": null,
+      "oldBase": null,
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/056_private_weekly_source_nhsp_negative_comparison_v1.sqlinc",
+        "definitionSha256": "e58c0b4daf4340cafb3e82e4837f8ca11de03c54f6d60ed3fcfc0950ab3f9886"
+      },
+      "status": "NEW_HEALTH_DEFINITION",
+      "scalarEdits": [],
+      "outputSha256": "e58c0b4daf4340cafb3e82e4837f8ca11de03c54f6d60ed3fcfc0950ab3f9886"
+    },
+    {
+      "signature": "private.weekly_source_paid_choice_immutable_v1(uuid)",
+      "leaf": "057_private_weekly_source_paid_choice_immutable_v1.sqlinc",
+      "current": null,
+      "oldBase": null,
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/057_private_weekly_source_paid_choice_immutable_v1.sqlinc",
+        "definitionSha256": "6f7aaf19538756f693219af349babe1fd09f578996cb8009454dfac54f9462d0"
+      },
+      "status": "NEW_HEALTH_DEFINITION",
+      "scalarEdits": [
+        {
+          "before": "to_jsonb(v_choice)",
+          "after": "(to_jsonb(v_choice)||jsonb_build_object('id',v_choice.id::text))",
+          "reason": "New paid-choice audit/immutable typed proof serialises the existing bigint identity losslessly; writer and every comparison use the same bytes."
+        },
+        {
+          "before": "to_jsonb(v_choice)",
+          "after": "(to_jsonb(v_choice)||jsonb_build_object('id',v_choice.id::text))",
+          "reason": "New paid-choice audit/immutable typed proof serialises the existing bigint identity losslessly; writer and every comparison use the same bytes."
+        }
+      ],
+      "outputSha256": "a370422cf58252cb5b2f276e3d9e96ff76bde274d4896d3cc5676b75ea523205"
+    },
+    {
+      "signature": "private.weekly_source_nhsp_projection_lock_input_v1(uuid,uuid,uuid)",
+      "leaf": "058_private_weekly_source_nhsp_projection_lock_input_v1.sqlinc",
+      "current": null,
+      "oldBase": null,
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/058_private_weekly_source_nhsp_projection_lock_input_v1.sqlinc",
+        "definitionSha256": "4127a77d0e86c76563c5a749c4a67fe05da33fb0a42fc7c9ad358454045fb4a2"
+      },
+      "status": "NEW_HEALTH_DEFINITION",
+      "scalarEdits": [
+        {
+          "before": "'choice_id',choice.id",
+          "after": "'choice_id',choice.id::text",
+          "reason": "New bigint choice counter is canonical decimal text in typed projection/hash."
+        }
+      ],
+      "outputSha256": "a7233c375393a0cbe9f8783d83b481b2ebf123617a2392de96d8103d28d17d5b"
+    },
+    {
+      "signature": "private.weekly_source_nhsp_projection_choice_recheck_v1(jsonb,jsonb,uuid,uuid)",
+      "leaf": "059_private_weekly_source_nhsp_projection_choice_recheck_v1.sqlinc",
+      "current": null,
+      "oldBase": null,
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/059_private_weekly_source_nhsp_projection_choice_recheck_v1.sqlinc",
+        "definitionSha256": "056bd7b3fc9073afc671fd5d18cd0a3967dfb41ba266d78426359a682b58e1df"
+      },
+      "status": "NEW_HEALTH_DEFINITION",
+      "scalarEdits": [],
+      "outputSha256": "056bd7b3fc9073afc671fd5d18cd0a3967dfb41ba266d78426359a682b58e1df"
+    },
+    {
+      "signature": "private.weekly_source_nhsp_invoice_only_vector_v1(text,bigint)",
+      "leaf": "060_private_weekly_source_nhsp_invoice_only_vector_v1.sqlinc",
+      "current": null,
+      "oldBase": null,
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/060_private_weekly_source_nhsp_invoice_only_vector_v1.sqlinc",
+        "definitionSha256": "7606eea7f07202b5f83bd6d258519fcad9b326ec0ffecd3dd748328e0fa52cc7"
+      },
+      "status": "NEW_HEALTH_DEFINITION",
+      "scalarEdits": [],
+      "outputSha256": "7606eea7f07202b5f83bd6d258519fcad9b326ec0ffecd3dd748328e0fa52cc7"
+    },
+    {
+      "signature": "private.weekly_source_nhsp_none_invoice_basis_v1(uuid,uuid)",
+      "leaf": "061_private_weekly_source_nhsp_none_invoice_basis_v1.sqlinc",
+      "current": null,
+      "oldBase": null,
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/061_private_weekly_source_nhsp_none_invoice_basis_v1.sqlinc",
+        "definitionSha256": "b181f1b63458db135d44fa0fe17d751be36b07ef0514fa80bb6c72355d08e5a2"
+      },
+      "status": "EXPLICIT_HEALTH_RECONCILIATION",
+      "scalarEdits": [
+        {
+          "before": "'paid_overlap_choice_id',choice.id",
+          "after": "'paid_overlap_choice_id',choice.id::text",
+          "reason": "New bigint choice counter is canonical decimal text in typed projection/hash."
+        },
+        {
+          "before": "to_jsonb(choice)",
+          "after": "(to_jsonb(choice)||jsonb_build_object('id',choice.id::text))",
+          "reason": "New paid-choice audit/immutable typed proof serialises the existing bigint identity losslessly; writer and every comparison use the same bytes."
+        }
+      ],
+      "outputSha256": "8b89b3c401fa3fe7770e3c30ab102536142be0af9bfa37313deddae8797a3996"
+    },
+    {
+      "signature": "private.weekly_source_nhsp_none_invoice_origin_assert_v1(uuid)",
+      "leaf": "062_private_weekly_source_nhsp_none_invoice_origin_assert_v1.sqlinc",
+      "current": null,
+      "oldBase": null,
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/062_private_weekly_source_nhsp_none_invoice_origin_assert_v1.sqlinc",
+        "definitionSha256": "c1b0d06edae9c5734bf142b4b46d94ae860c71637175a2a47e131c66f59d70a7"
+      },
+      "status": "NEW_HEALTH_DEFINITION",
+      "scalarEdits": [],
+      "outputSha256": "c1b0d06edae9c5734bf142b4b46d94ae860c71637175a2a47e131c66f59d70a7"
+    },
+    {
+      "signature": "public.weekly_source_workspace_scopes_v1(jsonb)",
+      "leaf": "064_public_weekly_source_workspace_scopes_v1.sqlinc",
+      "current": {
+        "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+        "path": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+        "physical": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+        "definitionSha256": "16695688cb88de999d17d38ef2779a827ed1b1b0cd1847b2d10194ef65e62121"
+      },
+      "oldBase": {
+        "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+        "definitionSha256": "16695688cb88de999d17d38ef2779a827ed1b1b0cd1847b2d10194ef65e62121"
+      },
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/064_public_weekly_source_workspace_scopes_v1.sqlinc",
+        "definitionSha256": "ef29865225c8a487e4ae5e082fa6ce7afcc12d11e823c88da58a83b5e29a5fac"
+      },
+      "status": "EXACT_CURRENT_BASE_APPLY",
+      "scalarEdits": [],
+      "outputSha256": "ef29865225c8a487e4ae5e082fa6ce7afcc12d11e823c88da58a83b5e29a5fac"
+    },
+    {
+      "signature": "private.weekly_source_nhsp_none_write_admit_v1(jsonb,uuid)",
+      "leaf": "066_private_weekly_source_nhsp_none_write_admit_v1.sqlinc",
+      "current": null,
+      "oldBase": null,
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/066_private_weekly_source_nhsp_none_write_admit_v1.sqlinc",
+        "definitionSha256": "f115e1227511ceff3f9f323c01a71bb35d14486f27157bfb89f2d222efc8aaf9"
+      },
+      "status": "NEW_HEALTH_DEFINITION",
+      "scalarEdits": [],
+      "outputSha256": "f115e1227511ceff3f9f323c01a71bb35d14486f27157bfb89f2d222efc8aaf9"
+    },
+    {
+      "signature": "private.weekly_source_nhsp_selected_pay_origin_v1(uuid,uuid,uuid)",
+      "leaf": "068_private_weekly_source_nhsp_selected_pay_origin_v1.sqlinc",
+      "current": null,
+      "oldBase": null,
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/068_private_weekly_source_nhsp_selected_pay_origin_v1.sqlinc",
+        "definitionSha256": "ac364fafd968b493dece36e743a77d11bf3c14f5cf2038fe30b4b6cafbb57554"
+      },
+      "status": "NEW_HEALTH_DEFINITION",
+      "scalarEdits": [],
+      "outputSha256": "ac364fafd968b493dece36e743a77d11bf3c14f5cf2038fe30b4b6cafbb57554"
+    },
+    {
+      "signature": "private.weekly_source_ordinary_projection_active_movements_v1(uuid,uuid)",
+      "leaf": "070_private_weekly_source_ordinary_projection_active_movements_v1.sqlinc",
+      "current": {
+        "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+        "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/09_complete_pay_consumers.sqlinc",
+        "physical": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/09_complete_pay_consumers.sqlinc",
+        "definitionSha256": "74dc0f865b93e05fccfc46153593b1fa3e647fdb8da0c9fbd130fc79ecc93e4e"
+      },
+      "oldBase": {
+        "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/09_complete_pay_consumers.sqlinc",
+        "definitionSha256": "74dc0f865b93e05fccfc46153593b1fa3e647fdb8da0c9fbd130fc79ecc93e4e"
+      },
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/070_private_weekly_source_ordinary_projection_active_movements_v1.sqlinc",
+        "definitionSha256": "845c89e238f32a37f327e7be23976a8049991c75f862df6d21172f310b63aa04"
+      },
+      "status": "EXACT_CURRENT_BASE_APPLY",
+      "scalarEdits": [],
+      "outputSha256": "845c89e238f32a37f327e7be23976a8049991c75f862df6d21172f310b63aa04"
+    },
+    {
+      "signature": "private.weekly_source_known_source_key_v1(uuid,uuid,uuid)",
+      "leaf": "071_private_weekly_source_known_source_key_v1.sqlinc",
+      "current": null,
+      "oldBase": null,
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/rekey-source-alias-all-owner-successor-20261014/forward/00_known_source_key.sqlinc",
+        "sourceSha256": "3efed0771093465c90faed992811b660b8a6f885bcbe7bfd17adfc36eb16d56d",
+        "definitionSha256": "1cb8b4cfec32262840f7776ef80dfb6a0b72c56ef12dce37d386683930619911"
+      },
+      "status": "EXACT_HEALTH_PREREQUISITE_HELPER",
+      "scalarEdits": [],
+      "outputSha256": "1cb8b4cfec32262840f7776ef80dfb6a0b72c56ef12dce37d386683930619911"
+    }
+  ],
+  "excludedBankBodies": [
+    {
+      "signature": "private.bpay_next_source_current_capture_transition_v1(uuid)",
+      "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/027_private_bpay_next_source_current_capture_transition_v1.sqlinc",
+      "bodyRead": false,
+      "disposition": "Genuine Banking-owned native capture/publish/toggle/event seam held; no body is read, copied or implemented."
+    },
+    {
+      "signature": "private.bpay_next_source_nhsp_magnitude_v1(jsonb,jsonb,jsonb)",
+      "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/049_private_bpay_next_source_nhsp_magnitude_v1.sqlinc",
+      "bodyRead": false,
+      "disposition": "Genuine Banking-owned native capture/publish/toggle/event seam held; no body is read, copied or implemented."
+    },
+    {
+      "signature": "private.bpay_next_source_current_capture_movement_v1(uuid)",
+      "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/050_private_bpay_next_source_current_capture_movement_v1.sqlinc",
+      "bodyRead": false,
+      "disposition": "Genuine Banking-owned native capture/publish/toggle/event seam held; no body is read, copied or implemented."
+    },
+    {
+      "signature": "private.bpay_next_source_current_publish_revision_v1(uuid)",
+      "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/063_private_bpay_next_source_current_publish_revision_v1.sqlinc",
+      "bodyRead": false,
+      "disposition": "Genuine Banking-owned native capture/publish/toggle/event seam held; no body is read, copied or implemented."
+    },
+    {
+      "signature": "private.bpay_next_source_current_toggle_v1(text,uuid,boolean)",
+      "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/065_private_bpay_next_source_current_toggle_v1.sqlinc",
+      "bodyRead": false,
+      "disposition": "Genuine Banking-owned native capture/publish/toggle/event seam held; no body is read, copied or implemented."
+    },
+    {
+      "signature": "private.bpay_next_source_current_capture_nhsp_none_v1(uuid)",
+      "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/067_private_bpay_next_source_current_capture_nhsp_none_v1.sqlinc",
+      "bodyRead": false,
+      "disposition": "Genuine Banking-owned native capture/publish/toggle/event seam held; no body is read, copied or implemented."
+    },
+    {
+      "signature": "private.bpay_next_source_current_event_v1(uuid,uuid)",
+      "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/069_private_bpay_next_source_current_event_v1.sqlinc",
+      "bodyRead": false,
+      "disposition": "Genuine Banking-owned native capture/publish/toggle/event seam held; no body is read, copied or implemented."
+    }
+  ],
+  "unresolvedComposition": [],
+  "sourceOnly": true,
+  "installable": false,
+  "native": "NOT_RUN",
+  "dbConnections": 0,
+  "selected": [
+    {
+      "signature": "private.weekly_source_work_event_payment_facts_v1(uuid,uuid,uuid)",
+      "leaf": "001_private_weekly_source_work_event_payment_facts_v1.sqlinc",
+      "current": null,
+      "oldBase": null,
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/001_private_weekly_source_work_event_payment_facts_v1.sqlinc",
+        "definitionSha256": "ca1618f56cd2d89a1e421271157e80402e89b8f56d5546ac3ecc6ac6ad021427"
+      },
+      "status": "NEW_HEALTH_DEFINITION",
+      "scalarEdits": [],
+      "outputSha256": "ca1618f56cd2d89a1e421271157e80402e89b8f56d5546ac3ecc6ac6ad021427"
+    },
+    {
+      "signature": "private.weekly_source_paid_overlap_candidates_v1(uuid,uuid,uuid,uuid)",
+      "leaf": "004_private_weekly_source_paid_overlap_candidates_v1.sqlinc",
+      "current": null,
+      "oldBase": null,
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/004_private_weekly_source_paid_overlap_candidates_v1.sqlinc",
+        "definitionSha256": "f7917d2001dbba53fea6c35c10b20ea98e623591b65c881f330eb374e3e9b891"
+      },
+      "status": "NEW_HEALTH_DEFINITION",
+      "scalarEdits": [],
+      "outputSha256": "f7917d2001dbba53fea6c35c10b20ea98e623591b65c881f330eb374e3e9b891"
+    },
+    {
+      "signature": "private.weekly_source_paid_overlap_choice_admit_v1(jsonb,jsonb)",
+      "leaf": "005_private_weekly_source_paid_overlap_choice_admit_v1.sqlinc",
+      "current": null,
+      "oldBase": null,
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/005_private_weekly_source_paid_overlap_choice_admit_v1.sqlinc",
+        "definitionSha256": "94ced00a3c96bf194075e75804e176b8a1fc37360a32e2014708b187963a6775"
+      },
+      "status": "NEW_HEALTH_DEFINITION",
+      "scalarEdits": [],
+      "outputSha256": "32d62217540e3aa677501f982175a007d7d6553519a142cf2b2db282c76e9d3e"
+    },
+    {
+      "signature": "public.weekly_source_office_recheck_begin_v1(jsonb)",
+      "leaf": "006_public_weekly_source_office_recheck_begin_v1.sqlinc",
+      "current": {
+        "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+        "path": "supabase/repeatable/08102026_1635_weekly_source_released_client_eligibility_v1.sql",
+        "physical": "supabase/repeatable/08102026_1635_weekly_source_released_client_eligibility_v1.sql",
+        "definitionSha256": "dcb2f4fb5e4e62b71a9b3ae9eac3a0c47be89ed42ddd11a782b232481144ab35"
+      },
+      "oldBase": {
+        "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "supabase/repeatable/08102026_1635_weekly_source_released_client_eligibility_v1.sql",
+        "definitionSha256": "dcb2f4fb5e4e62b71a9b3ae9eac3a0c47be89ed42ddd11a782b232481144ab35"
+      },
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/006_public_weekly_source_office_recheck_begin_v1.sqlinc",
+        "definitionSha256": "080f545a2d854f0e63fa04da6bb4becb12889bffccb26626a1863c0b1a60a78b"
+      },
+      "status": "EXACT_CURRENT_BASE_APPLY",
+      "scalarEdits": [
+        {
+          "before": "to_jsonb(v_choice)",
+          "after": "(to_jsonb(v_choice)||jsonb_build_object('id',v_choice.id::text))",
+          "reason": "New paid-choice audit/immutable typed proof serialises the existing bigint identity losslessly; writer and every comparison use the same bytes."
+        }
+      ],
+      "outputSha256": "a194c595de36b023388b4a5595074524658a0bf4eeac2520dda1a6b2234f1115"
+    },
+    {
+      "signature": "private.weekly_source_paid_overlap_choice_current_v1(uuid,uuid)",
+      "leaf": "007_private_weekly_source_paid_overlap_choice_current_v1.sqlinc",
+      "current": null,
+      "oldBase": null,
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/007_private_weekly_source_paid_overlap_choice_current_v1.sqlinc",
+        "definitionSha256": "7c4dd3806fe515ac7ac55b4282aaea5d5b80f9333d4876f9747b1b06605c044a"
+      },
+      "status": "NEW_HEALTH_DEFINITION",
+      "scalarEdits": [
+        {
+          "before": "'choice_id',v_choice.id",
+          "after": "'choice_id',v_choice.id::text",
+          "reason": "New bigint choice counter is canonical decimal text in typed projection/hash."
+        },
+        {
+          "before": "'choice_id',v_choice.id",
+          "after": "'choice_id',v_choice.id::text",
+          "reason": "New bigint choice counter is canonical decimal text in typed projection/hash."
+        }
+      ],
+      "outputSha256": "c5f9ef339af2907dc454a5d5a4bb027a49814b89d61754429bb09231e55fc345"
+    },
+    {
+      "signature": "private.weekly_source_paid_overlap_projection_lock_v1(uuid,uuid,uuid)",
+      "leaf": "008_private_weekly_source_paid_overlap_projection_lock_v1.sqlinc",
+      "current": null,
+      "oldBase": null,
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/008_private_weekly_source_paid_overlap_projection_lock_v1.sqlinc",
+        "definitionSha256": "e7847e002325e1669233e3dc9c77a7fcf37fe53ab91eb673a52b8a5aa15ca2de"
+      },
+      "status": "NEW_HEALTH_DEFINITION",
+      "scalarEdits": [],
+      "outputSha256": "e7847e002325e1669233e3dc9c77a7fcf37fe53ab91eb673a52b8a5aa15ca2de"
+    },
+    {
+      "signature": "public.weekly_source_upload_context_v1(jsonb)",
+      "leaf": "009_public_weekly_source_upload_context_v1.sqlinc",
+      "current": {
+        "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+        "path": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/02_complete_upload_context.sqlinc",
+        "physical": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/02_complete_upload_context.sqlinc",
+        "definitionSha256": "2c573e24d53d21e30672c4328cd539c2209e661a2bbaa07ff9f2fd320965e9aa"
+      },
+      "oldBase": {
+        "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "supabase/repeatable/13102026_2110_healthroster_report_native_fin_worker/08_complete_upload_context.sqlinc",
+        "definitionSha256": "37355a64d3472dea5f2010f154925a548c3c4d8177c55a9dc9ff2dbea9ebcf57"
+      },
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/009_public_weekly_source_upload_context_v1.sqlinc",
+        "definitionSha256": "43668bb2f85b3a0f9102fe3439bcdc0cbb91beb207eb691a25d3ecc821320008"
+      },
+      "status": "EXPLICIT_HEALTH_RECONCILIATION",
+      "scalarEdits": [],
+      "outputSha256": "a64f79d3c3fecaf647f95b1bd5bebc6d62a26c514c379af264dbbfd964f34a1f"
+    },
+    {
+      "signature": "public.weekly_source_projection_rows_apply_atomic_v1(uuid,uuid,jsonb)",
+      "leaf": "010_public_weekly_source_projection_rows_apply_atomic_v1.sqlinc",
+      "current": {
+        "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+        "path": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/03_complete_projection_rows.sqlinc",
+        "physical": "supabase/repeatable/17102026_0113_weekly_source_kept_pay_rekey/03_complete_projection_rows.sqlinc",
+        "definitionSha256": "fd5857ec2b864ff479989901fa93febf8ac2fe590f5e6e1d96a97ce99134cd14"
+      },
+      "oldBase": {
+        "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "supabase/repeatable/13102026_1561_weekly_source_magnit_contract_price_v1.sql",
+        "definitionSha256": "b3fe796d797bd130bc55caaf858b7bf578fe3be25b3194bd5801e766086d27fc"
+      },
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/010_public_weekly_source_projection_rows_apply_atomic_v1.sqlinc",
+        "definitionSha256": "af0dcb77e2ae4abe0a62ad6f5c474f72be21e7d32f7be886db5994e95d2ae19d"
+      },
+      "status": "EXPLICIT_HEALTH_RECONCILIATION",
+      "scalarEdits": [
+        {
+          "before": "'office_separate_choice_id',v_paid_choice_id",
+          "after": "'office_separate_choice_id',v_paid_choice_id::text",
+          "reason": "New bigint choice counter is canonical decimal text in typed projection/hash."
+        }
+      ],
+      "outputSha256": "debaadeecab26a4d70df8520438e440eaf504646969d826d915ece1b2e92a14d"
+    },
+    {
+      "signature": "private.weekly_source_finalise_engine_v1(jsonb,uuid,boolean,text)",
+      "leaf": "011_private_weekly_source_finalise_engine_v1.sqlinc",
+      "current": {
+        "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+        "path": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_08_private_weekly_source_finalise_engine_v1.sqlinc",
+        "physical": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_08_private_weekly_source_finalise_engine_v1.sqlinc",
+        "definitionSha256": "e7bd8ea7fafdee9f9dc6a0b26b1eb88cd52c3e03082fa0dfee9d0dd010591fdf"
+      },
+      "oldBase": {
+        "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "supabase/repeatable/14102026_0821_healthroster_fin4_rebill_record_fields/01_complete_fin4.sqlinc",
+        "definitionSha256": "11d8521f9e0d0526eef2bf0484e037a115978bde63c9f3b5011fddb46a80094c"
+      },
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/011_private_weekly_source_finalise_engine_v1.sqlinc",
+        "definitionSha256": "f8b82163a56af483e30e4d1a03f31df124bb97abc6073fe473374ee632035e45"
+      },
+      "status": "EXPLICIT_HEALTH_RECONCILIATION",
+      "scalarEdits": [
+        {
+          "before": "'paid_overlap_choice_id',v_row.paid_overlap_choice_id",
+          "after": "'paid_overlap_choice_id',v_row.paid_overlap_choice_id::text",
+          "reason": "New bigint choice counter is canonical decimal text in typed projection/hash."
+        },
+        {
+          "before": "'paid_overlap_choice_id',companion.paid_overlap_choice_id",
+          "after": "'paid_overlap_choice_id',companion.paid_overlap_choice_id::text",
+          "reason": "New bigint choice counter is canonical decimal text in typed projection/hash."
+        }
+      ],
+      "outputSha256": "d983af54c5a28db29d002e9efe76cc0ceeaca76c219a767a8177a3ae987b9a07"
+    },
+    {
+      "signature": "private.weekly_source_paid_choice_revision_guard_v1()",
+      "leaf": "012_private_weekly_source_paid_choice_revision_guard_v1.sqlinc",
+      "current": null,
+      "oldBase": null,
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/012_private_weekly_source_paid_choice_revision_guard_v1.sqlinc",
+        "definitionSha256": "d80c92afde82248de112f4092999040b3d72df18c915481c2398b813d68b9d31"
+      },
+      "status": "NEW_HEALTH_DEFINITION",
+      "scalarEdits": [],
+      "outputSha256": "d80c92afde82248de112f4092999040b3d72df18c915481c2398b813d68b9d31"
+    },
+    {
+      "signature": "private.weekly_source_paid_match_invoice_movement_insert_v1(uuid,uuid)",
+      "leaf": "013_private_weekly_source_paid_match_invoice_movement_insert_v1.sqlinc",
+      "current": null,
+      "oldBase": null,
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/013_private_weekly_source_paid_match_invoice_movement_insert_v1.sqlinc",
+        "definitionSha256": "51db47d57c908e6da251e7d457dc5e30a833dbb2371626455ea4c969c2e55bac"
+      },
+      "status": "NEW_HEALTH_DEFINITION",
+      "scalarEdits": [
+        {
+          "before": "'paid_overlap_choice_id',choice.id",
+          "after": "'paid_overlap_choice_id',choice.id::text",
+          "reason": "New bigint choice counter is canonical decimal text in typed projection/hash."
+        }
+      ],
+      "outputSha256": "f9b6d5b411097eed84ae347acfeab622a9b092747377e8b1663b90791e87d979"
+    },
+    {
+      "signature": "private.weekly_source_paid_match_invoice_origin_assert_v1(uuid)",
+      "leaf": "014_private_weekly_source_paid_match_invoice_origin_assert_v1.sqlinc",
+      "current": null,
+      "oldBase": null,
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/014_private_weekly_source_paid_match_invoice_origin_assert_v1.sqlinc",
+        "definitionSha256": "68045b8b6b0323b2ce115ee510e4b67b6c4feb1f0bf0f70e5e1ce33fe1a4c37c"
+      },
+      "status": "NEW_HEALTH_DEFINITION",
+      "scalarEdits": [
+        {
+          "before": "'paid_overlap_choice_id',s.paid_overlap_choice_id",
+          "after": "'paid_overlap_choice_id',s.paid_overlap_choice_id::text",
+          "reason": "New bigint choice counter is canonical decimal text in typed projection/hash."
+        },
+        {
+          "before": "'paid_overlap_choice_id',choice.id",
+          "after": "'paid_overlap_choice_id',choice.id::text",
+          "reason": "New bigint choice counter is canonical decimal text in typed projection/hash."
+        },
+        {
+          "before": "to_jsonb(choice)",
+          "after": "(to_jsonb(choice)||jsonb_build_object('id',choice.id::text))",
+          "reason": "New paid-choice audit/immutable typed proof serialises the existing bigint identity losslessly; writer and every comparison use the same bytes."
+        }
+      ],
+      "outputSha256": "126274d6a4c3d05ae586cb5faa860e784d7f7181f35c6682a50632af5a311d7a"
+    },
+    {
+      "signature": "private.weekly_source_billing_movement_hash_v1(jsonb)",
+      "leaf": "015_private_weekly_source_billing_movement_hash_v1.sqlinc",
+      "current": {
+        "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+        "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/02_money_origins.sqlinc",
+        "physical": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/02_money_origins.sqlinc",
+        "definitionSha256": "04ad7e4819dba0a1d78728e47dc6e13325ff31c48ea128f2ae70bb2ab6bb4782"
+      },
+      "oldBase": {
+        "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/02_money_origins.sqlinc",
+        "definitionSha256": "04ad7e4819dba0a1d78728e47dc6e13325ff31c48ea128f2ae70bb2ab6bb4782"
+      },
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/015_private_weekly_source_billing_movement_hash_v1.sqlinc",
+        "definitionSha256": "59497510f7ec3ebac89d00af1dfecf83cec96a0c02f08640dcb61efab2d24306"
+      },
+      "status": "EXACT_CURRENT_BASE_APPLY",
+      "scalarEdits": [],
+      "outputSha256": "59497510f7ec3ebac89d00af1dfecf83cec96a0c02f08640dcb61efab2d24306"
+    },
+    {
+      "signature": "private.weekly_source_invoice_movement_window_id_v1(uuid)",
+      "leaf": "016_private_weekly_source_invoice_movement_window_id_v1.sqlinc",
+      "current": {
+        "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+        "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/02_money_origins.sqlinc",
+        "physical": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/02_money_origins.sqlinc",
+        "definitionSha256": "4ac1dc27b1ec9cef2c0ca1a66599234ef780d4650817b6d057897dfab335e24b"
+      },
+      "oldBase": {
+        "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/02_money_origins.sqlinc",
+        "definitionSha256": "4ac1dc27b1ec9cef2c0ca1a66599234ef780d4650817b6d057897dfab335e24b"
+      },
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/016_private_weekly_source_invoice_movement_window_id_v1.sqlinc",
+        "definitionSha256": "1014216a2b0724d43c3065a223877b20b8a33b3e628821cc8830b1dad44e0da7"
+      },
+      "status": "EXACT_CURRENT_BASE_APPLY",
+      "scalarEdits": [],
+      "outputSha256": "1014216a2b0724d43c3065a223877b20b8a33b3e628821cc8830b1dad44e0da7"
+    },
+    {
+      "signature": "private.weekly_source_invoice_source_amount_movement_valid_v1(uuid)",
+      "leaf": "017_private_weekly_source_invoice_source_amount_movement_valid_v1.sqlinc",
+      "current": {
+        "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+        "path": "supabase/repeatable/13102026_1431_weekly_source_invoice_money_owners_v1.sql",
+        "physical": "supabase/repeatable/13102026_1431_weekly_source_invoice_money_owners_v1.sql",
+        "definitionSha256": "fdac487a96b1bfb34936ecb650921d5580440819e61d2aee7f27b32eb6bfcc39"
+      },
+      "oldBase": {
+        "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "supabase/repeatable/13102026_1431_weekly_source_invoice_money_owners_v1.sql",
+        "definitionSha256": "fdac487a96b1bfb34936ecb650921d5580440819e61d2aee7f27b32eb6bfcc39"
+      },
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/017_private_weekly_source_invoice_source_amount_movement_valid_v1.sqlinc",
+        "definitionSha256": "912ec45cf6a34830067d882d33b1230110e248d2a981a6d2abfcfa47ad94d580"
+      },
+      "status": "EXACT_CURRENT_BASE_APPLY",
+      "scalarEdits": [],
+      "outputSha256": "912ec45cf6a34830067d882d33b1230110e248d2a981a6d2abfcfa47ad94d580"
+    },
+    {
+      "signature": "public.weekly_source_invoice_admit_atomic_v1(jsonb)",
+      "leaf": "018_public_weekly_source_invoice_admit_atomic_v1.sqlinc",
+      "current": {
+        "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+        "path": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority/01_complete_invoice_authorities.sqlinc",
+        "physical": "supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority/01_complete_invoice_authorities.sqlinc",
+        "definitionSha256": "49e4f533f41134b00e7826a90e9787b726b3b56bef4611859a0ab344dcbbf78a"
+      },
+      "oldBase": {
+        "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "supabase/repeatable/14102026_0541_healthroster_report_current_native_composition/15_complete_native_report_admission.sqlinc",
+        "definitionSha256": "6e92047a29a0b08ad3cdb41edf1695956172c4379b48ee7b192153a3a33a7ec0"
+      },
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/018_public_weekly_source_invoice_admit_atomic_v1.sqlinc",
+        "definitionSha256": "98ed85cdacec920cc52830d1abb54880ebc0c4e554076f8b00a2a2bdc2e43b94"
+      },
+      "status": "CURRENT_3WAY_COMPOSED",
+      "scalarEdits": [
+        {
+          "before": "'paid_overlap_choice_id',snapshot.paid_overlap_choice_id",
+          "after": "'paid_overlap_choice_id',snapshot.paid_overlap_choice_id::text",
+          "reason": "New bigint choice counter is canonical decimal text in typed projection/hash."
+        },
+        {
+          "before": "'paid_overlap_choice_id',snapshot.paid_overlap_choice_id",
+          "after": "'paid_overlap_choice_id',snapshot.paid_overlap_choice_id::text",
+          "reason": "New bigint choice counter is canonical decimal text in typed projection/hash."
+        }
+      ],
+      "outputSha256": "d4f199a8bfa3007ecac4bae45aa1c81e6a5e64dac274885c2f67839c3bdd9dc4"
+    },
+    {
+      "signature": "private.weekly_source_shift_on_self_bill_v1(uuid,uuid)",
+      "leaf": "019_private_weekly_source_shift_on_self_bill_v1.sqlinc",
+      "current": {
+        "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+        "path": "supabase/repeatable/13102026_1431_weekly_source_invoice_money_owners_v1.sql",
+        "physical": "supabase/repeatable/13102026_1431_weekly_source_invoice_money_owners_v1.sql",
+        "definitionSha256": "04e8d3ca4268324616ef9cd7cd47ee6fe7de8bf7a236e278f8e88838c4c83788"
+      },
+      "oldBase": {
+        "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "supabase/repeatable/13102026_1431_weekly_source_invoice_money_owners_v1.sql",
+        "definitionSha256": "04e8d3ca4268324616ef9cd7cd47ee6fe7de8bf7a236e278f8e88838c4c83788"
+      },
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/019_private_weekly_source_shift_on_self_bill_v1.sqlinc",
+        "definitionSha256": "f6ba7106876fe2a1899823cf6bbda51e41561b5385b69d4fe5368923a45b9669"
+      },
+      "status": "EXACT_CURRENT_BASE_APPLY",
+      "scalarEdits": [
+        {
+          "before": "to_jsonb(choice)",
+          "after": "(to_jsonb(choice)||jsonb_build_object('id',choice.id::text))",
+          "reason": "New paid-choice audit/immutable typed proof serialises the existing bigint identity losslessly; writer and every comparison use the same bytes."
+        }
+      ],
+      "outputSha256": "8630d62e4085dc0fb762523ba9c408214ee809d7153a604920128f741b058ae4"
+    },
+    {
+      "signature": "private.weekly_source_ordinary_projection_source_units_v1(uuid,uuid)",
+      "leaf": "020_private_weekly_source_ordinary_projection_source_units_v1.sqlinc",
+      "current": {
+        "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+        "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/09_complete_pay_consumers.sqlinc",
+        "physical": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/09_complete_pay_consumers.sqlinc",
+        "definitionSha256": "dfa04b63145d7316cbf90e7b180220cbb4a4632f9544f16a86b5e69c129d3fce"
+      },
+      "oldBase": {
+        "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/09_complete_pay_consumers.sqlinc",
+        "definitionSha256": "dfa04b63145d7316cbf90e7b180220cbb4a4632f9544f16a86b5e69c129d3fce"
+      },
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/020_private_weekly_source_ordinary_projection_source_units_v1.sqlinc",
+        "definitionSha256": "5b9aed03d8d9c27929f2f426ee4aadde0ec7cab1b269e18a7356efeeac5406c5"
+      },
+      "status": "EXACT_CURRENT_BASE_APPLY",
+      "scalarEdits": [],
+      "outputSha256": "5b9aed03d8d9c27929f2f426ee4aadde0ec7cab1b269e18a7356efeeac5406c5"
+    },
+    {
+      "signature": "private.weekly_source_selected_source_witness_v1(uuid,uuid,uuid)",
+      "leaf": "021_private_weekly_source_selected_source_witness_v1.sqlinc",
+      "current": {
+        "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+        "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/09_complete_pay_consumers.sqlinc",
+        "physical": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/09_complete_pay_consumers.sqlinc",
+        "definitionSha256": "191ea5e4d18e861af194be3937003148eef0abe523a37c0f3c4f51a599f3675a"
+      },
+      "oldBase": {
+        "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/09_complete_pay_consumers.sqlinc",
+        "definitionSha256": "191ea5e4d18e861af194be3937003148eef0abe523a37c0f3c4f51a599f3675a"
+      },
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/021_private_weekly_source_selected_source_witness_v1.sqlinc",
+        "definitionSha256": "fd73ccc6394266ab048a559cc1022463aba0723ab17fb880fd9fd71d15f097e6"
+      },
+      "status": "EXACT_CURRENT_BASE_APPLY",
+      "scalarEdits": [],
+      "outputSha256": "fd73ccc6394266ab048a559cc1022463aba0723ab17fb880fd9fd71d15f097e6"
+    },
+    {
+      "signature": "public.weekly_source_finalisation_pay_open_atomic_v1(jsonb)",
+      "leaf": "022_public_weekly_source_finalisation_pay_open_atomic_v1.sqlinc",
+      "current": {
+        "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+        "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/09_complete_pay_consumers.sqlinc",
+        "physical": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/09_complete_pay_consumers.sqlinc",
+        "definitionSha256": "fbbfd7a2bef70cfd74cf479dd344338b71b8eec21129443242a0594cee1ec666"
+      },
+      "oldBase": {
+        "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/09_complete_pay_consumers.sqlinc",
+        "definitionSha256": "fbbfd7a2bef70cfd74cf479dd344338b71b8eec21129443242a0594cee1ec666"
+      },
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/022_public_weekly_source_finalisation_pay_open_atomic_v1.sqlinc",
+        "definitionSha256": "83ffec5357504a5e361aec1ef37d00f3bcc5e676b75b106a429ae1d4bc16e804"
+      },
+      "status": "EXACT_CURRENT_BASE_APPLY",
+      "scalarEdits": [],
+      "outputSha256": "83ffec5357504a5e361aec1ef37d00f3bcc5e676b75b106a429ae1d4bc16e804"
+    },
+    {
+      "signature": "private.weekly_source_invoice_allocation_assert_v1(uuid)",
+      "leaf": "023_private_weekly_source_invoice_allocation_assert_v1.sqlinc",
+      "current": {
+        "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+        "path": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/02_invoice_allocation_assert.sqlinc",
+        "physical": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/02_invoice_allocation_assert.sqlinc",
+        "definitionSha256": "19514a02b4a2c50ad5124b26333b483ee917415400a2f760d8fa991033b063b0"
+      },
+      "oldBase": {
+        "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "supabase/repeatable/13102026_1705_weekly_source_invoice_adjustments/02_invoice_allocation_assert.sqlinc",
+        "definitionSha256": "19514a02b4a2c50ad5124b26333b483ee917415400a2f760d8fa991033b063b0"
+      },
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/023_private_weekly_source_invoice_allocation_assert_v1.sqlinc",
+        "definitionSha256": "de761f19799bb080677c42fffcebbc6ed14a01583110451a3a520b33ca1cb7be"
+      },
+      "status": "EXACT_CURRENT_BASE_APPLY",
+      "scalarEdits": [],
+      "outputSha256": "de761f19799bb080677c42fffcebbc6ed14a01583110451a3a520b33ca1cb7be"
+    },
+    {
+      "signature": "private.weekly_source_paid_overlap_current_snapshot_v1(uuid,uuid,uuid,uuid,uuid,uuid,uuid[])",
+      "leaf": "024_private_weekly_source_paid_overlap_current_snapshot_v1.sqlinc",
+      "current": null,
+      "oldBase": null,
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/024_private_weekly_source_paid_overlap_current_snapshot_v1.sqlinc",
+        "definitionSha256": "4d2de23b2ffd54ff17e5addcf7b7980bb128feece3aee2354783a72ffa7465f2"
+      },
+      "status": "NEW_HEALTH_DEFINITION",
+      "scalarEdits": [],
+      "outputSha256": "4d2de23b2ffd54ff17e5addcf7b7980bb128feece3aee2354783a72ffa7465f2"
+    },
+    {
+      "signature": "private.weekly_source_paid_match_retained_transition_assert_v1(uuid)",
+      "leaf": "025_private_weekly_source_paid_match_retained_transition_assert_v1.sqlinc",
+      "current": null,
+      "oldBase": null,
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/025_private_weekly_source_paid_match_retained_transition_assert_v1.sqlinc",
+        "definitionSha256": "66f4f50a76855da26d87ae0c6087dd5c964bc06a7fa1c3884148195e01fcdd0c"
+      },
+      "status": "NEW_HEALTH_DEFINITION",
+      "scalarEdits": [
+        {
+          "before": "'paid_overlap_choice_id',s.paid_overlap_choice_id",
+          "after": "'paid_overlap_choice_id',s.paid_overlap_choice_id::text",
+          "reason": "New bigint choice counter is canonical decimal text in typed projection/hash."
+        },
+        {
+          "before": "to_jsonb(choice)",
+          "after": "(to_jsonb(choice)||jsonb_build_object('id',choice.id::text))",
+          "reason": "New paid-choice audit/immutable typed proof serialises the existing bigint identity losslessly; writer and every comparison use the same bytes."
+        }
+      ],
+      "outputSha256": "eb5be0156e1914817a1695c5a598e8d2be57b7edca1f1c26165b4626fb7040f4"
+    },
+    {
+      "signature": "private.weekly_source_paid_match_question_v1(uuid,uuid,uuid)",
+      "leaf": "026_private_weekly_source_paid_match_question_v1.sqlinc",
+      "current": null,
+      "oldBase": null,
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/026_private_weekly_source_paid_match_question_v1.sqlinc",
+        "definitionSha256": "7246cae44d4a67b904efc12c08702d437b55583e3b341755b6df9c1070461c1b"
+      },
+      "status": "NEW_HEALTH_DEFINITION",
+      "scalarEdits": [],
+      "outputSha256": "133992e08f27d9b1e187ce3406fb18135af78559edc7788fc8ed34b832b7166c"
+    },
+    {
+      "signature": "private.weekly_source_fixed_expense_invoice_values_v1(uuid)",
+      "leaf": "028_private_weekly_source_fixed_expense_invoice_values_v1.sqlinc",
+      "current": null,
+      "oldBase": null,
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/028_private_weekly_source_fixed_expense_invoice_values_v1.sqlinc",
+        "definitionSha256": "0949ccddb26a5bf9360965f5a20b933f5cc485bf152d8b1be826b22c4febaf6d"
+      },
+      "status": "NEW_HEALTH_DEFINITION",
+      "scalarEdits": [],
+      "outputSha256": "0949ccddb26a5bf9360965f5a20b933f5cc485bf152d8b1be826b22c4febaf6d"
+    },
+    {
+      "signature": "private.weekly_source_finalisation_materialise_expense_invoice_v1(uuid,uuid,text,uuid,uuid,uuid,uuid,text)",
+      "leaf": "029_private_weekly_source_finalisation_materialise_expense_invoice_v1.sqlinc",
+      "current": {
+        "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+        "path": "supabase/repeatable/13102026_1433_weekly_source_invoice_money_finalisation_v1.sql",
+        "physical": "supabase/repeatable/13102026_1433_weekly_source_invoice_money_finalisation_v1.sql",
+        "definitionSha256": "6bc61bd4db5b0e43cd526dac4dda41220680a33f924146db3e5eb2b2f902bd4a"
+      },
+      "oldBase": {
+        "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "supabase/repeatable/13102026_1433_weekly_source_invoice_money_finalisation_v1.sql",
+        "definitionSha256": "6bc61bd4db5b0e43cd526dac4dda41220680a33f924146db3e5eb2b2f902bd4a"
+      },
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/029_private_weekly_source_finalisation_materialise_expense_invoice_v1.sqlinc",
+        "definitionSha256": "f7b9e81d4b16cfe7be4c7fcb0051b6643d3e5b79dca0803ad695a08a382c83c1"
+      },
+      "status": "EXACT_CURRENT_BASE_APPLY",
+      "scalarEdits": [],
+      "outputSha256": "f7b9e81d4b16cfe7be4c7fcb0051b6643d3e5b79dca0803ad695a08a382c83c1"
+    },
+    {
+      "signature": "private.weekly_source_paid_match_expense_invoice_origin_assert_v1(uuid)",
+      "leaf": "030_private_weekly_source_paid_match_expense_invoice_origin_assert_v1.sqlinc",
+      "current": null,
+      "oldBase": null,
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/030_private_weekly_source_paid_match_expense_invoice_origin_assert_v1.sqlinc",
+        "definitionSha256": "eed3f2fa8ec6bbf829019fab4fcf4c0cf0b7a862c6cdf5161639ea40816e745b"
+      },
+      "status": "NEW_HEALTH_DEFINITION",
+      "scalarEdits": [
+        {
+          "before": "'paid_overlap_choice_id',s.paid_overlap_choice_id",
+          "after": "'paid_overlap_choice_id',s.paid_overlap_choice_id::text",
+          "reason": "New bigint choice counter is canonical decimal text in typed projection/hash."
+        },
+        {
+          "before": "'paid_overlap_choice_id',s.paid_overlap_choice_id",
+          "after": "'paid_overlap_choice_id',s.paid_overlap_choice_id::text",
+          "reason": "New bigint choice counter is canonical decimal text in typed projection/hash."
+        }
+      ],
+      "outputSha256": "fdb058665f00bfe61fc85977235507606ef5f2a18bb1c4cb593ce9d5ff646c36"
+    },
+    {
+      "signature": "private.weekly_source_paid_match_expense_invoice_insert_v1(uuid,uuid)",
+      "leaf": "031_private_weekly_source_paid_match_expense_invoice_insert_v1.sqlinc",
+      "current": null,
+      "oldBase": null,
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/031_private_weekly_source_paid_match_expense_invoice_insert_v1.sqlinc",
+        "definitionSha256": "90ab0047ebf8ed86f2588da1bb69cb506ef3214661424c8a2e5a4faf00f6f8ab"
+      },
+      "status": "NEW_HEALTH_DEFINITION",
+      "scalarEdits": [
+        {
+          "before": "'paid_overlap_choice_id',s.paid_overlap_choice_id",
+          "after": "'paid_overlap_choice_id',s.paid_overlap_choice_id::text",
+          "reason": "New bigint choice counter is canonical decimal text in typed projection/hash."
+        },
+        {
+          "before": "'paid_overlap_choice_id',s.paid_overlap_choice_id",
+          "after": "'paid_overlap_choice_id',s.paid_overlap_choice_id::text",
+          "reason": "New bigint choice counter is canonical decimal text in typed projection/hash."
+        }
+      ],
+      "outputSha256": "ca74ce24397a4e3c7c7b79feb6562108608b1028af7470ed1b06cf30139234a9"
+    },
+    {
+      "signature": "private.weekly_source_paid_match_prepared_census_recheck_v1(uuid,uuid)",
+      "leaf": "032_private_weekly_source_paid_match_prepared_census_recheck_v1.sqlinc",
+      "current": null,
+      "oldBase": null,
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/032_private_weekly_source_paid_match_prepared_census_recheck_v1.sqlinc",
+        "definitionSha256": "4ad0194ca163db8b20a212992389c0ae1124159f0c19fefc7488485e0720f434"
+      },
+      "status": "NEW_HEALTH_DEFINITION",
+      "scalarEdits": [],
+      "outputSha256": "4ad0194ca163db8b20a212992389c0ae1124159f0c19fefc7488485e0720f434"
+    },
+    {
+      "signature": "private.weekly_source_correct_final_prepared_context_v1(uuid)",
+      "leaf": "033_private_weekly_source_correct_final_prepared_context_v1.sqlinc",
+      "current": {
+        "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+        "path": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_14_private_weekly_source_correct_final_prepared_context_v1.sqlinc",
+        "physical": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_14_private_weekly_source_correct_final_prepared_context_v1.sqlinc",
+        "definitionSha256": "c7dda0516ac218f898881bcca9bef0eed3891c8b51784ef484767a47a6b0bca1"
+      },
+      "oldBase": {
+        "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/09_complete_pay_consumers.sqlinc",
+        "definitionSha256": "bf629c7565943e1cb654949f4af34e67b1440527e4fb7120644c06ddb421f9c8"
+      },
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/033_private_weekly_source_correct_final_prepared_context_v1.sqlinc",
+        "definitionSha256": "652bb18e76e7af746be89873a861573edd5a4e5da218ed2c697e9f6e347785b1"
+      },
+      "status": "EXPLICIT_HEALTH_RECONCILIATION",
+      "scalarEdits": [],
+      "outputSha256": "652bb18e76e7af746be89873a861573edd5a4e5da218ed2c697e9f6e347785b1"
+    },
+    {
+      "signature": "public.weekly_source_correct_final_prepare_atomic_v1(jsonb)",
+      "leaf": "034_public_weekly_source_correct_final_prepare_atomic_v1.sqlinc",
+      "current": {
+        "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+        "path": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_15_public_weekly_source_correct_final_prepare_atomic_v1.sqlinc",
+        "physical": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_15_public_weekly_source_correct_final_prepare_atomic_v1.sqlinc",
+        "definitionSha256": "bc3d04fab041800907973faa559a6d2147fb7988b35077b4b0591d82c2c75c9c"
+      },
+      "oldBase": {
+        "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10c_complete_root_report_consumer_union.sqlinc",
+        "definitionSha256": "5c4a1e776f6682efcde73327fd913d2829f0f244f79a3dfd29c0280c3f7b1be7"
+      },
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/034_public_weekly_source_correct_final_prepare_atomic_v1.sqlinc",
+        "definitionSha256": "bbd9cea855495922481248f65ef8497664b96b785cf96622bb54b75b21f2aea9"
+      },
+      "status": "EXPLICIT_HEALTH_RECONCILIATION",
+      "scalarEdits": [],
+      "outputSha256": "bbd9cea855495922481248f65ef8497664b96b785cf96622bb54b75b21f2aea9"
+    },
+    {
+      "signature": "public.weekly_source_correct_final_apply_atomic_v1(jsonb)",
+      "leaf": "035_public_weekly_source_correct_final_apply_atomic_v1.sqlinc",
+      "current": {
+        "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+        "path": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_16_public_weekly_source_correct_final_apply_atomic_v1.sqlinc",
+        "physical": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_16_public_weekly_source_correct_final_apply_atomic_v1.sqlinc",
+        "definitionSha256": "89a579bda0ad9a569e04525a0fe4c1cb57c0cb02cd6a4ed73c83f41c157b5ef9"
+      },
+      "oldBase": {
+        "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10c_complete_root_report_consumer_union.sqlinc",
+        "definitionSha256": "ef469c9579eb0fc4c702ba9718cac942473d9bebf830aa35e457267d4b0a65e1"
+      },
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/035_public_weekly_source_correct_final_apply_atomic_v1.sqlinc",
+        "definitionSha256": "cc0b4d3b8e57894273c29333b91fb2931b3f7ffec7cf1eb580a8cb7393837e55"
+      },
+      "status": "EXPLICIT_HEALTH_RECONCILIATION",
+      "scalarEdits": [],
+      "outputSha256": "cc0b4d3b8e57894273c29333b91fb2931b3f7ffec7cf1eb580a8cb7393837e55"
+    },
+    {
+      "signature": "private.weekly_source_ordinary_projection_current_expenses_v1(uuid,uuid)",
+      "leaf": "036_private_weekly_source_ordinary_projection_current_expenses_v1.sqlinc",
+      "current": {
+        "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+        "path": "supabase/repeatable/15092026_1534_weekly_source_ordinary_pay_projection_v1.sql",
+        "physical": "supabase/repeatable/15092026_1534_weekly_source_ordinary_pay_projection_v1.sql",
+        "definitionSha256": "8359dd8ec61c8bffc1934377324053203ee88604ee8115eb472667bd494a0897"
+      },
+      "oldBase": {
+        "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "supabase/repeatable/15092026_1534_weekly_source_ordinary_pay_projection_v1.sql",
+        "definitionSha256": "8359dd8ec61c8bffc1934377324053203ee88604ee8115eb472667bd494a0897"
+      },
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/036_private_weekly_source_ordinary_projection_current_expenses_v1.sqlinc",
+        "definitionSha256": "1854bbfc924ebae7d1905094589dcfad5ee956e641f28b8eecd5a0ab04d798f4"
+      },
+      "status": "EXACT_CURRENT_BASE_APPLY",
+      "scalarEdits": [],
+      "outputSha256": "1854bbfc924ebae7d1905094589dcfad5ee956e641f28b8eecd5a0ab04d798f4"
+    },
+    {
+      "signature": "public.weekly_source_office_workspace_v1(jsonb)",
+      "leaf": "037_public_weekly_source_office_workspace_v1.sqlinc",
+      "current": {
+        "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+        "path": "supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/04_complete_office_workspace.sqlinc",
+        "physical": "supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/04_complete_office_workspace.sqlinc",
+        "definitionSha256": "8da0e01f60ff15725f1ffc9148d84d1d8dd2d370f892e1416bcfb930f1de7f43"
+      },
+      "oldBase": {
+        "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+        "definitionSha256": "0693663d6e2bec8846e24d610e7a72d84b88f45fbc557595aecde78a733ece44"
+      },
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/037_public_weekly_source_office_workspace_v1.sqlinc",
+        "definitionSha256": "4528658d02b38f8b946e86751b2ec50f5c7b1c0b03d7d3ca3f9deaa1df889fb2"
+      },
+      "status": "EXPLICIT_HEALTH_RECONCILIATION",
+      "scalarEdits": [],
+      "outputSha256": "2390327e99324e44c0de664a7431a806a2318ef75438889b593e3d71a96d1688"
+    },
+    {
+      "signature": "private.weekly_source_paid_match_correction_scope_v1(uuid,uuid,boolean)",
+      "leaf": "038_private_weekly_source_paid_match_correction_scope_v1.sqlinc",
+      "current": null,
+      "oldBase": null,
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/038_private_weekly_source_paid_match_correction_scope_v1.sqlinc",
+        "definitionSha256": "14aee9541cff0847af7f82719415fe9f0c99d3229ecbc05dd8360ad777c9d3a0"
+      },
+      "status": "NEW_HEALTH_DEFINITION",
+      "scalarEdits": [],
+      "outputSha256": "14aee9541cff0847af7f82719415fe9f0c99d3229ecbc05dd8360ad777c9d3a0"
+    },
+    {
+      "signature": "private.weekly_source_correct_final_office_preview_v1(uuid)",
+      "leaf": "039_private_weekly_source_correct_final_office_preview_v1.sqlinc",
+      "current": {
+        "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+        "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10c_complete_root_report_consumer_union.sqlinc",
+        "physical": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10c_complete_root_report_consumer_union.sqlinc",
+        "definitionSha256": "dacb4504312f3899b029d92655a0476033fa7d7f5c0608f6fdb8050b58c5cc13"
+      },
+      "oldBase": {
+        "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/10c_complete_root_report_consumer_union.sqlinc",
+        "definitionSha256": "dacb4504312f3899b029d92655a0476033fa7d7f5c0608f6fdb8050b58c5cc13"
+      },
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/039_private_weekly_source_correct_final_office_preview_v1.sqlinc",
+        "definitionSha256": "e225e5c587f3c6961e631fc5d1c13ef27743c2d03a9fecf953a95f808a3e0f4e"
+      },
+      "status": "EXACT_CURRENT_BASE_APPLY",
+      "scalarEdits": [],
+      "outputSha256": "e225e5c587f3c6961e631fc5d1c13ef27743c2d03a9fecf953a95f808a3e0f4e"
+    },
+    {
+      "signature": "private.weekly_source_roster_prior_states_v1(uuid,uuid,text,date)",
+      "leaf": "040_private_weekly_source_roster_prior_states_v1.sqlinc",
+      "current": null,
+      "oldBase": null,
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/040_private_weekly_source_roster_prior_states_v1.sqlinc",
+        "definitionSha256": "6071ea6634d3ae6d7e3ab08ea652aaced40324753fbb15bae8aefe313c645c36"
+      },
+      "status": "NEW_HEALTH_DEFINITION",
+      "scalarEdits": [],
+      "outputSha256": "6071ea6634d3ae6d7e3ab08ea652aaced40324753fbb15bae8aefe313c645c36"
+    },
+    {
+      "signature": "private.weekly_source_legacy_signed_source_membership_v1(uuid,uuid,uuid,uuid)",
+      "leaf": "041_private_weekly_source_legacy_signed_source_membership_v1.sqlinc",
+      "current": null,
+      "oldBase": null,
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/041_private_weekly_source_legacy_signed_source_membership_v1.sqlinc",
+        "definitionSha256": "53bc5cbae2e266d358a05abd34e5392d4b7f0df1d74c23aa95aa16bf1370a63f"
+      },
+      "status": "NEW_HEALTH_DEFINITION",
+      "scalarEdits": [],
+      "outputSha256": "53bc5cbae2e266d358a05abd34e5392d4b7f0df1d74c23aa95aa16bf1370a63f"
+    },
+    {
+      "signature": "private.weekly_source_paid_overlap_current_snapshot_for_cycle_v1(uuid,uuid,uuid,uuid,uuid,uuid,uuid[],uuid)",
+      "leaf": "042_private_weekly_source_paid_overlap_current_snapshot_for_cycle_v1.sqlinc",
+      "current": null,
+      "oldBase": null,
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/042_private_weekly_source_paid_overlap_current_snapshot_for_cycle_v1.sqlinc",
+        "definitionSha256": "af8317c818fa3f20ef3e09c26587a87b074d9c928f97e0b6a921649d8aa2b912"
+      },
+      "status": "NEW_HEALTH_DEFINITION",
+      "scalarEdits": [],
+      "outputSha256": "af8317c818fa3f20ef3e09c26587a87b074d9c928f97e0b6a921649d8aa2b912"
+    },
+    {
+      "signature": "private.weekly_source_off_rule_setup_shape_assert_v1(jsonb)",
+      "leaf": "043_private_weekly_source_off_rule_setup_shape_assert_v1.sqlinc",
+      "current": {
+        "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+        "path": "supabase/repeatable/16102026_0802_healthroster_f5_native_fixture_participants/030_off_rule_shape.sqlinc",
+        "physical": "supabase/repeatable/16102026_0802_healthroster_f5_native_fixture_participants/030_off_rule_shape.sqlinc",
+        "definitionSha256": "752e9faddd28a846181b22b3410b4553d5b80dfec6d1846ed054885d9aa0e54c"
+      },
+      "oldBase": {
+        "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/21_SETUP_STATIC_SHAPE_ASSERT.sqlinc",
+        "definitionSha256": "b1759e40a531812ead0ce8cbf0b7c450aa87210b13e743be162723b9be368b2a"
+      },
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/043_private_weekly_source_off_rule_setup_shape_assert_v1.sqlinc",
+        "definitionSha256": "2ebf0bf8cae7761af01c6c880b3dd358da98d84ec6f0adda10699b56c15c0955"
+      },
+      "status": "EXPLICIT_HEALTH_RECONCILIATION",
+      "scalarEdits": [],
+      "outputSha256": "b4be99799562c0e445e1d4ce13b45d565304f1c6a374f1288403c343b8d68ca7"
+    },
+    {
+      "signature": "private.weekly_source_off_rule_native_parent_scope_v1(jsonb,uuid,jsonb)",
+      "leaf": "044_private_weekly_source_off_rule_native_parent_scope_v1.sqlinc",
+      "current": {
+        "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+        "path": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/05_OFF_RULE_NATIVE_PARENT_SCOPE.sqlinc",
+        "physical": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/05_OFF_RULE_NATIVE_PARENT_SCOPE.sqlinc",
+        "definitionSha256": "7eefac2bbb43ebb7b862878c27f6019bd05941db556365248459fb6c5bf71219"
+      },
+      "oldBase": {
+        "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/05_OFF_RULE_NATIVE_PARENT_SCOPE.sqlinc",
+        "definitionSha256": "7eefac2bbb43ebb7b862878c27f6019bd05941db556365248459fb6c5bf71219"
+      },
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/044_private_weekly_source_off_rule_native_parent_scope_v1.sqlinc",
+        "definitionSha256": "fd4983528597470c6f05b3e977365f0089a39a1dc5fa195df92f79d2954a3dc1"
+      },
+      "status": "EXACT_CURRENT_BASE_APPLY",
+      "scalarEdits": [],
+      "outputSha256": "fd4983528597470c6f05b3e977365f0089a39a1dc5fa195df92f79d2954a3dc1"
+    },
+    {
+      "signature": "private.weekly_source_rule_qualification_execute_v1(jsonb)",
+      "leaf": "046_private_weekly_source_rule_qualification_execute_v1.sqlinc",
+      "current": {
+        "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+        "path": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/06_OFF_RULE_COMMAND.sqlinc",
+        "physical": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/06_OFF_RULE_COMMAND.sqlinc",
+        "definitionSha256": "4817e333cd4d5d3e5866c0886f7a79c0bc5debdd0ba96c97d2d0bbfa374b6f4c"
+      },
+      "oldBase": {
+        "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/06_OFF_RULE_COMMAND.sqlinc",
+        "definitionSha256": "acc8ef0a375f9bca26b55c4157bc63352958caec4e9016eeed6f1b20dbb55402"
+      },
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/046_private_weekly_source_rule_qualification_execute_v1.sqlinc",
+        "definitionSha256": "66602d9cbed9162a55fa6aa26d624eaac312e37795c7375947b3465918e075f5"
+      },
+      "status": "EXPLICIT_HEALTH_RECONCILIATION",
+      "scalarEdits": [],
+      "outputSha256": "c04c8183b9c239fe5c25f887acc45552c425f80f9143c5965315480185fb70c8"
+    },
+    {
+      "signature": "private.weekly_source_rule_qualification_transport_status_v1(jsonb)",
+      "leaf": "047_private_weekly_source_rule_qualification_transport_status_v1.sqlinc",
+      "current": {
+        "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+        "path": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/08_OFF_RULE_TRANSPORT_STATUS.sqlinc",
+        "physical": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/08_OFF_RULE_TRANSPORT_STATUS.sqlinc",
+        "definitionSha256": "d34435edfb2d6c7cb381f7985de6c05281c5d9c5a4741463adeb3097fd38fc1b"
+      },
+      "oldBase": {
+        "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/08_OFF_RULE_TRANSPORT_STATUS.sqlinc",
+        "definitionSha256": "d34435edfb2d6c7cb381f7985de6c05281c5d9c5a4741463adeb3097fd38fc1b"
+      },
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/047_private_weekly_source_rule_qualification_transport_status_v1.sqlinc",
+        "definitionSha256": "909ef470437e334daee44d6b09fdea2ef9d8a812741898be5e25a9d4c45f3ede"
+      },
+      "status": "EXACT_CURRENT_BASE_APPLY",
+      "scalarEdits": [],
+      "outputSha256": "909ef470437e334daee44d6b09fdea2ef9d8a812741898be5e25a9d4c45f3ede"
+    },
+    {
+      "signature": "private.weekly_source_nhsp_paid_overlap_basis_v1(uuid,uuid,uuid)",
+      "leaf": "048_private_weekly_source_nhsp_paid_overlap_basis_v1.sqlinc",
+      "current": null,
+      "oldBase": null,
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/048_private_weekly_source_nhsp_paid_overlap_basis_v1.sqlinc",
+        "definitionSha256": "8d4683d99dc540e6ebc9b1f484b7964e8b43fc171261d3cb0a2ff8eb312f8552"
+      },
+      "status": "NEW_HEALTH_DEFINITION",
+      "scalarEdits": [],
+      "outputSha256": "8d4683d99dc540e6ebc9b1f484b7964e8b43fc171261d3cb0a2ff8eb312f8552"
+    },
+    {
+      "signature": "private.weekly_source_nhsp_negative_population_v1(uuid,uuid,uuid,uuid)",
+      "leaf": "051_private_weekly_source_nhsp_negative_population_v1.sqlinc",
+      "current": null,
+      "oldBase": null,
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/051_private_weekly_source_nhsp_negative_population_v1.sqlinc",
+        "definitionSha256": "16a22d913e7dbea98a068e5ac9b7dbcccf4d07aa7eafc3b8ca89d920edf28d2a"
+      },
+      "status": "NEW_HEALTH_DEFINITION",
+      "scalarEdits": [],
+      "outputSha256": "16a22d913e7dbea98a068e5ac9b7dbcccf4d07aa7eafc3b8ca89d920edf28d2a"
+    },
+    {
+      "signature": "private.weekly_source_native_line_vat_v1(bigint,boolean,numeric)",
+      "leaf": "052_private_weekly_source_native_line_vat_v1.sqlinc",
+      "current": null,
+      "oldBase": null,
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/052_private_weekly_source_native_line_vat_v1.sqlinc",
+        "definitionSha256": "48e46452f287e5cd89f962b017f3f75c9068762ff71311ed21e5aa71903329cd"
+      },
+      "status": "NEW_HEALTH_DEFINITION",
+      "scalarEdits": [],
+      "outputSha256": "48e46452f287e5cd89f962b017f3f75c9068762ff71311ed21e5aa71903329cd"
+    },
+    {
+      "signature": "private.weekly_source_finalisation_insert_current_movement_v1(uuid,uuid,uuid,uuid,text,text,text,uuid,uuid,uuid,bigint,bigint,text,bytea,uuid,jsonb,uuid,uuid)",
+      "leaf": "053_private_weekly_source_finalisation_insert_current_movement_v1.sqlinc",
+      "current": {
+        "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+        "path": "supabase/repeatable/13102026_1433_weekly_source_invoice_money_finalisation_v1.sql",
+        "physical": "supabase/repeatable/13102026_1433_weekly_source_invoice_money_finalisation_v1.sql",
+        "definitionSha256": "80754fb7b5e2f5d08b45bfed1c1594692390fe7131304588d9e28483cea1e3f4"
+      },
+      "oldBase": {
+        "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "supabase/repeatable/13102026_1433_weekly_source_invoice_money_finalisation_v1.sql",
+        "definitionSha256": "80754fb7b5e2f5d08b45bfed1c1594692390fe7131304588d9e28483cea1e3f4"
+      },
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/053_private_weekly_source_finalisation_insert_current_movement_v1.sqlinc",
+        "definitionSha256": "31e4c78ed215afb5c23fe0f6e6b7fd907c0cbf625bcda809aa73f2b23d304658"
+      },
+      "status": "EXACT_CURRENT_BASE_APPLY",
+      "scalarEdits": [],
+      "outputSha256": "31e4c78ed215afb5c23fe0f6e6b7fd907c0cbf625bcda809aa73f2b23d304658"
+    },
+    {
+      "signature": "private.weekly_source_nhsp_price_admission_v1(uuid,uuid)",
+      "leaf": "054_private_weekly_source_nhsp_price_admission_v1.sqlinc",
+      "current": null,
+      "oldBase": null,
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/054_private_weekly_source_nhsp_price_admission_v1.sqlinc",
+        "definitionSha256": "c3ec444d92827f6453bb7ece23d2d63f9ea83f54100a1155c388f339a12daad5"
+      },
+      "status": "NEW_HEALTH_DEFINITION",
+      "scalarEdits": [],
+      "outputSha256": "c3ec444d92827f6453bb7ece23d2d63f9ea83f54100a1155c388f339a12daad5"
+    },
+    {
+      "signature": "private.weekly_source_nhsp_invoice_values_v1(uuid,uuid)",
+      "leaf": "055_private_weekly_source_nhsp_invoice_values_v1.sqlinc",
+      "current": null,
+      "oldBase": null,
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/055_private_weekly_source_nhsp_invoice_values_v1.sqlinc",
+        "definitionSha256": "452c283700cd04e22a2e4ee6ca2b2b7d7a50e09c3d645bedd9ea9cd27ac509cc"
+      },
+      "status": "NEW_HEALTH_DEFINITION",
+      "scalarEdits": [],
+      "outputSha256": "452c283700cd04e22a2e4ee6ca2b2b7d7a50e09c3d645bedd9ea9cd27ac509cc"
+    },
+    {
+      "signature": "private.weekly_source_nhsp_negative_comparison_v1(jsonb)",
+      "leaf": "056_private_weekly_source_nhsp_negative_comparison_v1.sqlinc",
+      "current": null,
+      "oldBase": null,
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/056_private_weekly_source_nhsp_negative_comparison_v1.sqlinc",
+        "definitionSha256": "e58c0b4daf4340cafb3e82e4837f8ca11de03c54f6d60ed3fcfc0950ab3f9886"
+      },
+      "status": "NEW_HEALTH_DEFINITION",
+      "scalarEdits": [],
+      "outputSha256": "e58c0b4daf4340cafb3e82e4837f8ca11de03c54f6d60ed3fcfc0950ab3f9886"
+    },
+    {
+      "signature": "private.weekly_source_paid_choice_immutable_v1(uuid)",
+      "leaf": "057_private_weekly_source_paid_choice_immutable_v1.sqlinc",
+      "current": null,
+      "oldBase": null,
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/057_private_weekly_source_paid_choice_immutable_v1.sqlinc",
+        "definitionSha256": "6f7aaf19538756f693219af349babe1fd09f578996cb8009454dfac54f9462d0"
+      },
+      "status": "NEW_HEALTH_DEFINITION",
+      "scalarEdits": [
+        {
+          "before": "to_jsonb(v_choice)",
+          "after": "(to_jsonb(v_choice)||jsonb_build_object('id',v_choice.id::text))",
+          "reason": "New paid-choice audit/immutable typed proof serialises the existing bigint identity losslessly; writer and every comparison use the same bytes."
+        },
+        {
+          "before": "to_jsonb(v_choice)",
+          "after": "(to_jsonb(v_choice)||jsonb_build_object('id',v_choice.id::text))",
+          "reason": "New paid-choice audit/immutable typed proof serialises the existing bigint identity losslessly; writer and every comparison use the same bytes."
+        }
+      ],
+      "outputSha256": "a370422cf58252cb5b2f276e3d9e96ff76bde274d4896d3cc5676b75ea523205"
+    },
+    {
+      "signature": "private.weekly_source_nhsp_projection_lock_input_v1(uuid,uuid,uuid)",
+      "leaf": "058_private_weekly_source_nhsp_projection_lock_input_v1.sqlinc",
+      "current": null,
+      "oldBase": null,
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/058_private_weekly_source_nhsp_projection_lock_input_v1.sqlinc",
+        "definitionSha256": "4127a77d0e86c76563c5a749c4a67fe05da33fb0a42fc7c9ad358454045fb4a2"
+      },
+      "status": "NEW_HEALTH_DEFINITION",
+      "scalarEdits": [
+        {
+          "before": "'choice_id',choice.id",
+          "after": "'choice_id',choice.id::text",
+          "reason": "New bigint choice counter is canonical decimal text in typed projection/hash."
+        }
+      ],
+      "outputSha256": "a7233c375393a0cbe9f8783d83b481b2ebf123617a2392de96d8103d28d17d5b"
+    },
+    {
+      "signature": "private.weekly_source_nhsp_projection_choice_recheck_v1(jsonb,jsonb,uuid,uuid)",
+      "leaf": "059_private_weekly_source_nhsp_projection_choice_recheck_v1.sqlinc",
+      "current": null,
+      "oldBase": null,
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/059_private_weekly_source_nhsp_projection_choice_recheck_v1.sqlinc",
+        "definitionSha256": "056bd7b3fc9073afc671fd5d18cd0a3967dfb41ba266d78426359a682b58e1df"
+      },
+      "status": "NEW_HEALTH_DEFINITION",
+      "scalarEdits": [],
+      "outputSha256": "056bd7b3fc9073afc671fd5d18cd0a3967dfb41ba266d78426359a682b58e1df"
+    },
+    {
+      "signature": "private.weekly_source_nhsp_invoice_only_vector_v1(text,bigint)",
+      "leaf": "060_private_weekly_source_nhsp_invoice_only_vector_v1.sqlinc",
+      "current": null,
+      "oldBase": null,
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/060_private_weekly_source_nhsp_invoice_only_vector_v1.sqlinc",
+        "definitionSha256": "7606eea7f07202b5f83bd6d258519fcad9b326ec0ffecd3dd748328e0fa52cc7"
+      },
+      "status": "NEW_HEALTH_DEFINITION",
+      "scalarEdits": [],
+      "outputSha256": "7606eea7f07202b5f83bd6d258519fcad9b326ec0ffecd3dd748328e0fa52cc7"
+    },
+    {
+      "signature": "private.weekly_source_nhsp_none_invoice_basis_v1(uuid,uuid)",
+      "leaf": "061_private_weekly_source_nhsp_none_invoice_basis_v1.sqlinc",
+      "current": null,
+      "oldBase": null,
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/061_private_weekly_source_nhsp_none_invoice_basis_v1.sqlinc",
+        "definitionSha256": "b181f1b63458db135d44fa0fe17d751be36b07ef0514fa80bb6c72355d08e5a2"
+      },
+      "status": "EXPLICIT_HEALTH_RECONCILIATION",
+      "scalarEdits": [
+        {
+          "before": "'paid_overlap_choice_id',choice.id",
+          "after": "'paid_overlap_choice_id',choice.id::text",
+          "reason": "New bigint choice counter is canonical decimal text in typed projection/hash."
+        },
+        {
+          "before": "to_jsonb(choice)",
+          "after": "(to_jsonb(choice)||jsonb_build_object('id',choice.id::text))",
+          "reason": "New paid-choice audit/immutable typed proof serialises the existing bigint identity losslessly; writer and every comparison use the same bytes."
+        }
+      ],
+      "outputSha256": "8b89b3c401fa3fe7770e3c30ab102536142be0af9bfa37313deddae8797a3996"
+    },
+    {
+      "signature": "private.weekly_source_nhsp_none_invoice_origin_assert_v1(uuid)",
+      "leaf": "062_private_weekly_source_nhsp_none_invoice_origin_assert_v1.sqlinc",
+      "current": null,
+      "oldBase": null,
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/062_private_weekly_source_nhsp_none_invoice_origin_assert_v1.sqlinc",
+        "definitionSha256": "c1b0d06edae9c5734bf142b4b46d94ae860c71637175a2a47e131c66f59d70a7"
+      },
+      "status": "NEW_HEALTH_DEFINITION",
+      "scalarEdits": [],
+      "outputSha256": "c1b0d06edae9c5734bf142b4b46d94ae860c71637175a2a47e131c66f59d70a7"
+    },
+    {
+      "signature": "public.weekly_source_workspace_scopes_v1(jsonb)",
+      "leaf": "064_public_weekly_source_workspace_scopes_v1.sqlinc",
+      "current": {
+        "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+        "path": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+        "physical": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+        "definitionSha256": "16695688cb88de999d17d38ef2779a827ed1b1b0cd1847b2d10194ef65e62121"
+      },
+      "oldBase": {
+        "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "supabase/repeatable/14102026_0044_weekly_source_protected_pay_authority_v2.sql",
+        "definitionSha256": "16695688cb88de999d17d38ef2779a827ed1b1b0cd1847b2d10194ef65e62121"
+      },
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/064_public_weekly_source_workspace_scopes_v1.sqlinc",
+        "definitionSha256": "ef29865225c8a487e4ae5e082fa6ce7afcc12d11e823c88da58a83b5e29a5fac"
+      },
+      "status": "EXACT_CURRENT_BASE_APPLY",
+      "scalarEdits": [],
+      "outputSha256": "ef29865225c8a487e4ae5e082fa6ce7afcc12d11e823c88da58a83b5e29a5fac"
+    },
+    {
+      "signature": "private.weekly_source_nhsp_none_write_admit_v1(jsonb,uuid)",
+      "leaf": "066_private_weekly_source_nhsp_none_write_admit_v1.sqlinc",
+      "current": null,
+      "oldBase": null,
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/066_private_weekly_source_nhsp_none_write_admit_v1.sqlinc",
+        "definitionSha256": "f115e1227511ceff3f9f323c01a71bb35d14486f27157bfb89f2d222efc8aaf9"
+      },
+      "status": "NEW_HEALTH_DEFINITION",
+      "scalarEdits": [],
+      "outputSha256": "f115e1227511ceff3f9f323c01a71bb35d14486f27157bfb89f2d222efc8aaf9"
+    },
+    {
+      "signature": "private.weekly_source_nhsp_selected_pay_origin_v1(uuid,uuid,uuid)",
+      "leaf": "068_private_weekly_source_nhsp_selected_pay_origin_v1.sqlinc",
+      "current": null,
+      "oldBase": null,
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/068_private_weekly_source_nhsp_selected_pay_origin_v1.sqlinc",
+        "definitionSha256": "ac364fafd968b493dece36e743a77d11bf3c14f5cf2038fe30b4b6cafbb57554"
+      },
+      "status": "NEW_HEALTH_DEFINITION",
+      "scalarEdits": [],
+      "outputSha256": "ac364fafd968b493dece36e743a77d11bf3c14f5cf2038fe30b4b6cafbb57554"
+    },
+    {
+      "signature": "private.weekly_source_ordinary_projection_active_movements_v1(uuid,uuid)",
+      "leaf": "070_private_weekly_source_ordinary_projection_active_movements_v1.sqlinc",
+      "current": {
+        "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+        "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/09_complete_pay_consumers.sqlinc",
+        "physical": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/09_complete_pay_consumers.sqlinc",
+        "definitionSha256": "74dc0f865b93e05fccfc46153593b1fa3e647fdb8da0c9fbd130fc79ecc93e4e"
+      },
+      "oldBase": {
+        "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "supabase/repeatable/13102026_1700_weekly_source_invoice_window_receipt/09_complete_pay_consumers.sqlinc",
+        "definitionSha256": "74dc0f865b93e05fccfc46153593b1fa3e647fdb8da0c9fbd130fc79ecc93e4e"
+      },
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/070_private_weekly_source_ordinary_projection_active_movements_v1.sqlinc",
+        "definitionSha256": "845c89e238f32a37f327e7be23976a8049991c75f862df6d21172f310b63aa04"
+      },
+      "status": "EXACT_CURRENT_BASE_APPLY",
+      "scalarEdits": [],
+      "outputSha256": "845c89e238f32a37f327e7be23976a8049991c75f862df6d21172f310b63aa04"
+    },
+    {
+      "signature": "private.weekly_source_known_source_key_v1(uuid,uuid,uuid)",
+      "leaf": "071_private_weekly_source_known_source_key_v1.sqlinc",
+      "current": null,
+      "oldBase": null,
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/rekey-source-alias-all-owner-successor-20261014/forward/00_known_source_key.sqlinc",
+        "sourceSha256": "3efed0771093465c90faed992811b660b8a6f885bcbe7bfd17adfc36eb16d56d",
+        "definitionSha256": "1cb8b4cfec32262840f7776ef80dfb6a0b72c56ef12dce37d386683930619911"
+      },
+      "status": "EXACT_HEALTH_PREREQUISITE_HELPER",
+      "scalarEdits": [],
+      "outputSha256": "1cb8b4cfec32262840f7776ef80dfb6a0b72c56ef12dce37d386683930619911"
+    }
+  ],
+  "preservedWithoutReinstall": [
+    {
+      "signature": "private.weekly_source_kept_as_paid_context_for_publication_v1(uuid,uuid,uuid)",
+      "leaf": "002_private_weekly_source_kept_as_paid_context_for_publication_v1.sqlinc",
+      "current": {
+        "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+        "path": "supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/03_complete_canonical_context.sqlinc",
+        "physical": "supabase/repeatable/17102026_0209_weekly_source_keep_current_public_read/03_complete_canonical_context.sqlinc",
+        "definitionSha256": "4906c26998ff9123144b61a7a163aab1dc95c718b70477c8109517fc463adac1"
+      },
+      "oldBase": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-shift-overlap-native-facts-construction-20261014/before/02_complete_keep_context.sqlinc",
+        "definitionSha256": "4efbcc57dd61dd6c714a71ce0beb1a5b9c69169dd9451f4cb8241ee295077645"
+      },
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/002_private_weekly_source_kept_as_paid_context_for_publication_v1.sqlinc",
+        "definitionSha256": "af606e111da8b6232890cc3b04b16367085ef1e11deee33855d476ce9ed1ab7e"
+      },
+      "status": "PRESERVED_CURRENT_KEEP_PUBLIC_ENUM_ACK_AND_BASIS",
+      "scalarEdits": [],
+      "outputSha256": "4906c26998ff9123144b61a7a163aab1dc95c718b70477c8109517fc463adac1"
+    },
+    {
+      "signature": "private.weekly_source_kept_as_paid_context_v1(uuid,uuid)",
+      "leaf": "003_private_weekly_source_kept_as_paid_context_v1.sqlinc",
+      "current": {
+        "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+        "path": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_03_private_weekly_source_kept_as_paid_context_v1.sqlinc",
+        "physical": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/13_missing_03_private_weekly_source_kept_as_paid_context_v1.sqlinc",
+        "definitionSha256": "8e344bf103661150f1d63e2aa929c936f2db0d40796d3274c9b7ab9ad8d3f4d4"
+      },
+      "oldBase": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-shift-overlap-native-facts-construction-20261014/before/02_complete_keep_context.sqlinc",
+        "definitionSha256": "8e344bf103661150f1d63e2aa929c936f2db0d40796d3274c9b7ab9ad8d3f4d4"
+      },
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/003_private_weekly_source_kept_as_paid_context_v1.sqlinc",
+        "definitionSha256": "8e344bf103661150f1d63e2aa929c936f2db0d40796d3274c9b7ab9ad8d3f4d4"
+      },
+      "status": "PRESERVED_CURRENT_NO_NEW_HUNK",
+      "scalarEdits": [],
+      "outputSha256": "8e344bf103661150f1d63e2aa929c936f2db0d40796d3274c9b7ab9ad8d3f4d4"
+    },
+    {
+      "signature": "private.weekly_source_rule_qualification_setup_atomic_v1(jsonb)",
+      "leaf": "045_private_weekly_source_rule_qualification_setup_atomic_v1.sqlinc",
+      "current": {
+        "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+        "path": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/06_OFF_RULE_COMMAND.sqlinc",
+        "physical": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/06_OFF_RULE_COMMAND.sqlinc",
+        "definitionSha256": "9047b9cbd4f683c85a8978f0d7ffb96bc5cb392bba811e1fe0f014ed4e8090b4"
+      },
+      "oldBase": {
+        "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "supabase/repeatable/14102026_0430_healthroster_money_native_interfaces/06_OFF_RULE_COMMAND.sqlinc",
+        "definitionSha256": "9047b9cbd4f683c85a8978f0d7ffb96bc5cb392bba811e1fe0f014ed4e8090b4"
+      },
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/owners/045_private_weekly_source_rule_qualification_setup_atomic_v1.sqlinc",
+        "definitionSha256": "9047b9cbd4f683c85a8978f0d7ffb96bc5cb392bba811e1fe0f014ed4e8090b4"
+      },
+      "status": "PRESERVED_CURRENT_NO_NEW_HUNK",
+      "scalarEdits": [],
+      "outputSha256": "9047b9cbd4f683c85a8978f0d7ffb96bc5cb392bba811e1fe0f014ed4e8090b4"
+    }
+  ],
+  "bankBodies": 0
+}

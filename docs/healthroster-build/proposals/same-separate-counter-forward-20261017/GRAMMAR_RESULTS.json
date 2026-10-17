@@ -1,0 +1,110 @@
+{
+  "parser": "pglast v7.20",
+  "PostgreSQLGrammar": "17.7",
+  "files": [
+    {
+      "path": "payload/supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt_v1.sql",
+      "sha256": "0f355a1c787c088306f95fd83333f9ffaac88b2b315c684adff13f5f213c31b5",
+      "statements": 2,
+      "parsedBodies": 0,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogateBodies": 0
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/006_public_weekly_source_office_recheck_begin_v1.sqlinc",
+      "sha256": "2aa0ea9059b7226134f0778f37fa5dc90ace78ce5e80af6e6e08a1aafdc5ccbd",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogateBodies": 0
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/009_public_weekly_source_upload_context_v1.sqlinc",
+      "sha256": "bca137c5d0f189082d0ea609f7410c7eb393b7db0106395b8898e708a739d633",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogateBodies": 0
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/011_private_weekly_source_finalise_engine_v1.sqlinc",
+      "sha256": "56333dc5ea10704bd6532b96845ae2f9931a6769ed96e02385e1118e29acfc28",
+      "statements": 1,
+      "parsedBodies": null,
+      "actualCatalogueRequirement": "\"v_prior_movement.id\" is not a known variable",
+      "grammarOnlyRecordSurrogateBodies": 1
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/018_public_weekly_source_invoice_admit_atomic_v1.sqlinc",
+      "sha256": "cd08f0a936d330a5491c9a51b03ee9f2c390bfb497f70357bd85ea09ae3c25fa",
+      "statements": 1,
+      "parsedBodies": null,
+      "actualCatalogueRequirement": "\"v_snapshot.work_date\" is not a known variable",
+      "grammarOnlyRecordSurrogateBodies": 1
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/019_private_weekly_source_shift_on_self_bill_v1.sqlinc",
+      "sha256": "26e2186e4b2026f6aa2576ec3145e56ff2823214c8bbbf7f80a98545e3ad58e2",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogateBodies": 0
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/026_private_weekly_source_paid_match_question_v1.sqlinc",
+      "sha256": "9fc6cc1c6b34fe5f240766cf3987f83a25a1e8c67a5609bd8b13a61b1559caf2",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogateBodies": 0
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/034_public_weekly_source_correct_final_prepare_atomic_v1.sqlinc",
+      "sha256": "2caeef10311fe59dd6376ef4566c3d9fa6ba2007e565f48a1f66c3192fcc2f2f",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogateBodies": 0
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/035_public_weekly_source_correct_final_apply_atomic_v1.sqlinc",
+      "sha256": "da7d8d23edff6441d4f94c3da635437506efa176d8094e3053337385a06c4223",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogateBodies": 0
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/039_private_weekly_source_correct_final_office_preview_v1.sqlinc",
+      "sha256": "c7dcd26f34a6472d7ebafd59bf03c8078cfffad2fde1182a3bbe1bf45c5549ae",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogateBodies": 0
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/04_complete_current_review.sqlinc",
+      "sha256": "4e5918839b4a0ab8f17ff026ea66773d1f91fa3bbf07c66d5c2c7693e41c2b85",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogateBodies": 0
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_0335_weekly_source_paid_match_correction_receipt/99_acl.sqlinc",
+      "sha256": "1afcd16d49d06a37ff4fab845955acb1e310d17e8d55d17db88eeeca0873541f",
+      "statements": 27,
+      "parsedBodies": 0,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogateBodies": 0
+    }
+  ],
+  "statements": 39,
+  "parsedBodies": 8,
+  "catalogueDependent": 2,
+  "grammarOnlyRecordSurrogateBodies": 2,
+  "censusVectorsParsedStatements": 1,
+  "grammarOnly": true,
+  "native": "NOT_RUN",
+  "dbConnections": 0
+}

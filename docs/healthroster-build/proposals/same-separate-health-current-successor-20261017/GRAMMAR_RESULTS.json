@@ -1,0 +1,1053 @@
+{
+  "parser": "pglast v7.20",
+  "PostgresGrammar": "17.7",
+  "files": [
+    {
+      "path": "forward/001_private_weekly_source_work_event_payment_facts_v1.sqlinc",
+      "sha256": "2a5f8c1dbdc9c5bce8a4e6653b62e812f15744431e62733752e95840c62110f4",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "forward/002_private_weekly_source_kept_as_paid_context_for_publication_v1.sqlinc",
+      "sha256": "ea10aeb0cd3ba623399dd05f07c7a3e68e1a13c3c1a2e1f7324a367319027e70",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "forward/003_private_weekly_source_kept_as_paid_context_v1.sqlinc",
+      "sha256": "a211cfda94ac1068b3139a3f2088780a8e72edd777423c7c9d6395a27c6938ed",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "forward/004_private_weekly_source_paid_overlap_candidates_v1.sqlinc",
+      "sha256": "49a727d6ecc6ed0ca92e4721a526fab524f879169ef4f6e5613051c2d22be113",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "forward/005_private_weekly_source_paid_overlap_choice_admit_v1.sqlinc",
+      "sha256": "240685e8f351ef937ab30941460d911fa94b40c4195d5b4319430f4fd7087fe7",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "forward/006_public_weekly_source_office_recheck_begin_v1.sqlinc",
+      "sha256": "6a7a3a25b2cc3bb8f58fc30656da51f570a92d85fe37ddd76d5f0730d03e64de",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "forward/007_private_weekly_source_paid_overlap_choice_current_v1.sqlinc",
+      "sha256": "a1b51d93d8ad9e84cf76c8856e0474ff265f792cd48214db46d5631a1d263251",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "forward/008_private_weekly_source_paid_overlap_projection_lock_v1.sqlinc",
+      "sha256": "779c3b533151f4c7846bf1d7acf16c03738343fa19db211c7a0c15783c1197c1",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "forward/009_public_weekly_source_upload_context_v1.sqlinc",
+      "sha256": "b350c1af79d51d65b75fe1f19a2cc443879874286cd6c3ed17b948662a08b8c2",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "forward/010_public_weekly_source_projection_rows_apply_atomic_v1.sqlinc",
+      "sha256": "136b82824eb7506eeed44db9686ee7b68affbb1d99d4c47445348c279ee139c6",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "forward/011_private_weekly_source_finalise_engine_v1.sqlinc",
+      "sha256": "29d612601c8e9a60d0f1edb46c37126d2a57b9fdbaf04766ab30ef40835bbd52",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": "\"v_prior_movement.id\" is not a known variable",
+      "grammarOnlyRecordSurrogate": true
+    },
+    {
+      "path": "forward/012_private_weekly_source_paid_choice_revision_guard_v1.sqlinc",
+      "sha256": "b0c8e197d981ca3d274d45fe15de35e9e3fbfd572322492028a1fe4880c6fa1e",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "forward/013_private_weekly_source_paid_match_invoice_movement_insert_v1.sqlinc",
+      "sha256": "7b530d13af3ee25205a044d7ad527aa7013f2594b5b2c75fb851310dd48411af",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "forward/014_private_weekly_source_paid_match_invoice_origin_assert_v1.sqlinc",
+      "sha256": "e08c7d79362fb541d50d5dd44f775e20586ce542b75434d7d98406f100243a97",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "forward/015_private_weekly_source_billing_movement_hash_v1.sqlinc",
+      "sha256": "c66d603f1de2795e08b64ac5c44fa4754a971badf7ec1f823b0a1145c4c32c32",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "forward/016_private_weekly_source_invoice_movement_window_id_v1.sqlinc",
+      "sha256": "ca8101ac55f379c4f5f2e5614f065aea3321823b139ffd34fdc868443b7283b9",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "forward/017_private_weekly_source_invoice_source_amount_movement_valid_v1.sqlinc",
+      "sha256": "e85ad2ca84877e65d342c2b52da77bba45f1fff49820a865e079dfb1a0ff0945",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "forward/018_public_weekly_source_invoice_admit_atomic_v1.sqlinc",
+      "sha256": "3eacf88d26ccac85435b6b9331748d9537f75dba274a144de59198fa8859eec5",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": "\"v_snapshot.work_date\" is not a known variable",
+      "grammarOnlyRecordSurrogate": true
+    },
+    {
+      "path": "forward/019_private_weekly_source_shift_on_self_bill_v1.sqlinc",
+      "sha256": "ee2ec48bd7a7b7988701f614124166c2c28a906c30ee7921ffcc5b71e568e1aa",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "forward/020_private_weekly_source_ordinary_projection_source_units_v1.sqlinc",
+      "sha256": "c99441f5988c527986756ddecdb58a41c13b0f562ed1c06f016a532e7f9771b5",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "forward/021_private_weekly_source_selected_source_witness_v1.sqlinc",
+      "sha256": "175b4d9c57f762e8d47a6e7a87383122213e55abcf0e1760bdd0973fe7408136",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "forward/022_public_weekly_source_finalisation_pay_open_atomic_v1.sqlinc",
+      "sha256": "ade426e9b7acf1927cd235a02c806ee09fc7cfd70cd68c16f95ff15b7fb41423",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "forward/023_private_weekly_source_invoice_allocation_assert_v1.sqlinc",
+      "sha256": "6889c47fd2e8ce8259175c9289962ea0fbe2228a9b03bfffc9af23a458e95fee",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "forward/024_private_weekly_source_paid_overlap_current_snapshot_v1.sqlinc",
+      "sha256": "f2f7e11b60c9034ee882e7fda21b406c2776a4dc1d0c5f2046caefdf85064ee4",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "forward/025_private_weekly_source_paid_match_retained_transition_assert_v1.sqlinc",
+      "sha256": "8d4d16cb79b437c014a16dd6a1d74f2d9ace3135126b81220e05dbcd0288c55a",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "forward/026_private_weekly_source_paid_match_question_v1.sqlinc",
+      "sha256": "f4c4e4bd4585951b38d0e0b720b181af5382ad40f07e166fc69203887395096f",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "forward/028_private_weekly_source_fixed_expense_invoice_values_v1.sqlinc",
+      "sha256": "7fc8b42c2b7146fb0b06483620d4d1c59e3e75e734518a09519f1d386a9f0767",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "forward/029_private_weekly_source_finalisation_materialise_expense_invoice_v1.sqlinc",
+      "sha256": "dae86101e77cb40e2802f84ef6295b0a62234594bd6bf6d02887103465707a80",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "forward/030_private_weekly_source_paid_match_expense_invoice_origin_assert_v1.sqlinc",
+      "sha256": "ba3898542b732a3411418454754402e89177b9c49b8f3cb7d8ac10f527878099",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "forward/031_private_weekly_source_paid_match_expense_invoice_insert_v1.sqlinc",
+      "sha256": "9fab7c23837aae74cdd4051f3845f4cbede64068f9fd200f19744c57a9d30781",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "forward/032_private_weekly_source_paid_match_prepared_census_recheck_v1.sqlinc",
+      "sha256": "51979cd31560deab0ab2f1b9c44b836b0dd779cd5204270002fd5c43a1196a07",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "forward/033_private_weekly_source_correct_final_prepared_context_v1.sqlinc",
+      "sha256": "aba24a3b9b979c0445722b652161f8cc498ac0c6f7dd9208f9d8c7bae16ab844",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "forward/034_public_weekly_source_correct_final_prepare_atomic_v1.sqlinc",
+      "sha256": "c7823e594e609cc76e8cff59c6f508072050d667898538ebd7d5e506ad80ec41",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "forward/035_public_weekly_source_correct_final_apply_atomic_v1.sqlinc",
+      "sha256": "49bf701bcd0f2cc8693d1a84a8e3418f0840a5b63638ef3a6f8534f4a560d251",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "forward/036_private_weekly_source_ordinary_projection_current_expenses_v1.sqlinc",
+      "sha256": "643813415d9dd4feba83f22bdd98eae901fb258a7826be90a1d6e2c683cdedaa",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "forward/037_public_weekly_source_office_workspace_v1.sqlinc",
+      "sha256": "93dc90bca45e476cde4a74073ab11bf8864ccdca294269a39d13cb56eba16a21",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "forward/038_private_weekly_source_paid_match_correction_scope_v1.sqlinc",
+      "sha256": "987c10e66a0f47f8346eef084e16b1bc0a04b11a40c0e198b5e99370339d3f1d",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "forward/039_private_weekly_source_correct_final_office_preview_v1.sqlinc",
+      "sha256": "954a8288e2fed8880e7df06d427cf34646b263250fa1ff4c75d181ad991d4f71",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "forward/040_private_weekly_source_roster_prior_states_v1.sqlinc",
+      "sha256": "047e7768185a851e778d61983c0291d1bc7944627f34ab1fce06804993971c15",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "forward/041_private_weekly_source_legacy_signed_source_membership_v1.sqlinc",
+      "sha256": "2102fd11a92dec40b85f336cbe10b5e73ac660fbfa2ae523c0e3e8ed31c64341",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "forward/042_private_weekly_source_paid_overlap_current_snapshot_for_cycle_v1.sqlinc",
+      "sha256": "5310dc64c6e54380d2c0fceb5fb744a1bd1bbc6feda1d6df3ab2478e85e307eb",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "forward/043_private_weekly_source_off_rule_setup_shape_assert_v1.sqlinc",
+      "sha256": "de9479ddcd3f8cc34188c6431cc479f3832c0bec9b4041c894178b90bf77c0ff",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "forward/044_private_weekly_source_off_rule_native_parent_scope_v1.sqlinc",
+      "sha256": "da19c30f7b269f94a1c44187d63eea95abb21fafb5e240876cad0e7e5afbfd8c",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "forward/045_private_weekly_source_rule_qualification_setup_atomic_v1.sqlinc",
+      "sha256": "df48d0951eb3bffb2a33e9722c9c7258be4e159f78197423f7bf15e3352f6951",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "forward/046_private_weekly_source_rule_qualification_execute_v1.sqlinc",
+      "sha256": "786e9cf13c88c33e7d2efdbda0a28409a87b9959e3ad74811c39adbd19955ca0",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "forward/047_private_weekly_source_rule_qualification_transport_status_v1.sqlinc",
+      "sha256": "861a220460f1406b4b50514a5aab78ef54cac578f801426b812c57c923e779dc",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "forward/048_private_weekly_source_nhsp_paid_overlap_basis_v1.sqlinc",
+      "sha256": "c8b9e9e4b35199b9d5808a239de36cc2bfd1495cefe5b3e72b32ae329d0b2700",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "forward/051_private_weekly_source_nhsp_negative_population_v1.sqlinc",
+      "sha256": "3a0842fd0a135e6da5ad0da42af8e1bf6d165596d080aca4ca798addd135b40e",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": "\"p.id\" is not a known variable",
+      "grammarOnlyRecordSurrogate": true
+    },
+    {
+      "path": "forward/052_private_weekly_source_native_line_vat_v1.sqlinc",
+      "sha256": "2088caa8c5f137932b075b288e0783e06231a5415b03ccbd2b73dc4b14204691",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "forward/053_private_weekly_source_finalisation_insert_current_movement_v1.sqlinc",
+      "sha256": "3b4cf69d26a09ba31155c1abcad4c51d0609a4743c4740cf5aadccd8874a0cce",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "forward/054_private_weekly_source_nhsp_price_admission_v1.sqlinc",
+      "sha256": "fec2aa10512e7fb5068fb297a9d6dc54dc25c718486d7a16a63f08be51c14a0b",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": "\"v_charge_acceptance.id\" is not a known variable",
+      "grammarOnlyRecordSurrogate": true
+    },
+    {
+      "path": "forward/055_private_weekly_source_nhsp_invoice_values_v1.sqlinc",
+      "sha256": "7e4a0813218f069e3313871afc33fa4641b4ab486d3b8c434d9180312712773f",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "forward/056_private_weekly_source_nhsp_negative_comparison_v1.sqlinc",
+      "sha256": "815749bde9aed68615915acabd8b23c50fc430255f16614620201de6648c32cb",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "forward/057_private_weekly_source_paid_choice_immutable_v1.sqlinc",
+      "sha256": "f3885c8b1cad15909263abdc4c2d66fdd5ba03aaf3842434c9d197f92b42c845",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "forward/058_private_weekly_source_nhsp_projection_lock_input_v1.sqlinc",
+      "sha256": "996bf5f9524ef17c06584e6863500eff1b4ab04c33273dee01903e6521319f2a",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "forward/059_private_weekly_source_nhsp_projection_choice_recheck_v1.sqlinc",
+      "sha256": "b7658061f910e1de352e8525ef87fc290be58a02090751edaa2b0f83fd808668",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "forward/060_private_weekly_source_nhsp_invoice_only_vector_v1.sqlinc",
+      "sha256": "5234d843a9ca2f486dc6a2c641c25174876d401d2c1d643a349bb5159c4e1560",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "forward/061_private_weekly_source_nhsp_none_invoice_basis_v1.sqlinc",
+      "sha256": "c9718107f72874df2ebcbd44774f187a7b4b9434e396cc7f7f34b8e1500afb8a",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "forward/062_private_weekly_source_nhsp_none_invoice_origin_assert_v1.sqlinc",
+      "sha256": "ad72b39970de73118116ebed7455bfc4e2a265fa88cf8c68fd6f19ae9bc74b7a",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "forward/064_public_weekly_source_workspace_scopes_v1.sqlinc",
+      "sha256": "4daf7a2983e5fc1e806f65ef5a292e9a7d0264db6e7bee6f5c216ed4e2602684",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "forward/066_private_weekly_source_nhsp_none_write_admit_v1.sqlinc",
+      "sha256": "d914506dcea9c83f39a7b8d069d431845c47755f19e5b7659ef40e58f796d5f2",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "forward/068_private_weekly_source_nhsp_selected_pay_origin_v1.sqlinc",
+      "sha256": "a2bf00613f96862b0848d031009536e53d0d3dd284893b039285c7e2f65b3ba0",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "forward/070_private_weekly_source_ordinary_projection_active_movements_v1.sqlinc",
+      "sha256": "45ea5c8a9d8e08f3831dfe03fb6402bcd7dba19fc00e9ecc3eaddeeabb30e142",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "forward/071_private_weekly_source_known_source_key_v1.sqlinc",
+      "sha256": "ae7a7bbf84d7d7a895ccf445da87122a803ecd6935c0ae34968e87a8a263ac3c",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "payload/supabase/migrations/17102026_0231_weekly_source_paid_same_separate_10_footprint.sql",
+      "sha256": "54fcc770a920641d2c4322e6ea9818bb3fc9d1e13c74e80372f61973888203d5",
+      "statements": 16,
+      "parsedBodies": 2,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/001_private_weekly_source_work_event_payment_facts_v1.sqlinc",
+      "sha256": "2a5f8c1dbdc9c5bce8a4e6653b62e812f15744431e62733752e95840c62110f4",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/004_private_weekly_source_paid_overlap_candidates_v1.sqlinc",
+      "sha256": "49a727d6ecc6ed0ca92e4721a526fab524f879169ef4f6e5613051c2d22be113",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/005_private_weekly_source_paid_overlap_choice_admit_v1.sqlinc",
+      "sha256": "240685e8f351ef937ab30941460d911fa94b40c4195d5b4319430f4fd7087fe7",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/006_public_weekly_source_office_recheck_begin_v1.sqlinc",
+      "sha256": "6a7a3a25b2cc3bb8f58fc30656da51f570a92d85fe37ddd76d5f0730d03e64de",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/007_private_weekly_source_paid_overlap_choice_current_v1.sqlinc",
+      "sha256": "a1b51d93d8ad9e84cf76c8856e0474ff265f792cd48214db46d5631a1d263251",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/008_private_weekly_source_paid_overlap_projection_lock_v1.sqlinc",
+      "sha256": "779c3b533151f4c7846bf1d7acf16c03738343fa19db211c7a0c15783c1197c1",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/009_public_weekly_source_upload_context_v1.sqlinc",
+      "sha256": "b350c1af79d51d65b75fe1f19a2cc443879874286cd6c3ed17b948662a08b8c2",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/010_public_weekly_source_projection_rows_apply_atomic_v1.sqlinc",
+      "sha256": "136b82824eb7506eeed44db9686ee7b68affbb1d99d4c47445348c279ee139c6",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/011_private_weekly_source_finalise_engine_v1.sqlinc",
+      "sha256": "29d612601c8e9a60d0f1edb46c37126d2a57b9fdbaf04766ab30ef40835bbd52",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": "\"v_prior_movement.id\" is not a known variable",
+      "grammarOnlyRecordSurrogate": true
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/012_private_weekly_source_paid_choice_revision_guard_v1.sqlinc",
+      "sha256": "b0c8e197d981ca3d274d45fe15de35e9e3fbfd572322492028a1fe4880c6fa1e",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/013_private_weekly_source_paid_match_invoice_movement_insert_v1.sqlinc",
+      "sha256": "7b530d13af3ee25205a044d7ad527aa7013f2594b5b2c75fb851310dd48411af",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/014_private_weekly_source_paid_match_invoice_origin_assert_v1.sqlinc",
+      "sha256": "e08c7d79362fb541d50d5dd44f775e20586ce542b75434d7d98406f100243a97",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/015_private_weekly_source_billing_movement_hash_v1.sqlinc",
+      "sha256": "c66d603f1de2795e08b64ac5c44fa4754a971badf7ec1f823b0a1145c4c32c32",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/016_private_weekly_source_invoice_movement_window_id_v1.sqlinc",
+      "sha256": "ca8101ac55f379c4f5f2e5614f065aea3321823b139ffd34fdc868443b7283b9",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/017_private_weekly_source_invoice_source_amount_movement_valid_v1.sqlinc",
+      "sha256": "e85ad2ca84877e65d342c2b52da77bba45f1fff49820a865e079dfb1a0ff0945",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/018_public_weekly_source_invoice_admit_atomic_v1.sqlinc",
+      "sha256": "3eacf88d26ccac85435b6b9331748d9537f75dba274a144de59198fa8859eec5",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": "\"v_snapshot.work_date\" is not a known variable",
+      "grammarOnlyRecordSurrogate": true
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/019_private_weekly_source_shift_on_self_bill_v1.sqlinc",
+      "sha256": "ee2ec48bd7a7b7988701f614124166c2c28a906c30ee7921ffcc5b71e568e1aa",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/020_private_weekly_source_ordinary_projection_source_units_v1.sqlinc",
+      "sha256": "c99441f5988c527986756ddecdb58a41c13b0f562ed1c06f016a532e7f9771b5",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/021_private_weekly_source_selected_source_witness_v1.sqlinc",
+      "sha256": "175b4d9c57f762e8d47a6e7a87383122213e55abcf0e1760bdd0973fe7408136",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/022_public_weekly_source_finalisation_pay_open_atomic_v1.sqlinc",
+      "sha256": "ade426e9b7acf1927cd235a02c806ee09fc7cfd70cd68c16f95ff15b7fb41423",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/023_private_weekly_source_invoice_allocation_assert_v1.sqlinc",
+      "sha256": "6889c47fd2e8ce8259175c9289962ea0fbe2228a9b03bfffc9af23a458e95fee",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/024_private_weekly_source_paid_overlap_current_snapshot_v1.sqlinc",
+      "sha256": "f2f7e11b60c9034ee882e7fda21b406c2776a4dc1d0c5f2046caefdf85064ee4",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/025_private_weekly_source_paid_match_retained_transition_assert_v1.sqlinc",
+      "sha256": "8d4d16cb79b437c014a16dd6a1d74f2d9ace3135126b81220e05dbcd0288c55a",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/026_private_weekly_source_paid_match_question_v1.sqlinc",
+      "sha256": "f4c4e4bd4585951b38d0e0b720b181af5382ad40f07e166fc69203887395096f",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/028_private_weekly_source_fixed_expense_invoice_values_v1.sqlinc",
+      "sha256": "7fc8b42c2b7146fb0b06483620d4d1c59e3e75e734518a09519f1d386a9f0767",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/029_private_weekly_source_finalisation_materialise_expense_invoice_v1.sqlinc",
+      "sha256": "dae86101e77cb40e2802f84ef6295b0a62234594bd6bf6d02887103465707a80",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/030_private_weekly_source_paid_match_expense_invoice_origin_assert_v1.sqlinc",
+      "sha256": "ba3898542b732a3411418454754402e89177b9c49b8f3cb7d8ac10f527878099",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/031_private_weekly_source_paid_match_expense_invoice_insert_v1.sqlinc",
+      "sha256": "9fab7c23837aae74cdd4051f3845f4cbede64068f9fd200f19744c57a9d30781",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/032_private_weekly_source_paid_match_prepared_census_recheck_v1.sqlinc",
+      "sha256": "51979cd31560deab0ab2f1b9c44b836b0dd779cd5204270002fd5c43a1196a07",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/033_private_weekly_source_correct_final_prepared_context_v1.sqlinc",
+      "sha256": "aba24a3b9b979c0445722b652161f8cc498ac0c6f7dd9208f9d8c7bae16ab844",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/034_public_weekly_source_correct_final_prepare_atomic_v1.sqlinc",
+      "sha256": "c7823e594e609cc76e8cff59c6f508072050d667898538ebd7d5e506ad80ec41",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/035_public_weekly_source_correct_final_apply_atomic_v1.sqlinc",
+      "sha256": "49bf701bcd0f2cc8693d1a84a8e3418f0840a5b63638ef3a6f8534f4a560d251",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/036_private_weekly_source_ordinary_projection_current_expenses_v1.sqlinc",
+      "sha256": "643813415d9dd4feba83f22bdd98eae901fb258a7826be90a1d6e2c683cdedaa",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/037_public_weekly_source_office_workspace_v1.sqlinc",
+      "sha256": "93dc90bca45e476cde4a74073ab11bf8864ccdca294269a39d13cb56eba16a21",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/038_private_weekly_source_paid_match_correction_scope_v1.sqlinc",
+      "sha256": "987c10e66a0f47f8346eef084e16b1bc0a04b11a40c0e198b5e99370339d3f1d",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/039_private_weekly_source_correct_final_office_preview_v1.sqlinc",
+      "sha256": "954a8288e2fed8880e7df06d427cf34646b263250fa1ff4c75d181ad991d4f71",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/040_private_weekly_source_roster_prior_states_v1.sqlinc",
+      "sha256": "047e7768185a851e778d61983c0291d1bc7944627f34ab1fce06804993971c15",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/041_private_weekly_source_legacy_signed_source_membership_v1.sqlinc",
+      "sha256": "2102fd11a92dec40b85f336cbe10b5e73ac660fbfa2ae523c0e3e8ed31c64341",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/042_private_weekly_source_paid_overlap_current_snapshot_for_cycle_v1.sqlinc",
+      "sha256": "5310dc64c6e54380d2c0fceb5fb744a1bd1bbc6feda1d6df3ab2478e85e307eb",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/043_private_weekly_source_off_rule_setup_shape_assert_v1.sqlinc",
+      "sha256": "de9479ddcd3f8cc34188c6431cc479f3832c0bec9b4041c894178b90bf77c0ff",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/044_private_weekly_source_off_rule_native_parent_scope_v1.sqlinc",
+      "sha256": "da19c30f7b269f94a1c44187d63eea95abb21fafb5e240876cad0e7e5afbfd8c",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/046_private_weekly_source_rule_qualification_execute_v1.sqlinc",
+      "sha256": "786e9cf13c88c33e7d2efdbda0a28409a87b9959e3ad74811c39adbd19955ca0",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/047_private_weekly_source_rule_qualification_transport_status_v1.sqlinc",
+      "sha256": "861a220460f1406b4b50514a5aab78ef54cac578f801426b812c57c923e779dc",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/048_private_weekly_source_nhsp_paid_overlap_basis_v1.sqlinc",
+      "sha256": "c8b9e9e4b35199b9d5808a239de36cc2bfd1495cefe5b3e72b32ae329d0b2700",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/051_private_weekly_source_nhsp_negative_population_v1.sqlinc",
+      "sha256": "3a0842fd0a135e6da5ad0da42af8e1bf6d165596d080aca4ca798addd135b40e",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": "\"p.id\" is not a known variable",
+      "grammarOnlyRecordSurrogate": true
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/052_private_weekly_source_native_line_vat_v1.sqlinc",
+      "sha256": "2088caa8c5f137932b075b288e0783e06231a5415b03ccbd2b73dc4b14204691",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/053_private_weekly_source_finalisation_insert_current_movement_v1.sqlinc",
+      "sha256": "3b4cf69d26a09ba31155c1abcad4c51d0609a4743c4740cf5aadccd8874a0cce",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/054_private_weekly_source_nhsp_price_admission_v1.sqlinc",
+      "sha256": "fec2aa10512e7fb5068fb297a9d6dc54dc25c718486d7a16a63f08be51c14a0b",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": "\"v_charge_acceptance.id\" is not a known variable",
+      "grammarOnlyRecordSurrogate": true
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/055_private_weekly_source_nhsp_invoice_values_v1.sqlinc",
+      "sha256": "7e4a0813218f069e3313871afc33fa4641b4ab486d3b8c434d9180312712773f",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/056_private_weekly_source_nhsp_negative_comparison_v1.sqlinc",
+      "sha256": "815749bde9aed68615915acabd8b23c50fc430255f16614620201de6648c32cb",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/057_private_weekly_source_paid_choice_immutable_v1.sqlinc",
+      "sha256": "f3885c8b1cad15909263abdc4c2d66fdd5ba03aaf3842434c9d197f92b42c845",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/058_private_weekly_source_nhsp_projection_lock_input_v1.sqlinc",
+      "sha256": "996bf5f9524ef17c06584e6863500eff1b4ab04c33273dee01903e6521319f2a",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/059_private_weekly_source_nhsp_projection_choice_recheck_v1.sqlinc",
+      "sha256": "b7658061f910e1de352e8525ef87fc290be58a02090751edaa2b0f83fd808668",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/060_private_weekly_source_nhsp_invoice_only_vector_v1.sqlinc",
+      "sha256": "5234d843a9ca2f486dc6a2c641c25174876d401d2c1d643a349bb5159c4e1560",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/061_private_weekly_source_nhsp_none_invoice_basis_v1.sqlinc",
+      "sha256": "c9718107f72874df2ebcbd44774f187a7b4b9434e396cc7f7f34b8e1500afb8a",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/062_private_weekly_source_nhsp_none_invoice_origin_assert_v1.sqlinc",
+      "sha256": "ad72b39970de73118116ebed7455bfc4e2a265fa88cf8c68fd6f19ae9bc74b7a",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/064_public_weekly_source_workspace_scopes_v1.sqlinc",
+      "sha256": "4daf7a2983e5fc1e806f65ef5a292e9a7d0264db6e7bee6f5c216ed4e2602684",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/066_private_weekly_source_nhsp_none_write_admit_v1.sqlinc",
+      "sha256": "d914506dcea9c83f39a7b8d069d431845c47755f19e5b7659ef40e58f796d5f2",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/068_private_weekly_source_nhsp_selected_pay_origin_v1.sqlinc",
+      "sha256": "a2bf00613f96862b0848d031009536e53d0d3dd284893b039285c7e2f65b3ba0",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/070_private_weekly_source_ordinary_projection_active_movements_v1.sqlinc",
+      "sha256": "45ea5c8a9d8e08f3831dfe03fb6402bcd7dba19fc00e9ecc3eaddeeabb30e142",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/071_private_weekly_source_known_source_key_v1.sqlinc",
+      "sha256": "ae7a7bbf84d7d7a895ccf445da87122a803ecd6935c0ae34968e87a8a263ac3c",
+      "statements": 1,
+      "parsedBodies": 1,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/97_revision_guard_triggers.sqlinc",
+      "sha256": "5e05c6467a6aaefb3629fd415cbd90bc2824ee0ac593e0e13b93a2982b9836d1",
+      "statements": 3,
+      "parsedBodies": 0,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/98_complete_current_classification.sqlinc",
+      "sha256": "22df3a8119af2f398bf5273a758d4643ec18a4883432ba3c6cda1ebfb43025f6",
+      "statements": 41,
+      "parsedBodies": 8,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/99_acl.sqlinc",
+      "sha256": "39e7ad1cd794c72fd25c4a2b58cfaf8dc06d9b854041dc79444ff5eaf4335a50",
+      "statements": 132,
+      "parsedBodies": 0,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    },
+    {
+      "path": "payload/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health_v1.sql",
+      "sha256": "38b97ad2d6182cebcc3c620b1391bf92f098f42f1a7563751116633834b9cb92",
+      "statements": 2,
+      "parsedBodies": 0,
+      "actualCatalogueRequirement": null,
+      "grammarOnlyRecordSurrogate": false
+    }
+  ],
+  "statements": 319,
+  "parsedPlpgsqlBodies": 135,
+  "inheritedCurrentCatalogueRequirements": 8,
+  "fullPlpgsqlCatalogueGrammar": "NOT_PROVED",
+  "native": "NOT_RUN",
+  "catalogue": "NOT_RUN",
+  "dbConnections": 0
+}

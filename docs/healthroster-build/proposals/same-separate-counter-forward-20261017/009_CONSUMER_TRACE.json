@@ -1,0 +1,35 @@
+{
+  "parent": "ef3d20f4513a6f9fd1aa5e4cf6a69d258f6cd87c",
+  "scope": "Actual saved backend broker/src/weekly-source; exact header name, not the separate expected_ request field.",
+  "producer": {
+    "source": "009_public_weekly_source_upload_context_v1.sqlinc",
+    "field": "correction_session_version",
+    "nativeExpression": "select correction.version::text from public.weekly_final_source_correction_sessions correction",
+    "publicKeep27Changed": false
+  },
+  "directConsumer": {
+    "path": "broker/src/weekly-source/upload-publication-owner.mjs",
+    "beforeSha256": "1fd307dc80708de0b185a8f095d54a949fc9b1a480c45a562816af032cb2999c",
+    "afterSha256": "6a086ab44449c9173c0b62e9c9e3a23bd63bf8bbd0bd39bf433e56cdf9bd5e33",
+    "callers": [
+      "stageReplacementSource",
+      "rebuildReplacementProjection"
+    ],
+    "behavior": "Canonical int63 strings retained; exact safe legacy native numbers retained; unsafe native numbers refuse. Rebuild reads the genuine validated current upload header instead of an already rounded publish JSON number."
+  },
+  "requestForwarder": {
+    "path": "broker/src/weekly-source/upload-staging-adapter.mjs",
+    "sha256": "16b56f734d7a9b52b6aca6873dab15368b621da29d26fd34cfcfc847d5571af3",
+    "field": "expected_correction_session_version",
+    "behavior": "Forwards body value verbatim; no counter Number conversion; no code change."
+  },
+  "ordinaryPublishAbi": "Existing authority/publish numeric receipt remains; new typed paid path re-reads the same genuine idempotent begin receipt.",
+  "tests": [
+    "Original40 safe numeric Worker/correction vectors PASS.",
+    "Actual ordinary non-paid text-session preview/rebuild/prepare/apply for 3 and >2^53 PASS.",
+    "Actual typed native-header rebuild for CYCLE and NHSP_REPORT_SCOPE PASS."
+  ],
+  "native": "NOT_RUN",
+  "API": "NOT_RUN",
+  "dbConnections": 0
+}

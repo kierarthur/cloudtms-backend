@@ -1,0 +1,6 @@
+create or replace trigger weekly_source_paid_choice_revision_update_guard
+before update on public.weekly_source_final_revisions for each row execute function private.weekly_source_paid_choice_revision_guard_v1();
+create or replace trigger weekly_source_paid_choice_revision_delete_guard
+before delete on public.weekly_source_final_revisions for each row execute function private.weekly_source_paid_choice_revision_guard_v1();
+create or replace trigger weekly_source_paid_choice_revision_truncate_guard
+before truncate on public.weekly_source_final_revisions for each statement execute function private.weekly_source_paid_choice_revision_guard_v1();

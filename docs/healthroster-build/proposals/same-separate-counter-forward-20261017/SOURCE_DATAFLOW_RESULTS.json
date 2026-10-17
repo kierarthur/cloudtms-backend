@@ -1,0 +1,526 @@
+{
+  "beforeSha256": "3eacf88d26ccac85435b6b9331748d9537f75dba274a144de59198fa8859eec5",
+  "afterSha256": "cd08f0a936d330a5491c9a51b03ee9f2c390bfb497f70357bd85ea09ae3c25fa",
+  "parser": "pglast v7.20",
+  "grammarOnlyRecordSurrogate": true,
+  "scope": "ACTUAL_ASSIGNMENT_AST_ONLY_NO_NATIVE_SQL_OR_ORIGIN_PROOF",
+  "fixtures": [
+    {
+      "fixture": "SOURCE_NONE_REBILL",
+      "before": {
+        "hours": {
+          "day": "0",
+          "night": "0",
+          "sat": "0",
+          "sun": "0",
+          "bh": "0"
+        },
+        "pay_total": "0",
+        "pay_rates": {
+          "day": "0",
+          "night": "0",
+          "sat": "0",
+          "sun": "0",
+          "bh": "0"
+        },
+        "events": [
+          [
+            "ACTUAL_NATIVE_VECTOR_AGGREGATE",
+            523
+          ],
+          [
+            "v_pay_day",
+            576,
+            "v_pay_day:=(v_movement.canonical_pay_vector_json#>>'{rates,day}')::numeric"
+          ],
+          [
+            "v_pay_night",
+            577,
+            "v_pay_night:=(v_movement.canonical_pay_vector_json#>>'{rates,night}')::numeric"
+          ],
+          [
+            "v_pay_sat",
+            578,
+            "v_pay_sat:=(v_movement.canonical_pay_vector_json#>>'{rates,sat}')::numeric"
+          ],
+          [
+            "v_pay_sun",
+            579,
+            "v_pay_sun:=(v_movement.canonical_pay_vector_json#>>'{rates,sun}')::numeric"
+          ],
+          [
+            "v_pay_bh",
+            580,
+            "v_pay_bh:=(v_movement.canonical_pay_vector_json#>>'{rates,bh}')::numeric"
+          ]
+        ],
+        "insertLine": 634
+      },
+      "after": {
+        "hours": {
+          "day": "7.50",
+          "night": "0",
+          "sat": "0",
+          "sun": "0",
+          "bh": "0"
+        },
+        "pay_total": "0",
+        "pay_rates": {
+          "day": "0",
+          "night": "0",
+          "sat": "0",
+          "sun": "0",
+          "bh": "0"
+        },
+        "events": [
+          [
+            "ACTUAL_NATIVE_VECTOR_AGGREGATE",
+            519
+          ],
+          [
+            "v_hours_day",
+            544,
+            "v_hours_day:=(v_snapshot.pay_vector_json#>>'{hours,day}')::numeric"
+          ],
+          [
+            "v_hours_night",
+            545,
+            "v_hours_night:=(v_snapshot.pay_vector_json#>>'{hours,night}')::numeric"
+          ],
+          [
+            "v_hours_sat",
+            546,
+            "v_hours_sat:=(v_snapshot.pay_vector_json#>>'{hours,sat}')::numeric"
+          ],
+          [
+            "v_hours_sun",
+            547,
+            "v_hours_sun:=(v_snapshot.pay_vector_json#>>'{hours,sun}')::numeric"
+          ],
+          [
+            "v_hours_bh",
+            548,
+            "v_hours_bh:=(v_snapshot.pay_vector_json#>>'{hours,bh}')::numeric"
+          ],
+          [
+            "v_pay_day",
+            589,
+            "v_pay_day:=(v_movement.canonical_pay_vector_json#>>'{rates,day}')::numeric"
+          ],
+          [
+            "v_pay_night",
+            590,
+            "v_pay_night:=(v_movement.canonical_pay_vector_json#>>'{rates,night}')::numeric"
+          ],
+          [
+            "v_pay_sat",
+            591,
+            "v_pay_sat:=(v_movement.canonical_pay_vector_json#>>'{rates,sat}')::numeric"
+          ],
+          [
+            "v_pay_sun",
+            592,
+            "v_pay_sun:=(v_movement.canonical_pay_vector_json#>>'{rates,sun}')::numeric"
+          ],
+          [
+            "v_pay_bh",
+            593,
+            "v_pay_bh:=(v_movement.canonical_pay_vector_json#>>'{rates,bh}')::numeric"
+          ]
+        ],
+        "insertLine": 647
+      },
+      "expectedHours": {
+        "day": "7.50",
+        "night": "0",
+        "sat": "0",
+        "sun": "0",
+        "bh": "0"
+      },
+      "passAssignmentOrder": true
+    },
+    {
+      "fixture": "NHSP_NONE_HOURS",
+      "before": {
+        "hours": {
+          "day": "0",
+          "night": "0",
+          "sat": "0",
+          "sun": "0",
+          "bh": "0"
+        },
+        "pay_total": "0",
+        "pay_rates": {
+          "day": "0",
+          "night": "0",
+          "sat": "0",
+          "sun": "0",
+          "bh": "0"
+        },
+        "events": [
+          [
+            "ACTUAL_NATIVE_VECTOR_AGGREGATE",
+            523
+          ],
+          [
+            "v_pay_day",
+            576,
+            "v_pay_day:=(v_movement.canonical_pay_vector_json#>>'{rates,day}')::numeric"
+          ],
+          [
+            "v_pay_night",
+            577,
+            "v_pay_night:=(v_movement.canonical_pay_vector_json#>>'{rates,night}')::numeric"
+          ],
+          [
+            "v_pay_sat",
+            578,
+            "v_pay_sat:=(v_movement.canonical_pay_vector_json#>>'{rates,sat}')::numeric"
+          ],
+          [
+            "v_pay_sun",
+            579,
+            "v_pay_sun:=(v_movement.canonical_pay_vector_json#>>'{rates,sun}')::numeric"
+          ],
+          [
+            "v_pay_bh",
+            580,
+            "v_pay_bh:=(v_movement.canonical_pay_vector_json#>>'{rates,bh}')::numeric"
+          ]
+        ],
+        "insertLine": 634
+      },
+      "after": {
+        "hours": {
+          "day": "0",
+          "night": "8.25",
+          "sat": "0",
+          "sun": "0",
+          "bh": "0"
+        },
+        "pay_total": "0",
+        "pay_rates": {
+          "day": "0",
+          "night": "0",
+          "sat": "0",
+          "sun": "0",
+          "bh": "0"
+        },
+        "events": [
+          [
+            "ACTUAL_NATIVE_VECTOR_AGGREGATE",
+            519
+          ],
+          [
+            "ACTUAL_BOUND_ECONOMIC_SELECT",
+            550
+          ],
+          [
+            "v_pay_day",
+            589,
+            "v_pay_day:=(v_movement.canonical_pay_vector_json#>>'{rates,day}')::numeric"
+          ],
+          [
+            "v_pay_night",
+            590,
+            "v_pay_night:=(v_movement.canonical_pay_vector_json#>>'{rates,night}')::numeric"
+          ],
+          [
+            "v_pay_sat",
+            591,
+            "v_pay_sat:=(v_movement.canonical_pay_vector_json#>>'{rates,sat}')::numeric"
+          ],
+          [
+            "v_pay_sun",
+            592,
+            "v_pay_sun:=(v_movement.canonical_pay_vector_json#>>'{rates,sun}')::numeric"
+          ],
+          [
+            "v_pay_bh",
+            593,
+            "v_pay_bh:=(v_movement.canonical_pay_vector_json#>>'{rates,bh}')::numeric"
+          ]
+        ],
+        "insertLine": 647
+      },
+      "expectedHours": {
+        "day": "0",
+        "night": "8.25",
+        "sat": "0",
+        "sun": "0",
+        "bh": "0"
+      },
+      "passAssignmentOrder": true
+    },
+    {
+      "fixture": "SOURCE_NONE_FIXED_EXPENSE",
+      "before": {
+        "hours": {
+          "day": "0",
+          "night": "0",
+          "sat": "0",
+          "sun": "0",
+          "bh": "0"
+        },
+        "pay_total": "0",
+        "pay_rates": {
+          "day": null,
+          "night": null,
+          "sat": null,
+          "sun": null,
+          "bh": null
+        },
+        "events": [
+          [
+            "ACTUAL_NATIVE_VECTOR_AGGREGATE",
+            523
+          ],
+          [
+            "v_hours_day",
+            572,
+            "v_hours_day:=0"
+          ],
+          [
+            "v_hours_night",
+            572,
+            "v_hours_night:=0"
+          ],
+          [
+            "v_hours_sat",
+            572,
+            "v_hours_sat:=0"
+          ],
+          [
+            "v_hours_sun",
+            572,
+            "v_hours_sun:=0"
+          ],
+          [
+            "v_hours_bh",
+            572,
+            "v_hours_bh:=0"
+          ],
+          [
+            "v_pay_day",
+            573,
+            "v_pay_day:=null"
+          ],
+          [
+            "v_pay_night",
+            573,
+            "v_pay_night:=null"
+          ],
+          [
+            "v_pay_sat",
+            573,
+            "v_pay_sat:=null"
+          ],
+          [
+            "v_pay_sun",
+            573,
+            "v_pay_sun:=null"
+          ],
+          [
+            "v_pay_bh",
+            573,
+            "v_pay_bh:=null"
+          ]
+        ],
+        "insertLine": 634
+      },
+      "after": {
+        "hours": {
+          "day": "0",
+          "night": "0",
+          "sat": "0",
+          "sun": "0",
+          "bh": "0"
+        },
+        "pay_total": "0",
+        "pay_rates": {
+          "day": null,
+          "night": null,
+          "sat": null,
+          "sun": null,
+          "bh": null
+        },
+        "events": [
+          [
+            "ACTUAL_NATIVE_VECTOR_AGGREGATE",
+            519
+          ],
+          [
+            "v_hours_day",
+            585,
+            "v_hours_day:=0"
+          ],
+          [
+            "v_hours_night",
+            585,
+            "v_hours_night:=0"
+          ],
+          [
+            "v_hours_sat",
+            585,
+            "v_hours_sat:=0"
+          ],
+          [
+            "v_hours_sun",
+            585,
+            "v_hours_sun:=0"
+          ],
+          [
+            "v_hours_bh",
+            585,
+            "v_hours_bh:=0"
+          ],
+          [
+            "v_pay_day",
+            586,
+            "v_pay_day:=null"
+          ],
+          [
+            "v_pay_night",
+            586,
+            "v_pay_night:=null"
+          ],
+          [
+            "v_pay_sat",
+            586,
+            "v_pay_sat:=null"
+          ],
+          [
+            "v_pay_sun",
+            586,
+            "v_pay_sun:=null"
+          ],
+          [
+            "v_pay_bh",
+            586,
+            "v_pay_bh:=null"
+          ]
+        ],
+        "insertLine": 647
+      },
+      "expectedHours": {
+        "day": "0",
+        "night": "0",
+        "sat": "0",
+        "sun": "0",
+        "bh": "0"
+      },
+      "passAssignmentOrder": true
+    },
+    {
+      "fixture": "ORDINARY_NORMAL",
+      "before": {
+        "hours": {
+          "day": "6.25",
+          "night": "0",
+          "sat": "0",
+          "sun": "0",
+          "bh": "0"
+        },
+        "pay_total": "125",
+        "pay_rates": {
+          "day": "20",
+          "night": "0",
+          "sat": "0",
+          "sun": "0",
+          "bh": "0"
+        },
+        "events": [
+          [
+            "ACTUAL_NATIVE_VECTOR_AGGREGATE",
+            523
+          ],
+          [
+            "v_pay_day",
+            576,
+            "v_pay_day:=(v_movement.canonical_pay_vector_json#>>'{rates,day}')::numeric"
+          ],
+          [
+            "v_pay_night",
+            577,
+            "v_pay_night:=(v_movement.canonical_pay_vector_json#>>'{rates,night}')::numeric"
+          ],
+          [
+            "v_pay_sat",
+            578,
+            "v_pay_sat:=(v_movement.canonical_pay_vector_json#>>'{rates,sat}')::numeric"
+          ],
+          [
+            "v_pay_sun",
+            579,
+            "v_pay_sun:=(v_movement.canonical_pay_vector_json#>>'{rates,sun}')::numeric"
+          ],
+          [
+            "v_pay_bh",
+            580,
+            "v_pay_bh:=(v_movement.canonical_pay_vector_json#>>'{rates,bh}')::numeric"
+          ]
+        ],
+        "insertLine": 634
+      },
+      "after": {
+        "hours": {
+          "day": "6.25",
+          "night": "0",
+          "sat": "0",
+          "sun": "0",
+          "bh": "0"
+        },
+        "pay_total": "125",
+        "pay_rates": {
+          "day": "20",
+          "night": "0",
+          "sat": "0",
+          "sun": "0",
+          "bh": "0"
+        },
+        "events": [
+          [
+            "ACTUAL_NATIVE_VECTOR_AGGREGATE",
+            519
+          ],
+          [
+            "v_pay_day",
+            589,
+            "v_pay_day:=(v_movement.canonical_pay_vector_json#>>'{rates,day}')::numeric"
+          ],
+          [
+            "v_pay_night",
+            590,
+            "v_pay_night:=(v_movement.canonical_pay_vector_json#>>'{rates,night}')::numeric"
+          ],
+          [
+            "v_pay_sat",
+            591,
+            "v_pay_sat:=(v_movement.canonical_pay_vector_json#>>'{rates,sat}')::numeric"
+          ],
+          [
+            "v_pay_sun",
+            592,
+            "v_pay_sun:=(v_movement.canonical_pay_vector_json#>>'{rates,sun}')::numeric"
+          ],
+          [
+            "v_pay_bh",
+            593,
+            "v_pay_bh:=(v_movement.canonical_pay_vector_json#>>'{rates,bh}')::numeric"
+          ]
+        ],
+        "insertLine": 647
+      },
+      "expectedHours": {
+        "day": "6.25",
+        "night": "0",
+        "sat": "0",
+        "sun": "0",
+        "bh": "0"
+      },
+      "passAssignmentOrder": true
+    }
+  ],
+  "native": "NOT_RUN",
+  "dbConnections": 0
+}

@@ -1,0 +1,14 @@
+{
+  "version": "SAME_SEPARATE_F23_PREBODY_DEPENDENCY_FORWARD_V1",
+  "file": "scripts/healthroster-same-separate-type-review.mjs",
+  "beforeSha256": "7234379079c1bdf1d09653682a2ea82ceb8a669c08266a0834a0d1a4c63a702f",
+  "afterSha256": "897df1661b265921f960c107f5189470475866ad8311aec358b15f8841391259",
+  "hunk": {
+    "before": "  for(const pin of d.dependencies)if(sha(read(pin.path))!==pin.sha256)fail('DEPENDENCY_CHANGED');",
+    "after": "  for(const pin of d.dependencies){\n   let source=read(pin.path);\n   if(pin.path==='scripts/healthroster-prebody-dynamic-review.mjs'&&pin.sha256==='079ea08052ad96600ee0f9bdfee70dbeccaa8d85acb8eaf51483a1be5e5f99c1'&&sha(source)!==pin.sha256){\n    if(sha(source)!=='3504d0e858e1fdefe95edae2c86f14324944a96e1f27dc1a5caf097266898eef')fail('DEPENDENCY_CHANGED');\n    const raw=fs.readFileSync(path.join(root,'docs/healthroster-build/v6-owner-delivery-20261016/SAME_SEPARATE_PREBODY_DEPENDENCY_FORWARD_20261017.json'));\n    if(sha(raw)!=='6a349f504746da2545af40e7b83144c3e4b8312606761489cb6e396098cde4d9')fail('PREBODY_FORWARD_REVIEW_CHANGED');\n    const delta=JSON.parse(raw);if(source.split(delta.hunk.after).length!==2)fail('PREBODY_FORWARD_REVERSE_ANCHOR');\n    source=source.replace(delta.hunk.after,()=>delta.hunk.before);\n   }\n   if(sha(source)!==pin.sha256)fail('DEPENDENCY_CHANGED');\n  }"
+  },
+  "sourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/SAME_SEPARATE_PREBODY_DEPENDENCY_FORWARD_20261017.json",
+  "sourceReviewSha256": "6a349f504746da2545af40e7b83144c3e4b8312606761489cb6e396098cde4d9",
+  "frozenClassificationUnchanged": true,
+  "native": "NOT_RUN"
+}

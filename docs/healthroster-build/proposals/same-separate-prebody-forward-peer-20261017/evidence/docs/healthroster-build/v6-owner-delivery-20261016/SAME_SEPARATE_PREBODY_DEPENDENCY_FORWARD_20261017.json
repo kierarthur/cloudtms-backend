@@ -1,0 +1,30 @@
+{
+  "version": "SAME_SEPARATE_PREBODY_DEPENDENCY_SOURCE_FORWARD_V1",
+  "file": "scripts/healthroster-prebody-dynamic-review.mjs",
+  "beforeSha256": "079ea08052ad96600ee0f9bdfee70dbeccaa8d85acb8eaf51483a1be5e5f99c1",
+  "afterSha256": "3504d0e858e1fdefe95edae2c86f14324944a96e1f27dc1a5caf097266898eef",
+  "hunk": {
+    "before": " const source=canonical(value);\n const prior='069e6d1d2361c6c8026b193116db565d40503b9a2e338ddb75c4b1dadb15d415';",
+    "after": " const source=canonical(value);\n // The reviewed Same/Separate adapter has no compiler or migration-packet effect.\n // Reconstruct its exact complete prior bytes for this historical proof only.\n if(input.file==='broker/src/weekly-source/off-rule-native-proxy.mjs'\n  &&input.sha256==='4606dc7e262d1870c548f7382a259ffb48a0d06729fa4b8adbcf184495b3cdef'&&digest(source)!==input.sha256){\n  if(digest(source)!=='c46b57f1b923e57674a13a7d0b2d19a0745bd583257174aea0aecf86d0ac4a0c')fail('BOUND_SOURCE_CHANGED');\n  const changes=[[\"const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;\",\"const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;\"],[\"export const sourceOperations=Object.freeze(['weekly_source_upload_context_v1'\",\"export const sourceOperations=Object.freeze(['weekly_source_office_recheck_begin_v1','weekly_source_upload_context_v1'\"],[\"'weekly_exceptional_pay_stage_c1_request_v1']);\",\"'weekly_exceptional_pay_stage_c1_request_v1','weekly_source_missing_accept_context_v1','weekly_source_missing_accept_prepare_atomic_v1','weekly_source_later_change_decide_atomic_v1']);\"]];let reversed=source;\n  for(const[before,after]of changes){if(reversed.split(after).length!==2)fail('BOUND_SOURCE_CHANGED');reversed=reversed.replace(after,()=>before);}\n  if(digest(reversed)!==input.sha256)fail('BOUND_SOURCE_CHANGED');return reversed;\n }\n const prior='069e6d1d2361c6c8026b193116db565d40503b9a2e338ddb75c4b1dadb15d415';"
+  },
+  "targetAdapter": "broker/src/weekly-source/off-rule-native-proxy.mjs",
+  "adapterBeforeSha256": "4606dc7e262d1870c548f7382a259ffb48a0d06729fa4b8adbcf184495b3cdef",
+  "adapterAfterSha256": "c46b57f1b923e57674a13a7d0b2d19a0745bd583257174aea0aecf86d0ac4a0c",
+  "adapterLiteralEdits": [
+    [
+      "const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;",
+      "const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;"
+    ],
+    [
+      "export const sourceOperations=Object.freeze(['weekly_source_upload_context_v1'",
+      "export const sourceOperations=Object.freeze(['weekly_source_office_recheck_begin_v1','weekly_source_upload_context_v1'"
+    ],
+    [
+      "'weekly_exceptional_pay_stage_c1_request_v1']);",
+      "'weekly_exceptional_pay_stage_c1_request_v1','weekly_source_missing_accept_context_v1','weekly_source_missing_accept_prepare_atomic_v1','weekly_source_later_change_decide_atomic_v1']);"
+    ]
+  ],
+  "originalClassificationAnd95InputsUnchanged": true,
+  "compilerPacketsUnchanged": true,
+  "native": "NOT_RUN"
+}

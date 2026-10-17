@@ -1,0 +1,56 @@
+create or replace function private.weekly_source_paid_match_prepared_census_recheck_v1(p_final_revision_id uuid,p_actor_user_id uuid)
+returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare revision public.weekly_source_final_revisions%rowtype;session public.weekly_final_source_correction_sessions%rowtype;
+  publication public.weekly_source_projection_publications%rowtype;v_row record;v_choice jsonb;v_census jsonb:='{}'::jsonb;
+begin
+  select * into strict revision from public.weekly_source_final_revisions where id=p_final_revision_id;
+  if p_actor_user_id is null or revision.state is distinct from 'PREPARED' or revision.reason is distinct from 'CORRECT_FINAL_SOURCE'
+    or revision.finalised_by_user_id is distinct from p_actor_user_id or revision.authority_scope_kind not in ('CYCLE','NHSP_REPORT_SCOPE')
+    or (revision.authority_scope_kind='NHSP_REPORT_SCOPE') is distinct from (revision.report_scope_id is not null) then
+    raise exception 'WEEKLY_SOURCE_PAID_MATCH_PREPARED_ACTOR_REQUIRED' using errcode='42501';end if;
+  select * into strict session from public.weekly_final_source_correction_sessions
+    where prepared_final_revision_id=revision.id and source_cycle_id=revision.source_cycle_id
+      and replacement_correction_upload_id=revision.upload_id and actor_user_id=p_actor_user_id
+      and authority_scope_kind=revision.authority_scope_kind and report_scope_id is not distinct from revision.report_scope_id
+      and state in ('PREPARING','PREPARED','COMMITTING');
+  select * into strict publication from public.weekly_source_projection_publications
+    where id=session.replacement_projection_publication_id and upload_id=revision.upload_id
+      and source_cycle_id=revision.source_cycle_id and correction_session_id=session.id
+      and authority_scope_kind=revision.authority_scope_kind and report_scope_id is not distinct from revision.report_scope_id
+      and state='CORRECTION_READY';
+  if revision.authority_scope_kind='NHSP_REPORT_SCOPE' then
+    perform private.weekly_source_paid_match_correction_scope_v1(revision.upload_id,p_actor_user_id,false);
+  end if;
+  for v_row in select raw.id,resolution.work_event_id,resolution.candidate_id,resolution.client_id,resolution.contract_id,
+      resolution.paid_overlap_choice_id,resolution.pay_effect
+    from public.weekly_source_upload_rows raw join public.weekly_source_row_resolutions resolution on resolution.upload_row_id=raw.id
+      and resolution.generation=coalesce(publication.projection_generation,publication.authority_scope_version)
+    where raw.upload_id=revision.upload_id order by raw.source_row_ordinal,raw.id
+  loop
+    v_choice:=private.weekly_source_paid_overlap_choice_current_v1(v_row.id,p_actor_user_id);
+    if v_choice is null then
+      if v_row.pay_effect<>'NORMAL' or v_row.paid_overlap_choice_id is not null then
+        raise exception 'WEEKLY_SOURCE_PAID_MATCH_PREPARED_RESOLUTION_UNBOUND' using errcode='40001';end if;
+      continue;
+    end if;
+    if v_choice->>'schema_version' is distinct from 'WEEKLY_SOURCE_PAID_OVERLAP_CURRENT_CHOICE_V1'
+      or v_choice->>'viewer_actor_user_id' is distinct from p_actor_user_id::text
+      or v_choice->>'upload_row_id' is distinct from v_row.id::text
+      or v_choice->>'candidate_id' is distinct from v_row.candidate_id::text
+      or v_choice->>'client_id' is distinct from v_row.client_id::text
+      or v_choice->>'contract_id' is distinct from v_row.contract_id::text
+      or v_choice->>'choice_id' is distinct from v_row.paid_overlap_choice_id::text
+      or v_choice->>'pay_effect' is distinct from v_row.pay_effect
+      or (v_row.pay_effect='NONE' and v_choice->>'paid_overlap_target_work_event_id' is distinct from v_row.work_event_id::text)
+      or v_choice->>'choice_proof_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1(
+        'WEEKLY_SOURCE_PAID_OVERLAP_CURRENT_CHOICE_V1',v_choice-'choice_proof_sha256'),'hex') then
+      raise exception 'WEEKLY_SOURCE_PAID_MATCH_PREPARED_RESOLUTION_UNBOUND' using errcode='40001';end if;
+    v_census:=v_census||jsonb_build_object(v_row.id::text,v_choice);
+  end loop;
+  if v_census is distinct from revision.paid_overlap_choice_census then
+    raise exception 'WEEKLY_SOURCE_PAID_MATCH_PREPARED_CENSUS_CHANGED' using errcode='40001';end if;
+  return v_census;
+end;
+$function$;

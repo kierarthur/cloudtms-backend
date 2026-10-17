@@ -7206,5 +7206,34 @@
     "sourceCommit": "b5809c06b2e6c6e8ad4c671a8bbee647cac44729",
     "onlyPureReasonAndRequestHashQualification": true,
     "allOtherNativeBusinessAndReleaseGates": "PRESERVED_NOT_QUALIFIED"
+  },
+  "same_separate_source_continuation_20261017": {
+    "status": "SOURCE_GATE_PASS_NATIVE_UNQUALIFIED",
+    "root_receipt": "docs/healthroster-build/v6-owner-delivery-20261016/SAME_SEPARATE_ROOT_MOUNT_20261017.json",
+    "selection_sha256": "8b2c91e61a262f592d7ecae6b437f23d7277a5e565c7e4cc70076c0e21719c74",
+    "exact_runtime_targets": 84,
+    "distinct_health_definitions": 62,
+    "private_acl_literals_appended": 34,
+    "fixes_applied": 7,
+    "fixes_rejected": 0,
+    "source_inventory": {
+      "migrations": 425,
+      "repeatables": 1093,
+      "signatures": 3035,
+      "registered": 1648
+    },
+    "full_source_gate": {
+      "sql_sources": 2231,
+      "rpc_roots": 78,
+      "elapsed_ms": 187045
+    },
+    "historical_proof_dependencies_preserved": 95,
+    "original_packet_variants_preserved": 4,
+    "bank_bodies_added": 0,
+    "original_92_objects_preserved": true,
+    "native": "NOT_RUN",
+    "contract": "NOT_SEALED",
+    "install2": "NOT_INSTALLED",
+    "final_critics": "NOT_RUN"
   }
 }

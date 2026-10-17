@@ -1,0 +1,68 @@
+create or replace function private.weekly_source_paid_match_expense_invoice_insert_v1(p_snapshot_line_id uuid,p_final_revision_id uuid)
+returns uuid language plpgsql volatile security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare s public.weekly_source_final_snapshot_lines%rowtype;
+  p public.weekly_source_row_expense_policy_snapshots%rowtype;
+  h public.weekly_source_billing_movements%rowtype;r public.weekly_source_final_revisions%rowtype;
+  v_hours uuid;v_id uuid;v_values jsonb;v_pay jsonb;v_facts jsonb;v_state jsonb;v_mapping bytea;v_hash bytea;
+begin
+  -- The real HOURS companion proves the common immutable raw Source row,
+  -- actual choice/census/audit, original calculation and native lineage.
+  v_hours:=private.weekly_source_paid_match_invoice_movement_insert_v1(p_snapshot_line_id,p_final_revision_id);
+  if v_hours is null then return null;end if;
+  perform private.weekly_source_paid_match_invoice_origin_assert_v1(v_hours);
+  select * into strict h from public.weekly_source_billing_movements where id=v_hours;
+  select * into strict s from public.weekly_source_final_snapshot_lines where id=p_snapshot_line_id;
+  select * into strict r from public.weekly_source_final_revisions where id=p_final_revision_id;
+  select * into p from public.weekly_source_row_expense_policy_snapshots where row_resolution_id=s.row_resolution_id;
+  if not found then return null;end if;
+  if p.source_expense_pence is null or p.source_expense_pence<0
+    or p.row_resolution_id is distinct from s.row_resolution_id or p.upload_row_id is distinct from s.upload_row_id
+    or p.work_event_id is distinct from s.work_event_id or p.contract_id is distinct from s.contract_id
+    or p.candidate_id is distinct from s.candidate_id or p.client_id is distinct from s.client_id
+    or p.source_expense_pence is distinct from s.source_expense_pence
+    or private.weekly_source_finalisation_expense_policy_assert_v1(s.row_resolution_id,r.source_cycle_id) is distinct from p.id then
+    raise exception 'WEEKLY_SOURCE_PAID_MATCH_EXPENSE_POLICY_UNBOUND' using errcode='55000';end if;
+  if p.source_expense_pence=0 then return null;end if;
+  select id into v_id from public.weekly_source_billing_movements
+    where invoice_only_snapshot_line_id=s.id and source_line_kind='SOURCE_FIXED_EXPENSE';
+  if found then perform private.weekly_source_paid_match_expense_invoice_origin_assert_v1(v_id);return v_id;end if;
+  v_values:=private.weekly_source_fixed_expense_invoice_values_v1(p.id);
+  v_pay:=v_values->'pay_vector'||jsonb_build_object('source_expense_pence',0);
+  v_mapping:=private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_PAID_MATCH_EXPENSE_MAPPING_V1',
+    jsonb_build_object('snapshot_line_id',s.id,'snapshot_line_hash',encode(s.snapshot_line_hash,'hex'),
+      'row_expense_policy_snapshot_id',p.id,'invoice_vat_policy_fingerprint',encode(p.invoice_vat_policy_fingerprint,'hex'),
+      'hours_companion_movement_id',h.id,'paid_overlap_choice_id',s.paid_overlap_choice_id));
+  v_facts:=jsonb_build_object('schema_version','WEEKLY_SOURCE_PAID_MATCH_FIXED_EXPENSE_FACTS_V1',
+    'snapshot_line_id',s.id,'snapshot_line_hash',encode(s.snapshot_line_hash,'hex'),'upload_row_id',s.upload_row_id,
+    'bound_row_resolution_id',s.row_resolution_id,'paid_overlap_choice_id',s.paid_overlap_choice_id,'pay_effect','NONE',
+    'hours_companion_movement_id',h.id,'row_expense_policy_snapshot_id',p.id,'invoice_values',v_values,
+    'rule_set_version_id',r.rule_set_version_id,'invoice_window_cycle_id',h.source_facts_json->'invoice_window_cycle_id',
+    'invoice_window_scope',h.source_facts_json->'invoice_window_scope');
+  v_state:=jsonb_build_object('invoice_only_snapshot_line_id',s.id,'pay_effect','NONE','final_revision_id',r.id,
+    'finalisation_cycle_id',r.source_cycle_id,'actual_client_id',s.client_id,'candidate_id',s.candidate_id,
+    'contract_id',s.contract_id,'work_event_id',s.work_event_id,'movement_role','EXPENSE_POSITIVE',
+    'source_profile_kind',s.source_profile_kind,'source_line_kind','SOURCE_FIXED_EXPENSE','source_facts',v_facts,
+    'pay_vector',v_pay,'charge_vector',v_values->'charge_vector','total_pay_pence',0,
+    'calculated_comparison_charge_pence',p.source_expense_pence,'source_validation_charge_pence',p.source_expense_pence,
+    'invoice_presentation_charge_pence',p.source_expense_pence,'vat_rate_pct',(v_values->>'vat_rate_pct')::numeric(5,2),
+    'vat_amount',(v_values->>'vat_amount')::numeric(12,2),'total_inc_vat',(v_values->>'total_inc_vat')::numeric(12,2),
+    'price_check_result','NOT_APPLICABLE','price_check_fingerprint',null,'charge_acceptance_id',null,
+    'mapping_rate_policy_fingerprint',encode(v_mapping,'hex'),'invoice_timesheet_id',h.invoice_timesheet_id);
+  v_hash:=private.weekly_source_billing_movement_hash_v1(v_state);
+  insert into public.weekly_source_billing_movements(invoice_only_snapshot_line_id,pay_effect,final_revision_id,finalisation_cycle_id,
+    actual_client_id,candidate_id,contract_id,work_event_id,movement_role,source_profile_kind,source_line_kind,
+    source_facts_json,canonical_pay_vector_json,canonical_charge_vector_json,total_pay_ex_vat,
+    calculated_comparison_charge_pence,source_validation_charge_pence,invoice_presentation_charge_pence,
+    vat_rate_pct,vat_amount,total_inc_vat,price_check_result,mapping_rate_policy_fingerprint,
+    invoice_timesheet_id,original_cycle_key,movement_economic_hash)
+  values(s.id,'NONE',r.id,r.source_cycle_id,s.client_id,s.candidate_id,s.contract_id,s.work_event_id,'EXPENSE_POSITIVE',
+    s.source_profile_kind,'SOURCE_FIXED_EXPENSE',v_facts,v_pay,v_values->'charge_vector',0,
+    p.source_expense_pence,p.source_expense_pence,p.source_expense_pence,
+    (v_values->>'vat_rate_pct')::numeric(5,2),(v_values->>'vat_amount')::numeric(12,2),(v_values->>'total_inc_vat')::numeric(12,2),
+    'NOT_APPLICABLE',v_mapping,h.invoice_timesheet_id,r.source_cycle_id::text,v_hash) returning id into v_id;
+  perform private.weekly_source_paid_match_expense_invoice_origin_assert_v1(v_id);
+  return v_id;
+end;
+$function$;

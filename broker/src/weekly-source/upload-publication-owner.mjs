@@ -1,3 +1,4 @@
+import { reviewWeeklyCorrectFinalPaidMatchRecheck } from './correct-final-source-orchestrator.mjs';
 import { REPORT_PROFILE, assertReportUploadRequest, assertReportRuleContext, reportScopeRequest,
   assertReportScopeReceipt, assertReportPublicationContext, assertReportStageRowsReceipt,
   assertReportProjectionRowsReceipt } from './report-upload-provenance.mjs';
@@ -10,7 +11,9 @@ import { compareWeeklySourceShiftPrice } from './source-price-comparator.js';
 import { buildWeeklySourceCanonicalEconomicSnapshot } from './economic-snapshot.js';
 import { weeklySourceCoverageWarnings } from './coverage-warnings.mjs';
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const isPaidChoiceCounter=value=>typeof value==='string'&&/^[1-9][0-9]*$/.test(value)
+  &&(value.length<19||(value.length===19&&value<='9223372036854775807'));
 const NHSP = new Set(['NHSP_PREFINAL_RELEASED_V1', 'NHSP_FINAL_BACKING_V1']);
 const ROSTER_EXTERNAL = new Set([
   'HEALTHROSTER_WEEKLY_FROM_TO_ACTUAL_V1',
@@ -69,6 +72,11 @@ function requiredUuid(value, label) {
 
 function optionalUuid(value, label) {
   return value == null || value === '' ? null : requiredUuid(value, label);
+}
+
+function requiredCorrectionCounter(value,label){
+  if(typeof value==='number'){if(!Number.isSafeInteger(value)||value<1)fail('WEEKLY_SOURCE_CORRECTION_VERSION_INVALID',`${label} is invalid.`,502);return value;}
+  if(typeof value!=='string'||!/^([1-9][0-9]*)$/.test(value)||value.length>19||(value.length===19&&value>'9223372036854775807'))fail('WEEKLY_SOURCE_CORRECTION_VERSION_INVALID',`${label} is invalid.`,502);return value;
 }
 
 function requiredPositiveInteger(value, label) {
@@ -483,7 +491,33 @@ function projectionRow(source, body) {
   const policy = contract.effective_policy;
   const sourceAuthority = policy.authority_mode === 'SOURCE_AUTHORITY';
   const sourceMode = policy.c1_source_mode;
-  if (sourceAuthority) {
+  const paidChoice = row.paid_overlap_choice;
+  if (sourceAuthority && paidChoice != null) {
+    const nativeNhspIntent = row.profile_id === 'NHSP_FINAL_BACKING_V1'
+      && paidChoice.schema_version === 'WEEKLY_SOURCE_NHSP_PROJECTION_LOCK_INPUT_V1'
+      && paidChoice.fresh_choice_admission === false
+      && paidChoice.upload_id === body.native_projection_upload_id
+      && paidChoice.projection_publication_id === body.native_projection_publication_id
+      && typeof paidChoice.lock_input_sha256 === 'string' && /^[0-9a-f]{64}$/.test(paidChoice.lock_input_sha256);
+    if ((!nativeNhspIntent && paidChoice.schema_version !== 'WEEKLY_SOURCE_PAID_OVERLAP_CURRENT_CHOICE_V1')
+      || !isPaidChoiceCounter(paidChoice.choice_id)
+      || !['NORMAL', 'NONE'].includes(paidChoice.pay_effect)
+      || paidChoice.upload_row_id !== row.upload_row_id
+      || paidChoice.candidate_id !== row.candidate_id || paidChoice.client_id !== row.client_id
+      || paidChoice.contract_id !== qualified.selectedContractId
+      || typeof paidChoice.paid_overlap_target_work_event_id !== 'string'
+      || (!nativeNhspIntent && (typeof paidChoice.choice_proof_sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(paidChoice.choice_proof_sha256)))) {
+      return { ...base, contract_id: qualified.selectedContractId, mapping_state: 'SOURCE_ROW_BLOCKED',
+        blocker_code: 'PAID_SHIFT_MATCH_CHOICE_STALE', qualifying_contract_ids: qualified.eligibleContractIds };
+    }
+    base.prior_work_event_id = paidChoice.pay_effect === 'NONE' ? paidChoice.paid_overlap_target_work_event_id : null;
+    // The native constructor re-reads the actual immutable choice and derives
+    // pay_effect itself. No pay/evidence assertion enters p_rows from Worker.
+  } else if (sourceAuthority && ROSTER_EXTERNAL.has(row.profile_id) && row.row_finalisation_state === 'SOURCE_WORKED'
+    && !base.prior_work_event_id && (row.paid_overlap_inputs?.overlaps ?? []).some(item => item.native_payment_facts?.paid !== false)) {
+    return { ...base, contract_id: qualified.selectedContractId, mapping_state: 'SOURCE_ROW_BLOCKED',
+      blocker_code: 'PAID_SHIFT_OVERLAP_CONFIRMATION_REQUIRED', qualifying_contract_ids: qualified.eligibleContractIds };
+  } else if (sourceAuthority) {
     const matches = (row.protected_matches ?? []).filter(item => item.contract_id === qualified.selectedContractId);
     const selected = row.office_selected_work_event_id;
     const retained = matches.filter(item => item.retained_source_identity === true);
@@ -597,6 +631,8 @@ export function buildWeeklySourceProjectionRows(context, body = {}) {
   return context.rows.map((row) => projectionRow(row, {
     ...body,
     profile_id: context.profile_id,
+    native_projection_upload_id: context.upload_id,
+    native_projection_publication_id: context.projection_publication_id,
   }));
 }
 
@@ -900,7 +936,7 @@ export function createWeeklySourceUploadPublicationOwner(dependencies = {}) {
 
     async stageReplacementSource(input = {}) {
       const actorUserId = requiredUuid(input.actor_user_id, 'Office user');
-      const expectedSessionVersion = requiredPositiveInteger(
+      const expectedSessionVersion = requiredCorrectionCounter(
         input.expected_session_version,
         'Correction version',
       );
@@ -939,10 +975,7 @@ export function createWeeklySourceUploadPublicationOwner(dependencies = {}) {
           || publishedContext.projection_state !== 'CORRECTION_READY') {
         fail('WEEKLY_SOURCE_CORRECTION_PUBLICATION_STALE', 'The replacement source changed before it was prepared.');
       }
-      const correctionVersion = Number(publishedContext.correction_session_version);
-      if (!Number.isSafeInteger(correctionVersion) || correctionVersion < 1) {
-        fail('WEEKLY_SOURCE_CORRECTION_VERSION_INVALID', 'The replacement source version is invalid.', 502);
-      }
+      const correctionVersion = requiredCorrectionCounter(publishedContext.correction_session_version,'Replacement source version');
       return {
         ok: true,
         status: 'CORRECTION_READY',
@@ -970,14 +1003,33 @@ export function createWeeklySourceUploadPublicationOwner(dependencies = {}) {
     async recheckUpload(input = {}) {
       const request = { ...(input.request ?? {}), actor_user_id: requiredUuid(input.actor?.id, 'Office user') };
       const begun = await rpc(dependencies, 'weekly_source_office_recheck_begin_v1', request);
-      if (!begun?.ok || !['BUILDING', 'CURRENT'].includes(begun.status)) {
+      const correction = begun?.purpose === 'FINAL_SOURCE_CORRECTION';
+      if (correction !== Object.hasOwn(request,'correction_session_id')) {
+        fail('WEEKLY_SOURCE_CORRECTION_REBUILD_IDENTITY_MISMATCH', 'The saved source purpose changed.', 409);
+      }
+      if (correction && (begun.correction_session_id !== request.correction_session_id
+          || begun.upload_id !== request.upload_id)) {
+        fail('WEEKLY_SOURCE_CORRECTION_REBUILD_IDENTITY_MISMATCH', 'The saved correction scope changed.', 409);
+      }
+      if (!begun?.ok || !(correction ? ['BUILDING', 'CORRECTION_READY'] : ['BUILDING', 'CURRENT']).includes(begun.status)) {
         fail('WEEKLY_SOURCE_RECHECK_BEGIN_FAILED', 'The source comparison could not be rechecked.');
       }
       if (begun.status === 'CURRENT') return begun;
+      if (correction && begun.status === 'CORRECTION_READY') return {
+        ...begun, correction_review: await reviewWeeklyCorrectFinalPaidMatchRecheck(dependencies,request,begun,begun),
+      };
       try {
         const context = validateContext(await rpc(dependencies, 'weekly_source_upload_context_v1', {
-          ...scopeRequest({}, request.actor_user_id, 'BUILD_PROJECTION', begun.upload_id),
+          ...scopeRequest(correction ? { purpose: 'FINAL_SOURCE_CORRECTION',
+            correction_session_id: begun.correction_session_id } : {}, request.actor_user_id, 'BUILD_PROJECTION', begun.upload_id),
         }));
+        if (correction && (context.upload_id !== begun.upload_id
+          || context.correction_session_id !== begun.correction_session_id
+          || context.source_cycle_id !== begun.correction_review_identity?.source_cycle_id
+          || context.authority_scope_kind !== begun.correction_review_identity?.authority_scope_kind
+          || context.report_scope_id !== begun.correction_review_identity?.report_scope_id)) {
+          fail('WEEKLY_SOURCE_CORRECTION_REBUILD_IDENTITY_MISMATCH','The saved correction context changed.',409);
+        }
         const reportRecheckRowsReceipt = await rpc(dependencies, 'weekly_source_projection_rows_apply_atomic_v1', {
           p_actor_user_id: request.actor_user_id,
           p_publication_id: begun.publication_id,
@@ -987,10 +1039,14 @@ export function createWeeklySourceUploadPublicationOwner(dependencies = {}) {
         const result = await rpc(dependencies, 'weekly_source_projection_publish_atomic_v1', {
           actor_user_id: request.actor_user_id, publication_id: begun.publication_id,
         });
-        if (!result?.ok || result.status !== 'CURRENT') {
+        if (!result?.ok || result.status !== (correction ? 'CORRECTION_READY' : 'CURRENT')) {
           fail(result?.reason_code ?? 'WEEKLY_SOURCE_RECHECK_FAILED', 'The saved source comparison is still incomplete. Retry this recheck.', 409);
         }
-        return result;
+        if(!correction)return result;
+        // The same immutable native request re-reads its genuine typed ready
+        // receipt. Ordinary publish receipts retain their existing numeric ABI.
+        const ready=await rpc(dependencies,'weekly_source_office_recheck_begin_v1',request);
+        return{...result,correction_review:await reviewWeeklyCorrectFinalPaidMatchRecheck(dependencies,request,begun,ready)};
       } catch {
         // Begin is a separate committed transaction. A later failure must not
         // tell Office that its saved choice was rejected or invite a new key.
@@ -1010,11 +1066,11 @@ export function createWeeklySourceUploadPublicationOwner(dependencies = {}) {
         input.replacement_projection_publication_id,
         'Replacement comparison',
       );
-      const expectedSessionVersion = requiredPositiveInteger(
+      const expectedSessionVersion = requiredCorrectionCounter(
         input.expected_session_version,
         'Correction version',
       );
-      const expectedAuthorityScopeVersion = requiredPositiveInteger(
+      const expectedAuthorityScopeVersion = requiredCorrectionCounter(
         input.expected_authority_scope_version,
         'Authority scope version',
       );
@@ -1066,8 +1122,8 @@ export function createWeeklySourceUploadPublicationOwner(dependencies = {}) {
           'The rebuilt replacement comparison changed before review.',
         );
       }
-      const readySessionVersion = requiredPositiveInteger(
-        published.ready_session_version,
+      const readySessionVersion = requiredCorrectionCounter(
+        publishedContext.correction_session_version,
         'Rebuilt correction version',
       );
       return {

@@ -1687,6 +1687,10 @@
       "sha256": "3b113d6277fa88e2417aa311d7fa28d6f6999c391f01f41ccf2c5a4fe1c1f69e"
     },
     {
+      "path": "supabase/migrations/17102026_0231_weekly_source_paid_same_separate_10_footprint.sql",
+      "sha256": "54fcc770a920641d2c4322e6ea9818bb3fc9d1e13c74e80372f61973888203d5"
+    },
+    {
       "path": "supabase/migrations/17102026_0248_daily_health_support_admission.sql",
       "sha256": "6dcb719b0e62eec72cd547e59e9726dec7b7ccc513edba463ada003046b8842d"
     },

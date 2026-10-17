@@ -1,0 +1,34 @@
+create or replace function private.weekly_source_fixed_expense_invoice_values_v1(p_policy_snapshot_id uuid)
+returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare v_expense_policy public.weekly_source_row_expense_policy_snapshots%rowtype;
+  v_new_pence bigint;v_vat_rate numeric(5,2);v_vat numeric(12,2);v_total numeric(12,2);
+  v_replacement_pay_vector jsonb;v_replacement_charge_vector jsonb;
+begin
+  select * into strict v_expense_policy from public.weekly_source_row_expense_policy_snapshots
+    where id=p_policy_snapshot_id;
+  v_new_pence:=v_expense_policy.source_expense_pence;
+  if v_new_pence is null or v_new_pence<0 or v_expense_policy.source_expense_vat_enabled is null
+    or (v_expense_policy.source_expense_vat_enabled and v_expense_policy.invoice_vat_rate_pct is null) then
+    raise exception 'WEEKLY_SOURCE_FIXED_EXPENSE_INVOICE_VALUES_UNBOUND' using errcode='55000';end if;
+    v_vat_rate:=case when v_expense_policy.source_expense_vat_enabled
+      then v_expense_policy.invoice_vat_rate_pct else 0 end;
+    v_vat:=pg_catalog.round((v_new_pence::numeric/100)*(v_vat_rate/100),2);
+    v_total:=v_new_pence::numeric/100+v_vat;
+    v_replacement_pay_vector:=pg_catalog.jsonb_build_object(
+      'schema_version','WEEKLY_SOURCE_FIXED_EXPENSE_VECTOR_V1','kind','PAY',
+      'source_expense_pence',v_new_pence,
+      'source_expense_vat_enabled',v_expense_policy.source_expense_vat_enabled
+    );
+    v_replacement_charge_vector:=v_replacement_pay_vector||pg_catalog.jsonb_build_object('kind','CHARGE');
+  return jsonb_build_object('schema_version','WEEKLY_SOURCE_FIXED_EXPENSE_INVOICE_VALUES_V1',
+    'row_expense_policy_snapshot_id',v_expense_policy.id,'row_resolution_id',v_expense_policy.row_resolution_id,
+    'work_event_id',v_expense_policy.work_event_id,'candidate_id',v_expense_policy.candidate_id,
+    'client_id',v_expense_policy.client_id,'contract_id',v_expense_policy.contract_id,
+    'net_pence',v_new_pence,'source_expense_vat_enabled',v_expense_policy.source_expense_vat_enabled,
+    'vat_rate_pct',v_vat_rate,'vat_amount',v_vat,'total_inc_vat',v_total,
+    'pay_vector',v_replacement_pay_vector,'charge_vector',v_replacement_charge_vector,
+    'invoice_vat_policy_fingerprint',encode(v_expense_policy.invoice_vat_policy_fingerprint,'hex'));
+end;
+$function$;

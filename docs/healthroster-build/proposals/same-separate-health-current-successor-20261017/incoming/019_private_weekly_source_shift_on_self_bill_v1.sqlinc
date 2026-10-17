@@ -1,0 +1,132 @@
+create or replace function private.weekly_source_shift_on_self_bill_v1(p_work_event_id uuid,p_cycle_or_report uuid)
+returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare c public.weekly_source_cycles%rowtype; event_fact public.weekly_work_events%rowtype; scope_fact public.weekly_source_report_scopes%rowtype;
+  rules jsonb; selected boolean:=false; bound boolean:=false; ready boolean:=false;
+  r public.weekly_source_row_resolutions%rowtype; s public.weekly_source_upload_rows%rowtype; u public.weekly_source_uploads%rowtype;
+  profile text; count_rows integer; ids uuid[]; v_selection_upload_id uuid; v_selection_publication_id uuid; preparing_count integer;
+begin
+  -- NULL is the existing legacy/no-Source arm. An explicit but missing or
+  -- foreign mutation scope is an error, never four false admission facts.
+  if p_work_event_id is null or p_cycle_or_report is null then
+    return jsonb_build_object('on_accepted_report',false,'bound_to_finalised_export',false,'invoice_ready',false,'s25_pay_selected',false); end if;
+  select * into event_fact from public.weekly_work_events where id=p_work_event_id;
+  if not found then raise exception 'WEEKLY_SOURCE_SELF_BILL_EVENT_NOT_FOUND' using errcode='22023'; end if;
+  select * into c from public.weekly_source_cycles where weekly_source_cycles.id=p_cycle_or_report;
+  if not found then
+    select * into scope_fact from public.weekly_source_report_scopes where id=p_cycle_or_report;
+    if not found then raise exception 'WEEKLY_SOURCE_SELF_BILL_SCOPE_NOT_FOUND' using errcode='22023'; end if;
+    select * into strict c from public.weekly_source_cycles where id=scope_fact.source_cycle_id;
+    if scope_fact.client_id is distinct from event_fact.client_id or scope_fact.source_group_id is distinct from c.source_group_id
+      or not exists(select 1 from public.weekly_source_groups source_group where source_group.id=c.source_group_id
+        and source_group.agency_id=scope_fact.agency_id and source_group.environment=scope_fact.environment) then
+      raise exception 'WEEKLY_SOURCE_SELF_BILL_SCOPE_MISMATCH' using errcode='22023'; end if;
+  end if;
+  if event_fact.first_source_group_id is distinct from c.source_group_id
+    or (c.scope_client_id is not null and c.scope_client_id is distinct from event_fact.client_id) then
+    raise exception 'WEEKLY_SOURCE_SELF_BILL_SCOPE_MISMATCH' using errcode='22023'; end if;
+  rules:=private.weekly_source_effective_rule_set_v1(event_fact.client_id,c.id)->'values';
+  if rules->>'invoice_sender'='CLIENT_SELF_BILL' and rules->>'self_bill_source'='SEPARATE_FINAL_REPORT' then
+    if scope_fact.id is not null and scope_fact.self_bill_report_id is null then
+      raise exception 'WEEKLY_SOURCE_SELF_BILL_REPORT_SCOPE_REQUIRED' using errcode='22023'; end if;
+    return private.weekly_source_report_shift_facts_v1(event_fact.id,p_cycle_or_report);
+  end if;
+  if scope_fact.id is not null and scope_fact.self_bill_report_id is not null then
+    raise exception 'WEEKLY_SOURCE_SELF_BILL_REPORT_RULE_MISMATCH' using errcode='22023'; end if;
+  if rules is null or rules->>'invoice_sender' is distinct from 'CLIENT_SELF_BILL' or rules->>'self_bill_source' is distinct from 'SAME_FILE' then
+    return jsonb_build_object('on_accepted_report',false,'bound_to_finalised_export',false,'invoice_ready',false,'s25_pay_selected',false); end if;
+  v_selection_upload_id:=c.current_complete_upload_id; v_selection_publication_id:=c.current_projection_publication_id;
+  select count(*) into preparing_count from public.weekly_final_source_correction_sessions correction
+    where correction.source_cycle_id=c.id and correction.authority_scope_kind='CYCLE' and correction.state='PREPARING'
+      and correction.expected_current_final_revision_id=c.current_final_revision_id;
+  if preparing_count>1 then raise exception 'WEEKLY_SOURCE_SELF_BILL_CORRECTION_SCOPE_AMBIGUOUS' using errcode='55000'; end if;
+  if preparing_count=1 then
+    -- Only native PREPARE has this state. PREPARED stays hidden and ordinary
+    -- readers retain the committed current pointer.
+    select correction.replacement_correction_upload_id,correction.replacement_projection_publication_id
+      into v_selection_upload_id,v_selection_publication_id from public.weekly_final_source_correction_sessions correction
+      where correction.source_cycle_id=c.id and correction.authority_scope_kind='CYCLE' and correction.state='PREPARING'
+        and correction.expected_current_final_revision_id=c.current_final_revision_id;
+  end if;
+  select array_agg(resolution.id),count(*) into ids,count_rows from public.weekly_source_row_resolutions resolution
+    join public.weekly_source_upload_rows source_row on source_row.id=resolution.upload_row_id
+    join public.weekly_source_uploads upload on upload.id=source_row.upload_id
+    join public.weekly_source_projection_publications publication on publication.id=v_selection_publication_id and publication.upload_id=upload.id
+      and publication.source_cycle_id=c.id and publication.report_scope_id is null and publication.authority_scope_kind='CYCLE'
+      and publication.state=case when preparing_count=1 then 'CORRECTION_READY' else 'CURRENT' end
+    join public.weekly_work_events actual_event on actual_event.id=resolution.work_event_id and actual_event.client_id=resolution.client_id
+      and actual_event.candidate_id=resolution.candidate_id and actual_event.first_source_group_id=c.source_group_id
+    where upload.source_cycle_id=c.id and upload.report_scope_id is null
+      and upload.state=case when preparing_count=1 then 'CORRECTION_READY' else 'CURRENT' end
+      and (c.scope_client_id is null or c.scope_client_id=resolution.client_id) and resolution.work_event_id=p_work_event_id and upload.id=v_selection_upload_id
+      and resolution.generation=coalesce(publication.projection_generation,publication.authority_scope_version)
+      and resolution.mapping_state='RESOLVED' and resolution.pay_effect='NORMAL';
+  if count_rows=0 then
+    -- This selects an actual immutable prior row as PAY basis, not as current
+    -- upload membership. Real current NONE rows and their immutable confirmations
+    -- are the independent source-presence evidence for this branch.
+    select array_agg(distinct prior_resolution.id),count(distinct prior_resolution.id)
+      into ids,count_rows
+    from public.weekly_source_row_resolutions companion
+    join public.weekly_source_upload_rows current_row on current_row.id=companion.upload_row_id
+    join public.weekly_source_uploads current_upload on current_upload.id=current_row.upload_id
+    join public.weekly_source_projection_publications current_publication
+      on current_publication.id=v_selection_publication_id and current_publication.upload_id=current_upload.id
+        and current_publication.source_cycle_id=c.id and current_publication.authority_scope_kind='CYCLE'
+        and current_publication.state=case when preparing_count=1 then 'CORRECTION_READY' else 'CURRENT' end
+    join private.weekly_source_office_row_choices choice on choice.id=companion.paid_overlap_choice_id
+      and choice.upload_row_id=current_row.id and choice.pay_effect='NONE' and not choice.separate_shift
+      and choice.work_event_id=event_fact.id and choice.paid_overlap_target_work_event_id=event_fact.id
+      and choice.candidate_id=event_fact.candidate_id and choice.client_id=event_fact.client_id
+    cross join lateral jsonb_array_elements(choice.paid_overlap_inputs_json#>'{inputs,overlaps}') item
+    join public.weekly_source_final_snapshot_lines prior_snapshot
+      on prior_snapshot.id=(item->>'snapshot_line_id')::uuid and prior_snapshot.work_event_id=event_fact.id
+        and prior_snapshot.candidate_id=event_fact.candidate_id and prior_snapshot.client_id=event_fact.client_id
+        and prior_snapshot.contract_id=choice.contract_id and prior_snapshot.pay_effect='NORMAL'
+    join public.weekly_source_row_resolutions prior_resolution on prior_resolution.id=prior_snapshot.row_resolution_id
+      and prior_resolution.work_event_id=event_fact.id and prior_resolution.pay_effect='NORMAL'
+    join public.weekly_source_final_revisions prior_revision on prior_revision.id=prior_snapshot.final_revision_id
+    join public.weekly_source_cycles prior_cycle on prior_cycle.id=prior_revision.source_cycle_id
+      and prior_cycle.source_group_id=c.source_group_id and prior_cycle.finalisation_week_ending<c.finalisation_week_ending
+    join public.weekly_source_billing_movements prior_movement on prior_movement.id=(item->>'current_pay_head_movement_id')::uuid
+      and prior_movement.work_event_id=event_fact.id and prior_movement.candidate_id=event_fact.candidate_id
+      and prior_movement.actual_client_id=event_fact.client_id and prior_movement.contract_id=prior_snapshot.contract_id
+      and prior_movement.pay_effect='NORMAL' and prior_movement.movement_role in ('POSITIVE','REPLACEMENT')
+      and prior_movement.source_line_kind in ('SOURCE_ORDINARY','SOURCE_REPLACEMENT')
+    where current_upload.id=v_selection_upload_id and current_upload.source_cycle_id=c.id and current_upload.report_scope_id is null
+      and current_upload.state=case when preparing_count=1 then 'CORRECTION_READY' else 'CURRENT' end
+      and companion.generation=coalesce(current_publication.projection_generation,current_publication.authority_scope_version)
+      and companion.mapping_state='RESOLVED' and companion.pay_effect='NONE' and companion.work_event_id=event_fact.id
+      and companion.candidate_id=event_fact.candidate_id and companion.client_id=event_fact.client_id
+      and companion.contract_id=choice.contract_id and item->>'work_event_id'=event_fact.id::text
+      and current_row.row_finalisation_state='SOURCE_WORKED' and current_row.work_date=event_fact.work_date
+      and item#>'{native_payment_facts,paid}'='true'::jsonb
+      and item#>>'{native_payment_facts,paid_evidence_state}'='SETTLED_ORIGINAL'
+      and item->>'snapshot_line_hash'=encode(prior_snapshot.snapshot_line_hash,'hex')
+      and item->>'movement_economic_hash'=encode(prior_movement.movement_economic_hash,'hex')
+      and exists(select 1 from public.audit_events a where a.object_type='weekly_source_office_row_choices'
+        and a.object_id_text=choice.id::text and a.action='WEEKLY_SOURCE_PAID_SHIFT_MATCH_CONFIRMED'
+        and a.actor_user_id=choice.actor_user_id and a.after_json->'choice'=to_jsonb(choice)
+        and a.after_json->'admission'=choice.paid_overlap_inputs_json);
+  end if;
+  if count_rows>1 then raise exception 'WEEKLY_SOURCE_SELF_BILL_SHIFT_AMBIGUOUS' using errcode='55000'; end if;
+  if count_rows=1 then
+    select * into strict r from public.weekly_source_row_resolutions where weekly_source_row_resolutions.id=ids[1];
+    select * into strict s from public.weekly_source_upload_rows where weekly_source_upload_rows.id=r.upload_row_id;
+    select * into strict u from public.weekly_source_uploads where weekly_source_uploads.id=s.upload_id;
+    select profile_code into strict profile from public.weekly_source_format_profiles where weekly_source_format_profiles.id=u.source_format_profile_id;
+    if profile is distinct from rules->>'checking_profile_kind' then return jsonb_build_object('on_accepted_report',false,'bound_to_finalised_export',false,'invoice_ready',false,'s25_pay_selected',false); end if;
+    bound:=s.row_finalisation_state='SOURCE_WORKED' or (profile='ROSTER_WEEKLY_SUMMARY_ACTUAL_V1' and s.row_finalisation_state='NOT_APPLICABLE');
+    selected:=bound and s.work_date<=c.finalisation_week_ending and (profile='ROSTER_WEEKLY_SUMMARY_ACTUAL_V1'
+      or (s.finalised_at_utc is not null and nullif(btrim(s.finalised_by),'') is not null and s.finalised_at_utc<=c.cutoff_at_utc));
+    ready:=selected;
+    if selected and rules->>'invoice_amount_basis'='SOURCE_AMOUNT' and rules->>'source_amount_basis'='EXPORT_ACTUAL_COST_INC_VAT_NET_AGENCY_WORKER_PAY' then
+      ready:=s.source_money_parse_state='VALID' and s.source_shift_charge_pence is not null and s.source_gross_pence is not null and s.source_vat_pence is not null
+        and (abs(5::numeric*s.source_gross_pence-6::numeric*s.source_shift_charge_pence)<=5
+          or exists(select 1 from public.weekly_source_invoice_hold_releases receipt where receipt.upload_row_id=s.id and receipt.hold_kind='VAT_FIT'));
+    end if;
+  end if;
+  return jsonb_build_object('on_accepted_report',false,'bound_to_finalised_export',coalesce(bound,false),
+    'invoice_ready',coalesce(ready,false),'s25_pay_selected',coalesce(selected,false));
+end;
+$function$;

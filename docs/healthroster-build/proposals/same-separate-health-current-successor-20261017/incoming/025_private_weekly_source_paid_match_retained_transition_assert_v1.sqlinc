@@ -1,0 +1,168 @@
+create or replace function private.weekly_source_paid_match_retained_transition_assert_v1(p_transition_id uuid)
+returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare
+  t public.weekly_source_state_transitions%rowtype;r public.weekly_source_final_revisions%rowtype;
+  old_line public.weekly_source_final_snapshot_lines%rowtype;b public.weekly_source_final_snapshot_lines%rowtype;
+  m public.weekly_source_billing_movements%rowtype;choice private.weekly_source_office_row_choices%rowtype;
+  journal private.weekly_source_office_rechecks%rowtype;resolution public.weekly_source_row_resolutions%rowtype;
+  raw_row public.weekly_source_upload_rows%rowtype;audit public.audit_events%rowtype;
+  proof jsonb;item jsonb;rows jsonb;expected jsonb;counted integer;movement_id uuid;lineage_id uuid;economic_id uuid;
+  native_basis jsonb;legacy_current jsonb;native_roots uuid[];source_group_id uuid;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  select * into strict t from public.weekly_source_state_transitions where id=p_transition_id;
+  select * into strict r from public.weekly_source_final_revisions where id=t.final_revision_id;
+  if t.pay_basis_kind is distinct from 'RETAINED_PAID_MATCH' or t.outcome<>'NO_CHANGE'
+    or t.exclude_cancel or not t.previous_present or not t.new_present
+    or t.previous_snapshot_line_id is null or t.new_snapshot_line_id is distinct from t.previous_snapshot_line_id
+    or t.prior_state_fingerprint is null or t.new_state_fingerprint is distinct from t.prior_state_fingerprint
+    or r.authority_scope_kind<>'CYCLE' or r.report_scope_id is not null or r.finalised_by_user_id is null
+    or r.state not in ('PREPARED','CURRENT') then
+    raise exception 'WEEKLY_SOURCE_PAID_MATCH_RETAINED_TRANSITION_UNBOUND' using errcode='55000';end if;
+  select * into strict old_line from public.weekly_source_final_snapshot_lines where id=t.previous_snapshot_line_id;
+  if old_line.pay_effect<>'NORMAL'
+    or old_line.work_event_id is distinct from t.work_event_id or old_line.final_revision_id=t.final_revision_id then
+    raise exception 'WEEKLY_SOURCE_PAID_MATCH_PRIOR_PAY_BASIS_CHANGED' using errcode='55000';end if;
+  select coalesce(jsonb_agg(jsonb_build_object('snapshot_line_id',s.id,'upload_row_id',s.upload_row_id,
+    'paid_overlap_choice_id',s.paid_overlap_choice_id,'snapshot_line_hash',encode(s.snapshot_line_hash,'hex'))
+    order by s.upload_row_id),'[]'::jsonb) into rows from public.weekly_source_final_snapshot_lines s
+    where s.final_revision_id=r.id and s.work_event_id=t.work_event_id and s.pay_effect='NONE';
+  if jsonb_array_length(rows)=0 or rows is distinct from t.paid_match_source_rows
+    or exists(select 1 from public.weekly_source_final_snapshot_lines s
+      where s.final_revision_id=r.id and s.work_event_id=t.work_event_id and s.pay_effect='NORMAL') then
+    raise exception 'WEEKLY_SOURCE_PAID_MATCH_SOURCE_ROWS_CHANGED' using errcode='55000';end if;
+  for b in select * from public.weekly_source_final_snapshot_lines s
+    where s.final_revision_id=r.id and s.work_event_id=t.work_event_id and s.pay_effect='NONE' order by s.upload_row_id
+  loop
+    select * into strict resolution from public.weekly_source_row_resolutions where id=b.row_resolution_id;
+    select * into strict raw_row from public.weekly_source_upload_rows where id=b.upload_row_id;
+    select * into strict choice from private.weekly_source_office_row_choices where id=b.paid_overlap_choice_id;
+    proof:=r.paid_overlap_choice_census->b.upload_row_id::text;
+    if proof->>'schema_version' is distinct from 'WEEKLY_SOURCE_PAID_OVERLAP_CURRENT_CHOICE_V1'
+      or proof->>'choice_proof_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1(
+        'WEEKLY_SOURCE_PAID_OVERLAP_CURRENT_CHOICE_V1',proof-'choice_proof_sha256'),'hex')
+      or proof->>'viewer_actor_user_id' is distinct from r.finalised_by_user_id::text
+      or proof->>'choice_id' is distinct from choice.id::text or proof->>'pay_effect' is distinct from 'NONE'
+      or proof->>'upload_row_id' is distinct from b.upload_row_id::text
+      or proof->>'paid_overlap_target_work_event_id' is distinct from t.work_event_id::text
+      or (b.candidate_id,b.client_id,b.contract_id) is distinct from (old_line.candidate_id,old_line.client_id,old_line.contract_id)
+      or (resolution.upload_row_id,resolution.work_event_id,resolution.candidate_id,resolution.client_id,resolution.contract_id,resolution.pay_effect,resolution.paid_overlap_choice_id)
+        is distinct from (b.upload_row_id,t.work_event_id,b.candidate_id,b.client_id,b.contract_id,'NONE',choice.id)
+      or raw_row.upload_id is distinct from r.upload_id or raw_row.row_finalisation_state<>'SOURCE_WORKED'
+      or resolution.mapping_state<>'RESOLVED'
+      or (b.work_date,b.start_at_local,b.end_at_local,b.break_minutes,b.actual_net_minutes,b.source_fingerprint)
+        is distinct from (raw_row.work_date,raw_row.start_at_local,raw_row.end_at_local,raw_row.break_minutes,raw_row.actual_net_minutes,raw_row.normalised_row_hash)
+      or (choice.upload_row_id,choice.work_event_id,choice.candidate_id,choice.client_id,choice.contract_id,choice.pay_effect)
+        is distinct from (b.upload_row_id,t.work_event_id,b.candidate_id,b.client_id,b.contract_id,'NONE')
+      or choice.paid_overlap_target_work_event_id is distinct from t.work_event_id or choice.separate_shift
+      or proof->>'confirmed_by_actor_user_id' is distinct from choice.actor_user_id::text then
+      raise exception 'WEEKLY_SOURCE_PAID_MATCH_RETAINED_CHOICE_UNBOUND' using errcode='55000';end if;
+    select count(*),max(value->>'current_pay_head_movement_id')::uuid into counted,movement_id
+      from jsonb_array_elements(proof#>'{inputs,overlaps}') value where value->>'work_event_id'=t.work_event_id::text;
+    if counted<>1 then raise exception 'WEEKLY_SOURCE_PAID_MATCH_PRIOR_PAY_BASIS_CHANGED' using errcode='55000';end if;
+    select value into strict item from jsonb_array_elements(proof#>'{inputs,overlaps}') value where value->>'work_event_id'=t.work_event_id::text;
+    if item->>'snapshot_line_id' is distinct from old_line.id::text
+      or item->>'snapshot_line_hash' is distinct from encode(old_line.snapshot_line_hash,'hex')
+      or item#>>'{current_pay_snapshot,state}' is distinct from 'CURRENT'
+      or item#>>'{current_pay_snapshot,snapshot_line_id}' is distinct from old_line.id::text
+      or item#>>'{current_pay_snapshot,movement_id}' is distinct from movement_id::text
+      or item#>'{native_payment_facts,paid}' is distinct from 'true'::jsonb
+      or (item#>>'{native_payment_facts,paid_evidence_state}') is null or (item#>>'{native_payment_facts,paid_evidence_state}') not in ('SETTLED_ORIGINAL','SETTLED_LEGACY_SOURCE_COMPONENT') then
+      raise exception 'WEEKLY_SOURCE_PAID_MATCH_PRIOR_PAY_BASIS_CHANGED' using errcode='55000';end if;
+    select * into strict m from public.weekly_source_billing_movements where id=movement_id;
+    if (m.work_event_id,m.candidate_id,m.actual_client_id,m.contract_id) is distinct from
+      (t.work_event_id,old_line.candidate_id,old_line.client_id,old_line.contract_id)
+      or m.pay_effect<>'NORMAL' or m.movement_role not in ('POSITIVE','REPLACEMENT')
+      or m.source_profile_kind='SELF_BILL_REPORT'
+      or m.source_line_kind in ('SELF_BILL_REPORT_LINE','INVOICE_VAT_ROUNDING','SOURCE_REBILL_LINE','SOURCE_INVOICE_CORRECTION')
+      or item->>'movement_economic_hash' is distinct from encode(m.movement_economic_hash,'hex')
+      then
+      raise exception 'WEEKLY_SOURCE_PAID_MATCH_PRIOR_MOVEMENT_UNBOUND' using errcode='55000';end if;
+    if item#>>'{native_payment_facts,paid_evidence_state}'='SETTLED_ORIGINAL' then
+      -- Keep the existing NEXT map predicate unchanged for NEXT proof.
+      if not exists(select 1 from private.bpay_next_source_current_snapshots mapping
+        join private.bpay_next_source_current_scopes scope on scope.id=mapping.scope_id
+        where mapping.snapshot_line_id=old_line.id and mapping.movement_id=m.id and mapping.work_event_id=t.work_event_id
+          and scope.source_group_id=(select source_group_id from public.weekly_source_cycles where id=r.source_cycle_id)
+          and (scope.candidate_id,scope.client_id,scope.contract_id)=(old_line.candidate_id,old_line.client_id,old_line.contract_id)) then
+        raise exception 'WEEKLY_SOURCE_PAID_MATCH_PRIOR_MOVEMENT_UNBOUND' using errcode='55000';end if;
+    else
+      -- LEGACY publish_revision returns before NEXT capture. Re-prove the
+      -- genuine Source prior selection instead of manufacturing a NEXT map.
+      select c.source_group_id into strict source_group_id from public.weekly_source_cycles c where c.id=r.source_cycle_id;
+      if item#>>'{native_payment_facts,paid_evidence_state}' is distinct from 'SETTLED_LEGACY_SOURCE_COMPONENT'
+        or (select control.active_owner from private.bpay_next_module_control control where control.id=1) is distinct from 'LEGACY'
+        or item#>>'{native_payment_facts,schema_version}' is distinct from 'WEEKLY_SOURCE_WORK_EVENT_PAYMENT_FACTS_V1'
+        or item#>>'{native_payment_facts,work_event_id}' is distinct from t.work_event_id::text
+        or item#>>'{native_payment_facts,source_cycle_id}' is distinct from r.source_cycle_id::text
+        or item#>>'{native_payment_facts,source_group_id}' is distinct from source_group_id::text
+        or item#>>'{native_payment_facts,candidate_id}' is distinct from old_line.candidate_id::text
+        or item#>>'{native_payment_facts,client_id}' is distinct from old_line.client_id::text
+        or jsonb_typeof(item#>'{native_payment_facts,root_timesheet_ids}') is distinct from 'array'
+        or jsonb_array_length(item#>'{native_payment_facts,root_timesheet_ids}') not between 1 and 200
+        or jsonb_typeof(item#>'{native_payment_facts,native_paid_basis}') is distinct from 'array'
+        or jsonb_array_length(item#>'{native_payment_facts,native_paid_basis}')
+          is distinct from jsonb_array_length(item#>'{native_payment_facts,root_timesheet_ids}') then
+        raise exception 'WEEKLY_SOURCE_PAID_MATCH_LEGACY_BASIS_UNBOUND' using errcode='55000';end if;
+      native_roots:=array(select value::uuid from jsonb_array_elements_text(item#>'{native_payment_facts,root_timesheet_ids}') value order by value);
+      if cardinality(native_roots) is distinct from (select count(distinct root) from unnest(native_roots) root) then
+        raise exception 'WEEKLY_SOURCE_PAID_MATCH_LEGACY_BASIS_UNBOUND' using errcode='55000';end if;
+      for native_basis in select value from jsonb_array_elements(item#>'{native_payment_facts,native_paid_basis}') value loop
+        if native_basis->>'schema_version' is distinct from 'WEEKLY_SOURCE_LEGACY_SIGNED_SOURCE_MEMBERSHIP_INPUT_V1'
+          or native_basis->>'inputs_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1(
+            'WEEKLY_SOURCE_LEGACY_SIGNED_SOURCE_MEMBERSHIP_INPUT_V1',native_basis-'inputs_sha256'),'hex')
+          or native_basis->>'work_event_id' is distinct from t.work_event_id::text
+          or native_basis->>'source_cycle_id' is distinct from r.source_cycle_id::text
+          or native_basis->>'source_group_id' is distinct from source_group_id::text
+          or native_basis->>'candidate_id' is distinct from old_line.candidate_id::text
+          or native_basis->>'client_id' is distinct from old_line.client_id::text
+          or native_basis->>'actor_user_id' is distinct from r.finalised_by_user_id::text
+          or native_basis#>>'{native_module,active_owner}' is distinct from 'LEGACY'
+          or not ((native_basis->>'root_timesheet_id')::uuid=any(native_roots)) then
+          raise exception 'WEEKLY_SOURCE_PAID_MATCH_LEGACY_BASIS_UNBOUND' using errcode='55000';end if;
+      end loop;
+      if array(select (value->>'root_timesheet_id')::uuid
+          from jsonb_array_elements(item#>'{native_payment_facts,native_paid_basis}') value order by value->>'root_timesheet_id')
+        is distinct from native_roots then
+        raise exception 'WEEKLY_SOURCE_PAID_MATCH_LEGACY_BASIS_UNBOUND' using errcode='55000';end if;
+      legacy_current:=private.weekly_source_paid_overlap_current_snapshot_for_cycle_v1(t.work_event_id,m.id,
+        old_line.candidate_id,old_line.client_id,old_line.contract_id,source_group_id,native_roots,r.source_cycle_id);
+      if legacy_current is distinct from item->'current_pay_snapshot'
+        or legacy_current->>'state' is distinct from 'CURRENT'
+        or legacy_current->>'snapshot_line_id' is distinct from old_line.id::text
+        or legacy_current->>'movement_id' is distinct from m.id::text then
+        raise exception 'WEEKLY_SOURCE_PAID_MATCH_PRIOR_MOVEMENT_UNBOUND' using errcode='55000';end if;
+    end if;
+    select * into strict journal from private.weekly_source_office_rechecks
+      where request_id=(proof->>'confirmation_request_id')::uuid;
+    if journal.actor_user_id is distinct from choice.actor_user_id or journal.upload_id is distinct from raw_row.upload_id
+      or proof->>'confirmation_request_sha256' is distinct from encode(journal.request_hash,'hex')
+      or journal.request_hash is distinct from private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_OFFICE_RECHECK_V1',journal.request_json) then
+      raise exception 'WEEKLY_SOURCE_PAID_OVERLAP_CHOICE_UNBOUND' using errcode='55000';end if;
+    select count(*) into counted from public.audit_events a where a.object_type='weekly_source_office_row_choices'
+      and a.object_id_text=choice.id::text and a.action='WEEKLY_SOURCE_PAID_SHIFT_MATCH_CONFIRMED';
+    if counted<>1 then raise exception 'WEEKLY_SOURCE_PAID_OVERLAP_AUDIT_UNBOUND' using errcode='55000';end if;
+    select * into strict audit from public.audit_events a where a.object_type='weekly_source_office_row_choices'
+      and a.object_id_text=choice.id::text and a.action='WEEKLY_SOURCE_PAID_SHIFT_MATCH_CONFIRMED';
+    if audit.actor_user_id is distinct from choice.actor_user_id or audit.after_json->'choice' is distinct from to_jsonb(choice)
+      or audit.after_json->'admission' is distinct from choice.paid_overlap_inputs_json
+      or audit.after_json->'request' is distinct from journal.request_json
+      or audit.after_json->>'request_sha256' is distinct from encode(journal.request_hash,'hex') then
+      raise exception 'WEEKLY_SOURCE_PAID_OVERLAP_AUDIT_UNBOUND' using errcode='55000';end if;
+  end loop;
+  expected:=jsonb_build_object('final_revision_id',r.id,'work_event_id',t.work_event_id,
+    'previous_snapshot_line_id',old_line.id,'new_snapshot_line_id',old_line.id,'outcome','NO_CHANGE',
+    'prior_state_fingerprint',encode(t.prior_state_fingerprint,'hex'),'new_state_fingerprint',encode(t.new_state_fingerprint,'hex'),
+    'pay_basis_kind','RETAINED_PAID_MATCH','paid_match_source_rows',rows);
+  if t.transition_fingerprint is distinct from private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_STATE_TRANSITION_V1',expected) then
+    raise exception 'WEEKLY_SOURCE_PAID_MATCH_RETAINED_TRANSITION_HASH_UNBOUND' using errcode='55000';end if;
+  select id into strict lineage_id from public.weekly_source_row_timesheet_lineages where row_resolution_id=old_line.row_resolution_id;
+  select id into strict economic_id from public.weekly_source_row_economic_snapshots where row_resolution_id=old_line.row_resolution_id;
+  return jsonb_build_object('schema_version','WEEKLY_SOURCE_PAID_MATCH_RETAINED_PAY_BASIS_V1','transition_id',t.id,
+    'final_revision_id',r.id,'work_event_id',t.work_event_id,'snapshot_line_id',old_line.id,'movement_id',movement_id,
+    'row_resolution_id',old_line.row_resolution_id,'lineage_id',lineage_id,'economic_snapshot_id',economic_id,
+    'actual_present_invoice_rows',rows);
+end;
+$function$;

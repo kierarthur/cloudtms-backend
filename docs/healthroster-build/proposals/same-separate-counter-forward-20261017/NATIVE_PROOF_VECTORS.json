@@ -1,0 +1,24 @@
+{
+  "qualification": "REQUIRED_NATIVE_VECTORS_NOT_EXECUTED_BY_AUTHOR",
+  "native": "NOT_RUN",
+  "fixtureRule": "Root's real native fixture producers must supply each current upload, resolution, immutable admitted choice/audit, settled retained basis and economic rows. No JSON paid label, synthetic proof blob or hand-set ready flag is a substitute.",
+  "finalisation": [
+    {"case": "original-key-NORMAL-plus-new-key-Same-NONE", "rows": ["one genuine NORMAL resolution for the still-present original key", "one independently admitted NONE choice/resolution for the new key targeting that same event"], "expect": "Total resolution census equals accepted row count; one payable event; NONE keeps its own invoice-only movement and source row; no duplicate pay."},
+    {"case": "one-NORMAL-plus-multiple-NONE", "rows": ["one genuine NORMAL resolution", "two or more distinct source rows, each with its own immutable admitted NONE choice for the same event"], "expect": "Every NONE row/choice binding and current native proof revalidates; one payable event and one genuine invoice companion per NONE row."},
+    {"case": "duplicate-NORMAL", "rows": ["two NORMAL resolutions for the same non-NHSP event"], "expect": "WEEKLY_SOURCE_RESOLUTION_CENSUS_NOT_FINALISABLE before writes."},
+    {"case": "NONE-choice-reused-or-foreign", "rows": ["NONE resolution whose choice belongs to another physical row, event, Candidate, client or Contract"], "expect": "Prebody census refuses; later native choice proof is never bypassed."}
+  ],
+  "crossWindow": [
+    {"case": "NONE-SOURCE_REBILL_LINE", "producer": "private.weekly_source_paid_match_invoice_movement_insert_v1(uuid,uuid)", "proof": "private.weekly_source_paid_match_invoice_origin_assert_v1(uuid)", "expect": "Genuine FINALISED_IN_CYCLE_WINDOW movement admits only in its native actual invoice window and same group/client with zero pay vector/total; presentation uses genuine Source hours."},
+    {"case": "NONE-SOURCE_FIXED_EXPENSE", "producer": "private.weekly_source_paid_match_expense_invoice_insert_v1(uuid,uuid)", "proof": "private.weekly_source_paid_match_expense_invoice_origin_assert_v1(uuid)", "expect": "Genuine expense follows the exact hours companion's native invoice window, zero pay and zero presentation hours; charge/VAT stay native."},
+    {"case": "NORMAL-rebill-or-fixed-expense-cross-window", "expect": "No new exception: original manifest guard refuses unrelated NORMAL origins."},
+    {"case": "NONE-origin-window-group-hash-or-pay-vector-mismatch", "expect": "Existing native origin and manifest guards refuse; a line-kind label alone grants no admission."}
+  ],
+  "presentation": [
+    {"case": "SOURCE_NONE_REBILL", "expect": "Actual native invoice line has the validated snapshot's hours, with canonical pay rates/vector and total still zero."},
+    {"case": "NHSP_NONE_HOURS", "expect": "Actual native invoice line has the validated bound economic snapshot's hours, with zero pay."},
+    {"case": "SOURCE_NONE_FIXED_EXPENSE", "expect": "Actual native invoice line has zero hours and zero pay, preserving native expense charge/VAT."},
+    {"case": "ORDINARY_NORMAL", "expect": "Existing ordinary hours/pay and source-original enter/finish, receipt-map, rounding and VAT-release behavior remains unchanged."}
+  ],
+  "sourceOnlyEvidence": ["FINAL_CENSUS_VECTORS.sql is a pure census oracle, not a native financial fixture.", "SOURCE_DATAFLOW_RESULTS.json executes the exact actual assignment AST over bounded in-memory inputs and proves assignment order/output only.", "COUNTER_TEST_RESULTS.json exercises the actual current router and candidate Worker with native boundaries stubbed; API/database proofs remain unrun."]
+}

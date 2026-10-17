@@ -1,0 +1,136 @@
+{
+  "verdict": "ACCEPT_BOUNDED_SOURCE_ONLY",
+  "originalAlone": "HOLD",
+  "reviewModel": "gpt-6.1-sol",
+  "reasoning": "xhigh",
+  "configuredCwd": "D:/Development/GitHub",
+  "writeRoot": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026",
+  "reviewedRuntimeParent": "ef3d20f4513a6f9fd1aa5e4cf6a69d258f6cd87c",
+  "originalFunctional": "9c791fa971c97a198c09c4e3579c01b589486c14",
+  "originalMetadata": "b9c1d0bad2e52ce95f7aa6b8e7f98ecbbd1fc832",
+  "correctedCommit": "a7e4522cb87ae6961cb40efcb83e4e69b12fbd6c",
+  "correctedSelectionSha256": "8b2c91e61a262f592d7ecae6b437f23d7277a5e565c7e4cc70076c0e21719c74",
+  "correctedLocalPayloadManifestSha256": "29f3f66920a8d39fa507854cbeac1884f6eb23696fe0789abeb72824782bc195",
+  "correctedFreezeManifestSha256": "c5414b48ba55297d58b04f5dcc962990eacd9bfa0b2ef0f78fadc02f96f52303",
+  "finalRegistrySha256": "9c89151b35ac193d94c69fbd4b63527d3df78e1d37c8b0734934a562f361bd92",
+  "findings": 7,
+  "findingsCorrectedSourceOnly": 7,
+  "files": [
+    {
+      "path": "CORRECTED_COUNTER_REPLAY_RESULTS.json",
+      "bytes": 3069,
+      "sha256": "dad7c2b8201ecb6f3803f7911a5ba24acc167fc6cafcbf890850c5cdc7b57671"
+    },
+    {
+      "path": "CORRECTED_GRAMMAR_REPLAY_RESULTS.json",
+      "bytes": 19669,
+      "sha256": "800db351fa2192e3e14bdea5733f49d872132e82b82a060f053937d300513c70"
+    },
+    {
+      "path": "CORRECTED_RUNTIME_REPLAY_RESULTS.json",
+      "bytes": 11431,
+      "sha256": "0759549d2901640502d3af0b7b2e1c36f75fafb3fbf25b5b4793462774735820"
+    },
+    {
+      "path": "CORRECTED_SOURCE_CHECK_RESULTS.json",
+      "bytes": 10580,
+      "sha256": "b8ded3547cc6cd4eaaf6ccc3f9b0bd1d700ead0e02d002b7aa05574d276e2eff"
+    },
+    {
+      "path": "CORRECTED_SOURCE_HARNESS_REPLAY_RESULTS.json",
+      "bytes": 1057,
+      "sha256": "f7255a2357342b8dc9aa094adc60a564afed9cb7810d2c71fb7c34907626e2c9"
+    },
+    {
+      "path": "COUNTER_FINDING_REPRODUCTION.json",
+      "bytes": 1501,
+      "sha256": "71b880d088ac6cbc389780df2022fd9e80d3beae884e5f7345a4573ad429d295"
+    },
+    {
+      "path": "CURRENT_PARENT_INVENTORY_RESULTS.json",
+      "bytes": 1738,
+      "sha256": "9fbe68c7f625e49807a600cd70976045748cd5d1720557f8822db972beb8eaf8"
+    },
+    {
+      "path": "FINDINGS.json",
+      "bytes": 15502,
+      "sha256": "403622c8b280502ced8c4fded5aca365f165d43af0ce2b4096222a9b7a292dd2"
+    },
+    {
+      "path": "FROZEN_SOURCE_CHECK_RESULTS.json",
+      "bytes": 1182,
+      "sha256": "7a71efbb51caef88c361886d8039d7ba5f62302ab4b1da3880c6cba93e12719e"
+    },
+    {
+      "path": "REVIEW.md",
+      "bytes": 10439,
+      "sha256": "786f55696a89c063240f8735a7f5214fb738915ef7fbb44a48a23819e853c839"
+    },
+    {
+      "path": "REVIEW_PROGRESS.md",
+      "bytes": 6549,
+      "sha256": "9ef52deec71a3a749909be4d7077181b78609f937a76144892af54a5f851789c"
+    },
+    {
+      "path": "RUNTIME_REPLAY_RESULTS.json",
+      "bytes": 11485,
+      "sha256": "24fa87a2bb60874f1c39b85fa0b30662c2eae162f33e864b0d5b6e91dcaf0873"
+    },
+    {
+      "path": "corrected-counter-replay.mjs",
+      "bytes": 5840,
+      "sha256": "0d5a3688f98989f0d425738304c59e89b3a41f5688c1a04aad190de3bac4e29a"
+    },
+    {
+      "path": "corrected-grammar-replay.py",
+      "bytes": 2154,
+      "sha256": "f28f1187c6c5f390575ae3154295a8b32831492afcf3a8828cbb042e80038f35"
+    },
+    {
+      "path": "corrected-runtime-replay.mjs",
+      "bytes": 3273,
+      "sha256": "a7e80c4e2736134146029a7057ba43f5b5d8f963fe8c4e81a2b8d7f89e930f22"
+    },
+    {
+      "path": "corrected-source-checks.mjs",
+      "bytes": 8763,
+      "sha256": "420b5a051743edec7da37dcf1c9d872af181cc9d03126067b2d7dee4ab01ae1e"
+    },
+    {
+      "path": "corrected-source-harness-replay.mjs",
+      "bytes": 2177,
+      "sha256": "d301f6343235fe987b69d52f669586ee970192a3936407a8971174c8eda63d0d"
+    },
+    {
+      "path": "counter-reproduction.mjs",
+      "bytes": 4670,
+      "sha256": "b1afdee9542a70a618a836850ce1824ce3ed391f435a762dcdb44c55024603bf"
+    },
+    {
+      "path": "current-parent-inventory.mjs",
+      "bytes": 6059,
+      "sha256": "6e6c4f13f89e10897875f785aec21692d3e3413668ae1624d4452c0559fda02c"
+    },
+    {
+      "path": "frozen-source-checks.mjs",
+      "bytes": 7730,
+      "sha256": "12f35c04b35730b628be42480734a850a04f878adceced69630efd9fca21c6e2"
+    },
+    {
+      "path": "runtime-replay.mjs",
+      "bytes": 3272,
+      "sha256": "1c610627d312625fc444d3cad6e33fbe6a63b39bf1988622bb2a9b73dc240acc"
+    }
+  ],
+  "native": "NOT_RUN",
+  "API": "NOT_RUN",
+  "catalogue": "NOT_PROVED",
+  "races": "NOT_RUN",
+  "install": "NOT_RUN",
+  "databaseConnections": 0,
+  "foreignWrites": 0,
+  "rootWrites": 0,
+  "officeWrites": 0,
+  "excludedBankBodySemanticReads": 0,
+  "additionalAgents": 0
+}

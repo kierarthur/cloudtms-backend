@@ -1,0 +1,91 @@
+{
+  "checkpoint": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+  "files": [
+    {
+      "target": "broker/src/weekly-source/upload-publication-owner.mjs",
+      "current": {
+        "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+        "path": "broker/src/weekly-source/upload-publication-owner.mjs",
+        "sha256": "1fd307dc80708de0b185a8f095d54a949fc9b1a480c45a562816af032cb2999c"
+      },
+      "oldBase": {
+        "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "broker/src/weekly-source/upload-publication-owner.mjs",
+        "sha256": "1fd307dc80708de0b185a8f095d54a949fc9b1a480c45a562816af032cb2999c"
+      },
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-nhsp-phased-projection-consumer-20261015/forward/broker/src/weekly-source/upload-publication-owner.mjs",
+        "sha256": "840ee729a0acef3c2e5bed4f8ac6de9a8ea1705e296fdf9d8fe023474766b25e"
+      },
+      "status": "EXACT_CURRENT_BASE_APPLY",
+      "outputSha256": "8fdbb7689053a0377350fbcdef93392443eb03fed0b109288d121b431e88531c"
+    },
+    {
+      "target": "broker/src/weekly-source/correct-final-source-orchestrator.mjs",
+      "current": {
+        "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+        "path": "broker/src/weekly-source/correct-final-source-orchestrator.mjs",
+        "sha256": "0815260d495a35c0c612dbd7cbb9f07940d719236e5fbbc0d335b57695e128f6"
+      },
+      "oldBase": {
+        "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "broker/src/weekly-source/correct-final-source-orchestrator.mjs",
+        "sha256": "0815260d495a35c0c612dbd7cbb9f07940d719236e5fbbc0d335b57695e128f6"
+      },
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-correct-final-choice-construction-20261014/forward/broker/src/weekly-source/correct-final-source-orchestrator.mjs",
+        "sha256": "58415de1d25d8d1f489c7aa1d5cbca12306c2c6604dfeaba73103e44b380ff42"
+      },
+      "status": "EXACT_CURRENT_BASE_APPLY",
+      "outputSha256": "905e51fa2c36587650b6afea2246d6cd5039abda075531a5673e7acb9585a8a5"
+    },
+    {
+      "target": "broker/src/weekly-source/off-rule-native-proxy.mjs",
+      "current": {
+        "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+        "path": "broker/src/weekly-source/off-rule-native-proxy.mjs",
+        "sha256": "4606dc7e262d1870c548f7382a259ffb48a0d06729fa4b8adbcf184495b3cdef"
+      },
+      "oldBase": {
+        "commit": "f500d7615d471a5bc4c030913bc71f861a7f2393",
+        "path": "broker/src/weekly-source/off-rule-native-proxy.mjs",
+        "sha256": "cb453512996b9698a8e35673ce154db4be5e5400fae6e2162c8f6a8217cd6579"
+      },
+      "incoming": {
+        "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+        "path": "docs/healthroster-build/proposals/paid-match-off-command-consumer-construction-20261014/forward/broker/src/weekly-source/off-rule-native-proxy.mjs",
+        "sha256": "bf8019614987283828ebf9ea7ef9eb5c00d83b0207a2d1bd4b4a1a7b3ecfab69"
+      },
+      "status": "EXPLICIT_HEALTH_RECONCILIATION",
+      "outputSha256": "c46b57f1b923e57674a13a7d0b2d19a0745bd583257174aea0aecf86d0ac4a0c"
+    },
+    {
+      "target": "broker/src/weekly-source/routes.js",
+      "current": {
+        "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+        "path": "broker/src/weekly-source/routes.js",
+        "sha256": "91b1a323e74114490c2c15455e3c9a9db20675e8ad35a695c8061bc43d37eb1d"
+      },
+      "status": "FINITE_CURRENT_ROUTE_TYPED_PAID_VARIANTS",
+      "hunks": [
+        {
+          "before": "import{validateKeptPayContextCommand,parseKeptPayContextCommand,decodeKeptPayContext}from'./kept-pay-context.mjs';",
+          "after": "import{validateKeptPayContextCommand,parseKeptPayContextCommand,decodeKeptPayContext}from'./kept-pay-context.mjs';\nimport{isPaidMatchCommand,validatePaidMatchCommand,parsePaidMatchCommand}from'./same-separate-command.mjs';"
+        },
+        {
+          "before": "    if(isContactManualEnquiryCommand(typeof parsed.action==='string' ? parsed.action.trim().toUpperCase() : null))",
+          "after": "    if(isPaidMatchCommand(parsed)){try{return parsePaidMatchCommand(text);}catch{fail('WEEKLY_SOURCE_PAID_MATCH_COMMAND_INVALID','Refresh the paid-shift comparison before choosing.',400);}}\n    if(isContactManualEnquiryCommand(typeof parsed.action==='string' ? parsed.action.trim().toUpperCase() : null))"
+        },
+        {
+          "before": "  if (action === 'RECHECK_SOURCE') {",
+          "after": "  if (action === 'RECHECK_SOURCE') {\n    if(isPaidMatchCommand(body)){try{validatePaidMatchCommand(body);}catch{fail('WEEKLY_SOURCE_PAID_MATCH_COMMAND_INVALID','Refresh the paid-shift comparison before choosing.',400);}}"
+        }
+      ],
+      "outputSha256": "67a369464490aafe4035c06adb1c06d7e4e367d12dd93f05567a03b7bcf61786"
+    }
+  ],
+  "native": "NOT_RUN",
+  "bankBodies": 0
+}

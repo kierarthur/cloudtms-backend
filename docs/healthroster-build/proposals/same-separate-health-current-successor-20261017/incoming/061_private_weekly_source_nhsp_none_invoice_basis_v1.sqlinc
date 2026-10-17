@@ -1,0 +1,155 @@
+create or replace function private.weekly_source_nhsp_none_invoice_basis_v1(
+  p_row_resolution_id uuid,p_final_revision_id uuid
+) returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','pg_temp' as $function$
+declare r public.weekly_source_row_resolutions%rowtype;row public.weekly_source_upload_rows%rowtype;
+  u public.weekly_source_uploads%rowtype;revision public.weekly_source_final_revisions%rowtype;
+  scope public.weekly_source_report_scopes%rowtype;cycle public.weekly_source_cycles%rowtype;
+  choice private.weekly_source_office_row_choices%rowtype;journal private.weekly_source_office_rechecks%rowtype;
+  target public.weekly_source_billing_movements%rowtype;target_revision public.weekly_source_final_revisions%rowtype;
+  proof jsonb;match jsonb;negative jsonb;invoice jsonb;result jsonb;counted integer;ts uuid;
+  session public.weekly_final_source_correction_sessions%rowtype;
+  side integer;comparison jsonb;overlaps jsonb;item jsonb;saved_comparison jsonb;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  if p_row_resolution_id is null or p_final_revision_id is null then
+    raise exception 'WEEKLY_SOURCE_NHSP_NONE_INVOICE_BASIS_UNBOUND' using errcode='55000';end if;
+  select * into strict r from public.weekly_source_row_resolutions where id=p_row_resolution_id;
+  select * into strict row from public.weekly_source_upload_rows where id=r.upload_row_id;
+  select * into strict u from public.weekly_source_uploads where id=row.upload_id;
+  select * into strict revision from public.weekly_source_final_revisions where id=p_final_revision_id;
+  select * into strict scope from public.weekly_source_report_scopes where id=revision.report_scope_id;
+  select * into strict cycle from public.weekly_source_cycles where id=revision.source_cycle_id;
+  select * into strict choice from private.weekly_source_office_row_choices where id=r.paid_overlap_choice_id;
+  proof:=revision.paid_overlap_choice_census->row.id::text;
+  if revision.authority_scope_kind<>'NHSP_REPORT_SCOPE' or revision.upload_id is distinct from u.id
+    or revision.source_cycle_id is distinct from u.source_cycle_id or u.report_scope_id is distinct from scope.id
+    or u.purpose not in ('ORDINARY','FINAL_SOURCE_CORRECTION')
+    or (u.purpose='ORDINARY' and u.correction_session_id is not null)
+    or (u.purpose='FINAL_SOURCE_CORRECTION' and u.correction_session_id is null) or scope.self_bill_report_id is not null
+    or scope.source_cycle_id is distinct from cycle.id or scope.source_group_id is distinct from cycle.source_group_id
+    or scope.client_id is distinct from r.client_id
+    or not exists(select 1 from public.weekly_source_groups g where g.id=cycle.source_group_id and g.source_family='NHSP')
+    or not exists(select 1 from public.weekly_source_format_profiles profile
+      where profile.id=u.source_format_profile_id and profile.profile_code='NHSP_FINAL_BACKING_V1')
+    or r.mapping_state<>'RESOLVED' or r.pay_effect<>'NONE' or choice.pay_effect<>'NONE'
+    or row.row_finalisation_state<>'SOURCE_WORKED' or row.source_money_parse_state is distinct from 'VALID'
+    or row.source_shift_charge_pence is null or row.source_shift_charge_pence<0
+    or r.source_row_fingerprint is distinct from row.normalised_row_hash
+    or (choice.upload_row_id,choice.work_event_id,choice.paid_overlap_target_work_event_id,choice.candidate_id,choice.client_id,choice.contract_id)
+      is distinct from (row.id,r.work_event_id,r.work_event_id,r.candidate_id,r.client_id,r.contract_id)
+    or choice.separate_shift
+    or proof->>'schema_version' is distinct from 'WEEKLY_SOURCE_PAID_OVERLAP_CURRENT_CHOICE_V1'
+    or proof->>'choice_id' is distinct from choice.id::text or proof->>'pay_effect' is distinct from 'NONE'
+    or proof->>'upload_row_id' is distinct from row.id::text
+    or proof->>'paid_overlap_target_work_event_id' is distinct from r.work_event_id::text
+    or proof->>'candidate_id' is distinct from r.candidate_id::text or proof->>'client_id' is distinct from r.client_id::text
+    or proof->>'contract_id' is distinct from r.contract_id::text
+    or proof->>'confirmed_by_actor_user_id' is distinct from choice.actor_user_id::text
+    or proof->>'choice_proof_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_PAID_OVERLAP_CURRENT_CHOICE_V1',proof-'choice_proof_sha256'),'hex') then
+    raise exception 'WEEKLY_SOURCE_NHSP_NONE_INVOICE_BASIS_UNBOUND' using errcode='55000';end if;
+  if u.purpose='FINAL_SOURCE_CORRECTION' then
+    select * into strict session from public.weekly_final_source_correction_sessions where id=u.correction_session_id;
+    if revision.reason<>'CORRECT_FINAL_SOURCE' or revision.predecessor_revision_id is null
+      or session.authority_scope_kind<>'NHSP_REPORT_SCOPE' or session.report_scope_id is distinct from scope.id
+      or session.source_cycle_id is distinct from cycle.id or session.replacement_correction_upload_id is distinct from u.id
+      or session.actor_user_id is distinct from revision.finalised_by_user_id
+      or session.expected_current_final_revision_id is distinct from revision.predecessor_revision_id
+      or session.state not in ('PREPARING','PREPARED','COMMITTING','APPLIED')
+      or (session.state<>'PREPARING' and session.prepared_final_revision_id is distinct from revision.id)
+      or (session.state='APPLIED' and session.applied_final_revision_id is distinct from revision.id)
+      or proof#>>'{inputs,correction_scope,schema_version}' is distinct from 'WEEKLY_SOURCE_PAID_MATCH_CORRECTION_SCOPE_V1'
+      or proof#>>'{inputs,correction_scope,correction_session_id}' is distinct from session.id::text
+      or proof#>>'{inputs,correction_scope,prior_final_revision_id}' is distinct from revision.predecessor_revision_id::text
+      or proof#>>'{inputs,correction_scope,prior_final_manifest_hash}' is distinct from encode(session.expected_final_manifest_hash,'hex')
+      or proof#>>'{inputs,correction_scope,upload_id}' is distinct from u.id::text
+      or proof#>>'{inputs,correction_scope,report_scope_id}' is distinct from scope.id::text
+      or proof#>>'{inputs,correction_scope,authority_scope_kind}' is distinct from 'NHSP_REPORT_SCOPE'
+      or proof#>>'{inputs,correction_scope,scope_sha256}' is distinct from encode(private.weekly_source_sha256_jsonb_v1(
+        'WEEKLY_SOURCE_PAID_MATCH_CORRECTION_SCOPE_V1',(proof#>'{inputs,correction_scope}')-'scope_sha256'),'hex') then
+      raise exception 'WEEKLY_SOURCE_NHSP_NONE_CORRECTION_PROVENANCE_UNBOUND' using errcode='55000';end if;
+  end if;
+  select * into strict journal from private.weekly_source_office_rechecks where request_id=(choice.paid_overlap_inputs_json->>'request_id')::uuid;
+  select count(*) into counted from public.audit_events a
+    where a.object_type='weekly_source_office_row_choices' and a.object_id_text=choice.id::text
+      and a.action='WEEKLY_SOURCE_PAID_SHIFT_MATCH_CONFIRMED' and a.actor_user_id=choice.actor_user_id
+      and a.after_json->'choice'=to_jsonb(choice) and a.after_json->'admission'=choice.paid_overlap_inputs_json
+      and a.after_json->'request'=journal.request_json and journal.actor_user_id=choice.actor_user_id
+      and journal.upload_id=u.id and journal.request_hash=private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_OFFICE_RECHECK_V1',journal.request_json)
+      and a.after_json->>'request_sha256'=encode(journal.request_hash,'hex')
+      and proof->>'confirmation_request_id'=journal.request_id::text
+      and proof->>'confirmation_request_sha256'=encode(journal.request_hash,'hex');
+  if counted<>1 then raise exception 'WEEKLY_SOURCE_NHSP_NONE_INVOICE_AUDIT_UNBOUND' using errcode='55000';end if;
+  if choice.paid_overlap_inputs_json->>'schema_version' is distinct from 'WEEKLY_SOURCE_PAID_OVERLAP_CHOICE_ADMISSION_V1'
+    or choice.paid_overlap_inputs_json->>'inputs_sha256' is distinct from encode(choice.paid_overlap_inputs_sha256,'hex')
+    or proof#>>'{inputs,schema_version}' is distinct from 'WEEKLY_SOURCE_PAID_OVERLAP_INPUTS_V1'
+    or proof#>>'{inputs,inputs_sha256}' is distinct from encode(private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_PAID_OVERLAP_INPUTS_V1',(proof->'inputs')-'inputs_sha256'),'hex')
+    or proof#>>'{inputs,upload_id}' is distinct from u.id::text
+    or proof#>>'{inputs,upload_row_id}' is distinct from row.id::text
+    or proof#>>'{inputs,source_cycle_id}' is distinct from cycle.id::text
+    or proof#>>'{inputs,normalised_row_hash}' is distinct from encode(row.normalised_row_hash,'hex')
+    or proof#>>'{inputs,row_manifest_hash}' is distinct from encode(u.row_manifest_hash,'hex') then
+    raise exception 'WEEKLY_SOURCE_NHSP_NONE_INVOICE_PROOF_UNBOUND' using errcode='55000';end if;
+  -- The immutable final confirmation and original audit must agree on the
+  -- complete semantic input population, preserving both raw generations.
+  for side in 0..1 loop
+    comparison:=case when side=0 then choice.paid_overlap_inputs_json->'inputs' else proof->'inputs' end;
+    if comparison->>'schema_version' is distinct from 'WEEKLY_SOURCE_PAID_OVERLAP_INPUTS_V1'
+      or comparison->>'inputs_sha256' is distinct from encode(private.weekly_source_sha256_jsonb_v1(
+        'WEEKLY_SOURCE_PAID_OVERLAP_INPUTS_V1',comparison-'inputs_sha256'),'hex') then
+      raise exception 'WEEKLY_SOURCE_NHSP_NONE_INVOICE_PROOF_UNBOUND' using errcode='55000';end if;
+    overlaps:='[]'::jsonb;
+    for item in select value from jsonb_array_elements(comparison->'overlaps') loop
+      item:=jsonb_set(item,'{nhsp_negative_population}',private.weekly_source_nhsp_negative_comparison_v1(
+        item->'nhsp_negative_population'),false);
+      overlaps:=overlaps||jsonb_build_array(item);
+    end loop;
+    comparison:=jsonb_set(comparison,'{overlaps}',overlaps,false)-'actor_user_id'-'inputs_sha256';
+    if side=0 then saved_comparison:=comparison;elsif comparison is distinct from saved_comparison then
+      raise exception 'WEEKLY_SOURCE_NHSP_NONE_INVOICE_PROOF_UNBOUND' using errcode='55000';end if;
+  end loop;
+  select count(*) into counted from jsonb_array_elements(proof#>'{inputs,overlaps}') item where item->>'work_event_id'=r.work_event_id::text;
+  if counted<>1 then raise exception 'WEEKLY_SOURCE_NHSP_NONE_INVOICE_TARGET_UNBOUND' using errcode='55000';end if;
+  select item into strict match from jsonb_array_elements(proof#>'{inputs,overlaps}') item where item->>'work_event_id'=r.work_event_id::text;
+  negative:=match->'nhsp_negative_population';
+  perform private.weekly_source_nhsp_negative_comparison_v1(negative);
+  if match#>>'{current_native_position,state}' is distinct from 'CURRENT_NATIVE_POSITION'
+    or match#>'{native_payment_facts,paid}' is distinct from 'true'::jsonb
+    or match#>>'{native_payment_facts,paid_evidence_state}' is distinct from 'SETTLED_ORIGINAL'
+    or negative->>'upload_id' is distinct from u.id::text or negative->>'work_event_id' is distinct from r.work_event_id::text
+    or negative->>'source_cycle_id' is distinct from cycle.id::text or negative->>'report_scope_id' is distinct from scope.id::text
+    or negative->>'projection_generation' is distinct from r.generation::text
+    or jsonb_array_length(negative->'current_targets')<>1
+    or match#>'{current_native_position,native_current_target}' is distinct from negative#>'{current_targets,0}' then
+    raise exception 'WEEKLY_SOURCE_NHSP_NONE_INVOICE_TARGET_UNBOUND' using errcode='55000';end if;
+  select * into strict target from public.weekly_source_billing_movements where id=(negative#>>'{current_targets,0,movement_id}')::uuid;
+  select * into strict target_revision from public.weekly_source_final_revisions where id=target.final_revision_id;
+  if target.pay_effect<>'NORMAL' or target.source_profile_kind<>'NHSP_TRUST_BACKING_REPORT'
+    or target.source_line_kind<>'NHSP_PHYSICAL_POSITIVE' or target.movement_role not in ('POSITIVE','REPLACEMENT')
+    or (target.work_event_id,target.candidate_id,target.actual_client_id,target.contract_id)
+      is distinct from (r.work_event_id,r.candidate_id,r.client_id,r.contract_id)
+    or encode(target.movement_economic_hash,'hex') is distinct from negative#>>'{current_targets,0,movement_economic_hash}'
+    or target_revision.authority_scope_kind<>'NHSP_REPORT_SCOPE'
+    or (target_revision.report_scope_id=scope.id and (u.purpose<>'FINAL_SOURCE_CORRECTION'
+      or revision.reason<>'CORRECT_FINAL_SOURCE' or revision.predecessor_revision_id is null))
+    or not exists(select 1 from public.weekly_source_report_scopes target_scope
+      where target_scope.id=target_revision.report_scope_id and target_scope.source_group_id=cycle.source_group_id
+        and target_scope.client_id=r.client_id and target_scope.self_bill_report_id is null) then
+    raise exception 'WEEKLY_SOURCE_NHSP_NONE_NORMAL_WITNESS_UNBOUND' using errcode='55000';end if;
+  invoice:=private.weekly_source_nhsp_invoice_values_v1(r.id,cycle.id);
+  ts:=private.weekly_source_finalisation_lineage_assert_v1(r.id,cycle.id);
+  result:=jsonb_build_object('schema_version','WEEKLY_SOURCE_NHSP_NONE_INVOICE_BASIS_V1',
+    'row_resolution_id',r.id,'upload_row_id',row.id,'final_revision_id',revision.id,'report_scope_id',scope.id,
+    'source_cycle_id',cycle.id,'work_event_id',r.work_event_id,'candidate_id',r.candidate_id,'client_id',r.client_id,
+    'contract_id',r.contract_id,'invoice_timesheet_id',ts,'paid_overlap_choice_id',choice.id,
+    'paid_overlap_choice_proof',proof,'native_invoice_values',invoice,
+    'normal_pay_movement_id',target.id,'normal_pay_movement_sha256',encode(target.movement_economic_hash,'hex'),
+    'normal_pay_final_revision_id',target_revision.id,'normal_pay_report_scope_id',target_revision.report_scope_id,
+    'pay_effect','NONE','invoice_only',true,'paid_writer_permission',null);
+  if octet_length(result::text)>1048576 then raise exception 'WEEKLY_SOURCE_NHSP_NONE_INVOICE_BYTE_BOUND' using errcode='54000';end if;
+  return result||jsonb_build_object('inputs_sha256',encode(private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_SOURCE_NHSP_NONE_INVOICE_BASIS_V1',result),'hex'));
+end;
+$function$;

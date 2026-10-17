@@ -1,0 +1,317 @@
+create or replace function private.weekly_source_finalisation_materialise_expense_invoice_v1(
+  p_final_revision_id uuid,
+  p_finalisation_cycle_id uuid,
+  p_source_profile_kind text,
+  p_expense_authority_generation_id uuid,
+  p_prior_expense_authority_generation_id uuid,
+  p_expense_policy_snapshot_id uuid,
+  p_invoice_timesheet_id uuid,
+  p_correction_presentation text
+) returns jsonb
+language plpgsql volatile security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+declare
+  v_current public.weekly_expense_authority_generations%rowtype;
+  v_prior public.weekly_expense_authority_generations%rowtype;
+  v_expense_policy public.weekly_source_row_expense_policy_snapshots%rowtype;
+  v_contract public.contracts%rowtype;
+  v_event public.weekly_work_events%rowtype;
+  v_prior_movement public.weekly_source_billing_movements%rowtype;
+  v_revision public.weekly_source_final_revisions%rowtype;
+  v_old_pence bigint:=0;
+  v_new_pence bigint;
+  v_correction_unit_id uuid;
+  v_mapping_fingerprint bytea;
+  v_reversal_hash bytea;
+  v_replacement_hash bytea;
+  v_reversal_id uuid;
+  v_replacement_id uuid;
+  v_reversal_vector jsonb;
+  v_replacement_pay_vector jsonb;
+  v_replacement_charge_vector jsonb;
+  v_vat_rate numeric(5,2);
+  v_vat numeric(12,2);
+  v_total numeric(12,2);
+  v_count integer:=0;
+  v_prepared boolean:=false;
+begin
+  if p_final_revision_id is null or p_finalisation_cycle_id is null
+     or p_expense_authority_generation_id is null
+     or p_source_profile_kind not in ('GENERIC_COMPLETE_SNAPSHOT','HEALTHROSTER_ACTUAL_ROWS')
+     or p_correction_presentation not in ('FULL_REVERSAL_REPLACEMENT','NET_DIFFERENCE_PRESENTATION') then
+    raise exception 'WEEKLY_SOURCE_EXPENSE_MOVEMENT_INPUT_INVALID' using errcode='22023';
+  end if;
+
+  select * into strict v_revision
+  from public.weekly_source_final_revisions
+  where id=p_final_revision_id and source_cycle_id=p_finalisation_cycle_id
+    and state in ('PREPARED','CURRENT') and authority_scope_kind='CYCLE';
+  v_prepared:=v_revision.state='PREPARED';
+  select * into strict v_current
+  from public.weekly_expense_authority_generations
+  where id=p_expense_authority_generation_id and final_revision_id=p_final_revision_id
+    and state=case when v_prepared then 'PREPARED' else 'CURRENT' end;
+  v_new_pence:=(v_current.client_charge_ex_vat*100)::bigint;
+  if v_current.source_expense_pence is distinct from v_new_pence
+     or v_current.candidate_reimbursement_ex_vat is distinct from v_current.client_charge_ex_vat
+     or v_current.prior_expense_authority_generation_id
+          is distinct from p_prior_expense_authority_generation_id
+     or v_current.correction_presentation is distinct from p_correction_presentation then
+    raise exception 'WEEKLY_SOURCE_EXPENSE_AUTHORITY_INVALID' using errcode='55000';
+  end if;
+
+  if p_prior_expense_authority_generation_id is not null then
+    select * into strict v_prior
+    from public.weekly_expense_authority_generations
+    where id=p_prior_expense_authority_generation_id
+      and work_event_id=v_current.work_event_id
+      and (
+        (not v_prepared and generation=v_current.generation-1)
+        or (v_prepared and generation<v_current.generation)
+      )
+      and (
+        (not v_prepared and state='SUPERSEDED')
+        or (v_prepared and state in ('CURRENT','SUPERSEDED'))
+      );
+    if v_prepared and exists(
+      select 1
+      from public.weekly_expense_authority_generations skipped
+      where skipped.work_event_id=v_current.work_event_id
+        and skipped.generation>v_prior.generation
+        and skipped.generation<v_current.generation
+        and skipped.final_revision_id is distinct from v_revision.predecessor_revision_id
+    ) then
+      raise exception 'WEEKLY_SOURCE_PREPARED_EXPENSE_HISTORY_INVALID'
+        using errcode='55000';
+    end if;
+    v_old_pence:=(v_prior.client_charge_ex_vat*100)::bigint;
+    if v_prior.source_expense_pence is distinct from v_old_pence
+       or v_prior.candidate_reimbursement_ex_vat is distinct from v_prior.client_charge_ex_vat then
+      raise exception 'WEEKLY_SOURCE_PRIOR_EXPENSE_AUTHORITY_INVALID' using errcode='55000';
+    end if;
+  elsif v_current.generation<>1 then
+    if not v_prepared or exists(
+      select 1
+      from public.weekly_expense_authority_generations skipped
+      where skipped.work_event_id=v_current.work_event_id
+        and skipped.generation<v_current.generation
+        and skipped.final_revision_id is distinct from v_revision.predecessor_revision_id
+    ) then
+      raise exception 'WEEKLY_SOURCE_PRIOR_EXPENSE_AUTHORITY_MISSING' using errcode='55000';
+    end if;
+  end if;
+
+  if v_new_pence=v_old_pence and (
+       p_prior_expense_authority_generation_id is null
+       or (v_current.source_expense_vat_enabled is not distinct from v_prior.source_expense_vat_enabled
+           and v_current.contract_id is not distinct from v_prior.contract_id)
+     ) then
+    return pg_catalog.jsonb_build_object(
+      'movement_count',0,'primary_movement_id',null,'zero_noop',true
+    );
+  end if;
+  v_correction_unit_id:=case when v_old_pence>0 then pg_catalog.gen_random_uuid() end;
+
+  if v_old_pence>0 then
+    select * into v_prior_movement
+    from public.weekly_source_billing_movements movement
+    where movement.expense_authority_generation_id=p_prior_expense_authority_generation_id
+      and movement.source_line_kind='SOURCE_FIXED_EXPENSE'
+      and movement.movement_role in ('EXPENSE_POSITIVE','EXPENSE_REPLACEMENT')
+      and movement.invoice_presentation_charge_pence=v_old_pence
+    order by movement.created_at_utc desc,movement.id desc
+    limit 1;
+    if not found then
+      raise exception 'WEEKLY_SOURCE_PRIOR_EXPENSE_MOVEMENT_MISSING' using errcode='55000';
+    end if;
+    v_reversal_vector:=pg_catalog.jsonb_build_object(
+      'schema_version','WEEKLY_SOURCE_FIXED_EXPENSE_VECTOR_V1',
+      'kind','PAY_AND_CHARGE','source_expense_pence',-v_old_pence,
+      'source_expense_vat_enabled',v_prior.source_expense_vat_enabled
+    );
+    v_mapping_fingerprint:=private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_FIXED_EXPENSE_MAPPING_V1',
+      pg_catalog.jsonb_build_object(
+        'current_expense_authority_generation_id',v_current.id,
+        'prior_expense_authority_generation_id',v_prior.id,
+        'prior_movement_id',v_prior_movement.id,
+        'role','EXPENSE_REVERSAL'
+      )
+    );
+    v_reversal_hash:=private.weekly_source_billing_movement_hash_v1(
+      pg_catalog.jsonb_build_object(
+        'expense_authority_generation_id',v_current.id,
+        'final_revision_id',p_final_revision_id,
+        'finalisation_cycle_id',p_finalisation_cycle_id,
+        'actual_client_id',v_prior_movement.actual_client_id,
+        'candidate_id',v_prior_movement.candidate_id,
+        'contract_id',v_prior_movement.contract_id,
+        'work_event_id',v_prior_movement.work_event_id,
+        'movement_role','EXPENSE_REVERSAL','correction_unit_id',v_correction_unit_id,
+        'prior_movement_id',v_prior_movement.id,
+        'source_profile_kind',p_source_profile_kind,
+        'source_line_kind','SOURCE_FIXED_EXPENSE',
+        'source_facts',pg_catalog.jsonb_build_object(
+          'schema_version','WEEKLY_SOURCE_FIXED_EXPENSE_FACTS_V1',
+          'correction_presentation',p_correction_presentation,
+          'old_expense_pence',v_old_pence,'new_expense_pence',v_new_pence,
+          'authority_generation_id',v_current.id,
+          'prior_authority_generation_id',v_prior.id,
+          'row_expense_policy_snapshot_id',v_current.row_expense_policy_snapshot_id,
+          'source_observation_kind',v_current.source_observation_kind
+        ),
+        'vector',v_reversal_vector,'invoice_presentation_charge_pence',-v_old_pence,
+        'vat_rate_pct',v_prior_movement.vat_rate_pct,
+        'vat_amount',-v_prior_movement.vat_amount,
+        'total_inc_vat',-v_prior_movement.total_inc_vat,
+        'mapping_rate_policy_fingerprint',pg_catalog.encode(v_mapping_fingerprint,'hex'),
+        'invoice_timesheet_id',v_prior_movement.invoice_timesheet_id
+      )
+    );
+    insert into public.weekly_source_billing_movements(
+      transition_id,nhsp_upload_row_id,expense_authority_generation_id,
+      final_revision_id,finalisation_cycle_id,actual_client_id,candidate_id,
+      contract_id,work_event_id,movement_role,correction_unit_id,prior_movement_id,
+      source_profile_kind,source_line_kind,source_facts_json,
+      canonical_pay_vector_json,canonical_charge_vector_json,total_pay_ex_vat,
+      calculated_comparison_charge_pence,source_validation_charge_pence,
+      invoice_presentation_charge_pence,vat_rate_pct,vat_amount,total_inc_vat,
+      price_check_result,price_check_fingerprint,mapping_rate_policy_fingerprint,
+      invoice_timesheet_id,original_cycle_key,movement_economic_hash,placement_state
+    ) values (
+      null,null,v_current.id,p_final_revision_id,p_finalisation_cycle_id,
+      v_prior_movement.actual_client_id,v_prior_movement.candidate_id,
+      v_prior_movement.contract_id,v_prior_movement.work_event_id,
+      'EXPENSE_REVERSAL',v_correction_unit_id,v_prior_movement.id,
+      p_source_profile_kind,'SOURCE_FIXED_EXPENSE',
+      pg_catalog.jsonb_build_object(
+        'schema_version','WEEKLY_SOURCE_FIXED_EXPENSE_FACTS_V1',
+        'correction_presentation',p_correction_presentation,
+        'old_expense_pence',v_old_pence,'new_expense_pence',v_new_pence,
+        'authority_generation_id',v_current.id,
+        'prior_authority_generation_id',v_prior.id,
+        'row_expense_policy_snapshot_id',v_current.row_expense_policy_snapshot_id,
+        'source_observation_kind',v_current.source_observation_kind
+      ),v_reversal_vector,v_reversal_vector,-v_old_pence::numeric/100,
+      -v_old_pence,-v_old_pence,-v_old_pence,v_prior_movement.vat_rate_pct,
+      -v_prior_movement.vat_amount,-v_prior_movement.total_inc_vat,
+      'NOT_APPLICABLE',null,v_mapping_fingerprint,
+      v_prior_movement.invoice_timesheet_id,p_finalisation_cycle_id::text,
+      v_reversal_hash,'UNPLACED'
+    ) returning id into v_reversal_id;
+    v_count:=v_count+1;
+  end if;
+
+  if v_new_pence>0 then
+    if p_expense_policy_snapshot_id is null or p_invoice_timesheet_id is null
+       or v_current.source_observation_kind<>'ROW_PRESENT'
+       or v_current.row_expense_policy_snapshot_id is distinct from p_expense_policy_snapshot_id then
+      raise exception 'WEEKLY_SOURCE_EXPENSE_POLICY_SNAPSHOT_MISSING' using errcode='55000';
+    end if;
+    select * into strict v_expense_policy
+    from public.weekly_source_row_expense_policy_snapshots
+    where id=p_expense_policy_snapshot_id;
+    select * into strict v_contract
+    from public.contracts where id=v_current.contract_id;
+    select * into strict v_event
+    from public.weekly_work_events where id=v_current.work_event_id;
+    if v_expense_policy.work_event_id is distinct from v_current.work_event_id
+       or v_expense_policy.contract_id is distinct from v_current.contract_id
+       or v_expense_policy.source_expense_pence is distinct from v_current.source_expense_pence
+       or v_contract.id is distinct from v_expense_policy.contract_id
+       or v_contract.client_id is distinct from v_expense_policy.client_id
+       or v_contract.candidate_id is distinct from v_expense_policy.candidate_id
+       or v_event.client_id is distinct from v_expense_policy.client_id
+       or v_event.candidate_id is distinct from v_expense_policy.candidate_id
+       or v_expense_policy.source_expense_vat_enabled is distinct from v_current.source_expense_vat_enabled then
+      raise exception 'WEEKLY_SOURCE_EXPENSE_POLICY_SNAPSHOT_INVALID' using errcode='55000';
+    end if;
+    v_vat_rate:=case when v_current.source_expense_vat_enabled
+      then v_expense_policy.invoice_vat_rate_pct else 0 end;
+    v_vat:=pg_catalog.round((v_new_pence::numeric/100)*(v_vat_rate/100),2);
+    v_total:=v_new_pence::numeric/100+v_vat;
+    v_replacement_pay_vector:=pg_catalog.jsonb_build_object(
+      'schema_version','WEEKLY_SOURCE_FIXED_EXPENSE_VECTOR_V1','kind','PAY',
+      'source_expense_pence',v_new_pence,
+      'source_expense_vat_enabled',v_current.source_expense_vat_enabled
+    );
+    v_replacement_charge_vector:=v_replacement_pay_vector||pg_catalog.jsonb_build_object('kind','CHARGE');
+    v_mapping_fingerprint:=private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_SOURCE_FIXED_EXPENSE_MAPPING_V1',
+      pg_catalog.jsonb_build_object(
+        'current_expense_authority_generation_id',v_current.id,
+        'prior_expense_authority_generation_id',p_prior_expense_authority_generation_id,
+        'expense_policy_snapshot_id',v_expense_policy.id,
+        'invoice_vat_policy_fingerprint',pg_catalog.encode(v_expense_policy.invoice_vat_policy_fingerprint,'hex'),
+        'role',case when v_old_pence=0 then 'EXPENSE_POSITIVE' else 'EXPENSE_REPLACEMENT' end
+      )
+    );
+    v_replacement_hash:=private.weekly_source_billing_movement_hash_v1(
+      pg_catalog.jsonb_build_object(
+        'expense_authority_generation_id',v_current.id,
+        'final_revision_id',p_final_revision_id,
+        'finalisation_cycle_id',p_finalisation_cycle_id,
+        'actual_client_id',v_expense_policy.client_id,'candidate_id',v_expense_policy.candidate_id,
+        'contract_id',v_expense_policy.contract_id,'work_event_id',v_expense_policy.work_event_id,
+        'movement_role',case when v_old_pence=0 then 'EXPENSE_POSITIVE' else 'EXPENSE_REPLACEMENT' end,
+        'correction_unit_id',v_correction_unit_id,'prior_movement_id',v_prior_movement.id,
+        'source_profile_kind',p_source_profile_kind,'source_line_kind','SOURCE_FIXED_EXPENSE',
+        'source_facts',pg_catalog.jsonb_build_object(
+          'schema_version','WEEKLY_SOURCE_FIXED_EXPENSE_FACTS_V1',
+          'correction_presentation',p_correction_presentation,
+          'old_expense_pence',v_old_pence,'new_expense_pence',v_new_pence,
+          'authority_generation_id',v_current.id,
+          'prior_authority_generation_id',p_prior_expense_authority_generation_id,
+          'row_expense_policy_snapshot_id',v_current.row_expense_policy_snapshot_id,
+          'source_observation_kind',v_current.source_observation_kind
+        ),
+        'pay_vector',v_replacement_pay_vector,'charge_vector',v_replacement_charge_vector,
+        'invoice_presentation_charge_pence',v_new_pence,'vat_rate_pct',v_vat_rate,
+        'vat_amount',v_vat,'total_inc_vat',v_total,
+        'mapping_rate_policy_fingerprint',pg_catalog.encode(v_mapping_fingerprint,'hex'),
+        'invoice_timesheet_id',p_invoice_timesheet_id
+      )
+    );
+    insert into public.weekly_source_billing_movements(
+      transition_id,nhsp_upload_row_id,expense_authority_generation_id,
+      final_revision_id,finalisation_cycle_id,actual_client_id,candidate_id,
+      contract_id,work_event_id,movement_role,correction_unit_id,prior_movement_id,
+      source_profile_kind,source_line_kind,source_facts_json,
+      canonical_pay_vector_json,canonical_charge_vector_json,total_pay_ex_vat,
+      calculated_comparison_charge_pence,source_validation_charge_pence,
+      invoice_presentation_charge_pence,vat_rate_pct,vat_amount,total_inc_vat,
+      price_check_result,price_check_fingerprint,mapping_rate_policy_fingerprint,
+      invoice_timesheet_id,original_cycle_key,movement_economic_hash,placement_state
+    ) values (
+      null,null,v_current.id,p_final_revision_id,p_finalisation_cycle_id,
+      v_expense_policy.client_id,v_expense_policy.candidate_id,v_expense_policy.contract_id,
+      v_expense_policy.work_event_id,
+      case when v_old_pence=0 then 'EXPENSE_POSITIVE' else 'EXPENSE_REPLACEMENT' end,
+      v_correction_unit_id,case when v_old_pence>0 then v_prior_movement.id end,
+      p_source_profile_kind,'SOURCE_FIXED_EXPENSE',
+      pg_catalog.jsonb_build_object(
+        'schema_version','WEEKLY_SOURCE_FIXED_EXPENSE_FACTS_V1',
+        'correction_presentation',p_correction_presentation,
+        'old_expense_pence',v_old_pence,'new_expense_pence',v_new_pence,
+        'authority_generation_id',v_current.id,
+        'prior_authority_generation_id',p_prior_expense_authority_generation_id,
+        'row_expense_policy_snapshot_id',v_current.row_expense_policy_snapshot_id,
+        'source_observation_kind',v_current.source_observation_kind
+      ),v_replacement_pay_vector,v_replacement_charge_vector,v_new_pence::numeric/100,
+      v_new_pence,v_new_pence,v_new_pence,v_vat_rate,v_vat,v_total,
+      'NOT_APPLICABLE',null,v_mapping_fingerprint,p_invoice_timesheet_id,
+      p_finalisation_cycle_id::text,v_replacement_hash,'UNPLACED'
+    ) returning id into v_replacement_id;
+    v_count:=v_count+1;
+  end if;
+
+  return pg_catalog.jsonb_build_object(
+    'movement_count',v_count,
+    'reversal_movement_id',v_reversal_id,
+    'replacement_movement_id',v_replacement_id,
+    'primary_movement_id',coalesce(v_replacement_id,v_reversal_id),
+    'zero_noop',false
+  );
+end;
+$function$;

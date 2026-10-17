@@ -1,14 +1,14 @@
 // Server dependency adapter only. Existing authenticated handlers supply actor,
 // agency and cycle; no browser qualifier/strategy/rule or finance field added.
-const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const fail=code=>{throw Object.assign(new Error(code),{code});};
-export const sourceOperations=Object.freeze(['weekly_source_upload_context_v1','weekly_source_upload_stage_begin_atomic_v1',
+export const sourceOperations=Object.freeze(['weekly_source_office_recheck_begin_v1','weekly_source_upload_context_v1','weekly_source_upload_stage_begin_atomic_v1',
  'weekly_source_upload_stage_rows_atomic_v1','weekly_source_upload_seal_atomic_v1','weekly_source_invoice_hold_release_atomic_v1','weekly_source_projection_begin_atomic_v1',
  'weekly_source_projection_rows_apply_atomic_v1','weekly_source_projection_publish_atomic_v1','weekly_source_import_prepare_atomic_v1',
  'weekly_source_finalise_atomic_v1','weekly_source_finalisation_pay_open_atomic_v1','weekly_source_finalisation_pay_task_start_atomic_v1',
  'weekly_source_ordinary_pay_projection_apply_atomic_v1','weekly_source_finalisation_pay_task_finish_atomic_v1','REPORT_FIN_AB_FINALISE']);
 export const automaticOperations=Object.freeze(['weekly_source_automatic_reconcile_atomic_v1','weekly_exceptional_pay_prepare_action_v1',
- 'weekly_exceptional_pay_action_context_v1','weekly_exceptional_pay_action_publication_status_v1','weekly_exceptional_pay_stage_c1_request_v1']);
+ 'weekly_exceptional_pay_action_context_v1','weekly_exceptional_pay_action_publication_status_v1','weekly_exceptional_pay_stage_c1_request_v1','weekly_source_missing_accept_context_v1','weekly_source_missing_accept_prepare_atomic_v1','weekly_source_later_change_decide_atomic_v1']);
 export async function createOffRuleNativeDependencies({actorUserId,agencyId,environment,sourceCycleId,purpose,dependencies}){
  if(!uuid.test(actorUserId)||!uuid.test(agencyId)||!uuid.test(sourceCycleId)||!['TEST','LIVE'].includes(environment)
   ||!['SOURCE_FIXTURE_SETUP','AUTOMATIC_JOURNEY'].includes(purpose)||typeof dependencies?.dataRpc!=='function')fail('OFF_RULE_PROXY_INPUT_INVALID');

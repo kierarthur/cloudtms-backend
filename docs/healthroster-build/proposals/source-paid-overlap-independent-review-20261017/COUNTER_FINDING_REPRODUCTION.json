@@ -1,0 +1,43 @@
+{
+  "functionalCommit": "9c791fa971c97a198c09c4e3579c01b589486c14",
+  "sourceSha256": "905e51fa2c36587650b6afea2246d6cd5039abda075531a5673e7acb9585a8a5",
+  "cases": [
+    {
+      "name": "NATIVE_SMALL_NUMBER_VERSUS_REQUEST_STRING",
+      "requestAuthority": "3",
+      "nativeAuthority": 3,
+      "nativeReadySession": 7,
+      "observedCode": "WEEKLY_SOURCE_CORRECTION_REBUILD_IDENTITY_MISMATCH",
+      "status": 409,
+      "rpcCalls": 0,
+      "defectReproduced": true
+    },
+    {
+      "name": "CANONICAL_INT63_READY_SESSION_ABOVE_2_POW_53",
+      "requestAuthority": "3",
+      "nativeAuthority": "3",
+      "nativeReadySession": "9007199254740993",
+      "observedCode": "WEEKLY_SOURCE_CORRECTION_VERSION_INVALID",
+      "status": 502,
+      "rpcCalls": 0,
+      "defectReproduced": true
+    },
+    {
+      "name": "FIVE_FIELD_NATIVE_FRAME_CANNOT_PRESERVE_NHSP_REPORT_SCOPE",
+      "nativeFrameKeys": [
+        "schema_version",
+        "correction_session_id",
+        "source_cycle_id",
+        "expected_current_final_revision_id",
+        "expected_final_manifest_hash"
+      ],
+      "observedKind": "CYCLE",
+      "observedReportId": null,
+      "rpcCalls": 1,
+      "defectReproduced": true,
+      "qualification": "The five-field native006 frame has identical shape for CYCLE and NHSP_REPORT_SCOPE; no report identity can survive this callback. The controlled RPC confirms the actual output contexts, not native execution."
+    }
+  ],
+  "native": "NOT_RUN",
+  "databaseConnections": 0
+}

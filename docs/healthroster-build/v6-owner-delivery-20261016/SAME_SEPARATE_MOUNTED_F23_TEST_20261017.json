@@ -1,0 +1,17 @@
+{
+  "version": "SAME_SEPARATE_ROOT_MOUNTED_F23_TEST_V1",
+  "originalFile": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/test.mjs",
+  "originalSha256": "d1e4762aa182f6c1572c3b8d247b5b21ea3c304758b335631274db7401a20974",
+  "mountedFile": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/root-mounted-test.mjs",
+  "mountedSha256": "800279ad99f11c846af124efc66c89142b47e4306b6e36c54b54812e4ae8bbba",
+  "soleChange": {
+    "from": "from './payload/scripts/healthroster-same-separate-type-review.mjs'",
+    "to": "from '../../../../scripts/healthroster-same-separate-type-review.mjs'"
+  },
+  "originalPreserved": true,
+  "actualMountedHelperSha256": "897df1661b265921f960c107f5189470475866ad8311aec358b15f8841391259",
+  "tests": 16,
+  "status": "PASS_SOURCE_ONLY",
+  "frozenTestResultWritesSuppressed": 1,
+  "native": "NOT_RUN"
+}

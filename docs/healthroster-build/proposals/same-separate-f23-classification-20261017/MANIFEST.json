@@ -1,0 +1,355 @@
+{
+  "version": "SAME_SEPARATE_F23_FINITE_PROPOSAL_MANIFEST_V1",
+  "finalCommit": "a7e4522cb87ae6961cb40efcb83e4e69b12fbd6c",
+  "selection": {
+    "commit": "a7e4522cb87ae6961cb40efcb83e4e69b12fbd6c",
+    "path": "docs/healthroster-build/proposals/same-separate-counter-forward-20261017/COMPOSED_SELECTION.json",
+    "sha256": "8b2c91e61a262f592d7ecae6b437f23d7277a5e565c7e4cc70076c0e21719c74"
+  },
+  "parent": "ef3d20f4513a6f9fd1aa5e4cf6a69d258f6cd87c",
+  "gateInputSha256": "2798cc6178aca812b82194659a6618bd94f12fdb404621783b5822b53a6a965f",
+  "classificationSha256": "f338e3eaf7f3ce2ff027cd2728cc5f16f0724ea4ce7eeea139f5217ee949766d",
+  "originalKeptEntryClassificationSha256": "6309ea0cadd0d2cd3e98537c145cd8bb49aef984d74bbfe0f11075f54982a874",
+  "originalLaterKeepClassificationSha256": "326fded2189c8076c0c6a3ed8d1c5bbae6350f3815a142de128bf5a39e606140",
+  "mountFiles": 39,
+  "files": [
+    {
+      "file": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/AST_RESULTS.json",
+      "bytes": 172859,
+      "sha256": "b46b68c467f1e73db913f6e35590bd9a76dbb104dd849e84987a766ca3afb038"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/ast-proof.py",
+      "bytes": 6834,
+      "sha256": "fb1ee965df36be5fa7bacf76df05ce07a145958bbc3f2928ed9977e341520589"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/build-classification.mjs",
+      "bytes": 3980,
+      "sha256": "3db497ff81dae8e1f17d88e4a74c42cc79eb8bee72e7f9d3b58be7b90be8af4d"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/build-gate-hunks.mjs",
+      "bytes": 3786,
+      "sha256": "6b713c479e91369cd425244cd10af562388caa768bd3302a1101cd06f425999a"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/CENSUS.json",
+      "bytes": 270663,
+      "sha256": "46cba454e89d4e82ce137b5d0f9616c1b2b453392a45032108587f86f034f71a"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/census.mjs",
+      "bytes": 5811,
+      "sha256": "82a3bf081480efd4f8e5c102943a6971544b68dae893daa17b5f5d12c47b1dcb"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/CLASSIFICATION.json",
+      "bytes": 902242,
+      "sha256": "f338e3eaf7f3ce2ff027cd2728cc5f16f0724ea4ce7eeea139f5217ee949766d",
+      "mountTarget": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/CLASSIFICATION.json"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/COMPLETE_LOADER_RESULTS.json",
+      "bytes": 22124,
+      "sha256": "9de67e80e37f78eb0ac0faaeb8d95f56b80331e51012a277244cf6d782a1514f"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/freeze.mjs",
+      "bytes": 3050,
+      "sha256": "f4e215d02a68d94b3434feb3b1a373aab1fa8255a4215fdebc94d1c358b79302"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/GATE_EDITS.json",
+      "bytes": 5067,
+      "sha256": "5d6fd1f72bb0747b1773af086a51825047fd33e018084b1ba5c26d9d12453f10"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/inputs/owners/01.sqlinc",
+      "bytes": 11738,
+      "sha256": "9ebd15c5a40ab2352973074df53b952974cf6c3fbbeb053662ddd039f7663396",
+      "mountTarget": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/inputs/owners/01.sqlinc"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/inputs/owners/02.sqlinc",
+      "bytes": 28499,
+      "sha256": "a9149686b3aa1456603550dfa8eb93af1936606e498113286110a4f900274902",
+      "mountTarget": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/inputs/owners/02.sqlinc"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/inputs/owners/03.sqlinc",
+      "bytes": 68884,
+      "sha256": "0cd140692ed4a5d7b2f539d7f86ff2876ceebb51d1f19e1c221b39926453fc35",
+      "mountTarget": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/inputs/owners/03.sqlinc"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/inputs/owners/04.sqlinc",
+      "bytes": 115643,
+      "sha256": "f99a6448dc8e3534768fa8742ca6b1a0b71a79507bee30f09e39e33afe71e9b5",
+      "mountTarget": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/inputs/owners/04.sqlinc"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/inputs/owners/05.sqlinc",
+      "bytes": 1445,
+      "sha256": "636932e79c0faeef2c7c0e925c22c273e257bcde1e341043fab6606c86023b83",
+      "mountTarget": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/inputs/owners/05.sqlinc"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/inputs/owners/06.sqlinc",
+      "bytes": 1190,
+      "sha256": "f5ee18ae1b58ea8b3bad4b629e3e9607c370fc3e411f2e9c448d17837bdaa231",
+      "mountTarget": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/inputs/owners/06.sqlinc"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/inputs/owners/07.sqlinc",
+      "bytes": 6713,
+      "sha256": "1545ae39635cf9351bb2225227a288ccd1ab2268244ce35af8ee64f380f8202a",
+      "mountTarget": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/inputs/owners/07.sqlinc"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/inputs/owners/08.sqlinc",
+      "bytes": 49514,
+      "sha256": "bc1ce152c05c7ab726503f67bdb8e84f7af8046ad767b34de9c334f70135ab60",
+      "mountTarget": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/inputs/owners/08.sqlinc"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/inputs/owners/09.sqlinc",
+      "bytes": 8017,
+      "sha256": "35b7f11d6c2982b424551ceb9714fc4c4224783ef2b57551217d5a832475e701",
+      "mountTarget": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/inputs/owners/09.sqlinc"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/inputs/owners/10.sqlinc",
+      "bytes": 4996,
+      "sha256": "87b9722bc0646246594124f77539f0c2021669d56138cd81f5365163bd277538",
+      "mountTarget": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/inputs/owners/10.sqlinc"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/inputs/owners/11.sqlinc",
+      "bytes": 37869,
+      "sha256": "fa03a0e6b4a32518047398877c541d76a63811c72c8f5cef997fc8a7593a7088",
+      "mountTarget": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/inputs/owners/11.sqlinc"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/inputs/owners/12.sqlinc",
+      "bytes": 8170,
+      "sha256": "6b2a5138c9ed4f8ae3103545ea5aee43a41815c9cc0c0c4ee53d1341f8b319ec",
+      "mountTarget": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/inputs/owners/12.sqlinc"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/inputs/owners/13.sqlinc",
+      "bytes": 9625,
+      "sha256": "b3b13a9054c131c8a1e5de1a04e578dd53c1e9335d96bf38015af6a5dfe7f693",
+      "mountTarget": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/inputs/owners/13.sqlinc"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/inputs/owners/14.sqlinc",
+      "bytes": 16903,
+      "sha256": "b9510285bc7a642b6fb93dcaabd4d2798fbae2e0e8329144f31268d50fab1c33",
+      "mountTarget": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/inputs/owners/14.sqlinc"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/inputs/owners/15.sqlinc",
+      "bytes": 7505,
+      "sha256": "23a0681163e4942f71fac7c9ff3eb275719cf1dafb39c2b817f0c3dba8d6a711",
+      "mountTarget": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/inputs/owners/15.sqlinc"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/inputs/owners/16.sqlinc",
+      "bytes": 16581,
+      "sha256": "264922d32b47818ae8ad289d9b822bb4e9514803d35e409c977dfec8cac38125",
+      "mountTarget": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/inputs/owners/16.sqlinc"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/inputs/owners/17.sqlinc",
+      "bytes": 36439,
+      "sha256": "cca64fd3d0f21814b5c7fa57f9c8958486b2d20740a4170d5e75c4be4d92925d",
+      "mountTarget": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/inputs/owners/17.sqlinc"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/inputs/owners/18.sqlinc",
+      "bytes": 4030,
+      "sha256": "4e1f8becf091b5cd3a28d285f68bcf3c1201171fee21dcb519c011c88a1d5a50",
+      "mountTarget": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/inputs/owners/18.sqlinc"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/inputs/owners/19.sqlinc",
+      "bytes": 118827,
+      "sha256": "97df46e0db21c7a232c0368ad6da2a7cbc6f16f4743328757fa37a433c1ea9c3",
+      "mountTarget": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/inputs/owners/19.sqlinc"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/inputs/owners/20.sqlinc",
+      "bytes": 17115,
+      "sha256": "a0fb2311a8c29dcd5281cce5c183918453ddf492cd94c9b9e57cd2972a198667",
+      "mountTarget": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/inputs/owners/20.sqlinc"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/inputs/owners/21.sqlinc",
+      "bytes": 6014,
+      "sha256": "15dbe990cfe6792c01d0775c956cf41c2fa88e44b16ccda58400c0e5a9d2d79a",
+      "mountTarget": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/inputs/owners/21.sqlinc"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/inputs/owners/22.sqlinc",
+      "bytes": 22454,
+      "sha256": "d841410531821f0262d37d2adc8ff710842e575ca4f68d652906e5c45ab24ed0",
+      "mountTarget": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/inputs/owners/22.sqlinc"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/inputs/owners/23.sqlinc",
+      "bytes": 9579,
+      "sha256": "920c8f7957de2cdcccab797f0c6da2bf3a27fbcdb9a0a0fb2d9c600a09c2ec9c",
+      "mountTarget": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/inputs/owners/23.sqlinc"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/inputs/owners/24.sqlinc",
+      "bytes": 3929,
+      "sha256": "08242ac91fd3f1a715e4ea40cd09cdd5e56351c498fce48c76f0dea7b0ace4c8",
+      "mountTarget": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/inputs/owners/24.sqlinc"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/inputs/owners/25.sqlinc",
+      "bytes": 15899,
+      "sha256": "b6c86e492968c1c57883cd0368dc19a97bfded137776386909a76246143b331c",
+      "mountTarget": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/inputs/owners/25.sqlinc"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/inputs/owners/26.sqlinc",
+      "bytes": 9781,
+      "sha256": "5befdc405e17f9a05d769e71bd3cb798ff998562e94ad2ae3fc8389b3400149a",
+      "mountTarget": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/inputs/owners/26.sqlinc"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/inputs/owners/27.sqlinc",
+      "bytes": 12360,
+      "sha256": "47e534be7a621b29d92db76ba4a9ca229e812c1bb0e139ca45ae89014e1957fd",
+      "mountTarget": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/inputs/owners/27.sqlinc"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/inputs/owners/28.sqlinc",
+      "bytes": 21106,
+      "sha256": "6a7a3a25b2cc3bb8f58fc30656da51f570a92d85fe37ddd76d5f0730d03e64de",
+      "mountTarget": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/inputs/owners/28.sqlinc"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/inputs/owners/29.sqlinc",
+      "bytes": 32175,
+      "sha256": "b350c1af79d51d65b75fe1f19a2cc443879874286cd6c3ed17b948662a08b8c2",
+      "mountTarget": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/inputs/owners/29.sqlinc"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/inputs/owners/30.sqlinc",
+      "bytes": 115693,
+      "sha256": "29d612601c8e9a60d0f1edb46c37126d2a57b9fdbaf04766ab30ef40835bbd52",
+      "mountTarget": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/inputs/owners/30.sqlinc"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/inputs/owners/31.sqlinc",
+      "bytes": 55870,
+      "sha256": "3eacf88d26ccac85435b6b9331748d9537f75dba274a144de59198fa8859eec5",
+      "mountTarget": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/inputs/owners/31.sqlinc"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/inputs/owners/32.sqlinc",
+      "bytes": 12607,
+      "sha256": "ee2ec48bd7a7b7988701f614124166c2c28a906c30ee7921ffcc5b71e568e1aa",
+      "mountTarget": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/inputs/owners/32.sqlinc"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/inputs/owners/33.sqlinc",
+      "bytes": 9469,
+      "sha256": "f4c4e4bd4585951b38d0e0b720b181af5382ad40f07e166fc69203887395096f",
+      "mountTarget": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/inputs/owners/33.sqlinc"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/inputs/owners/34.sqlinc",
+      "bytes": 16760,
+      "sha256": "c7823e594e609cc76e8cff59c6f508072050d667898538ebd7d5e506ad80ec41",
+      "mountTarget": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/inputs/owners/34.sqlinc"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/inputs/owners/35.sqlinc",
+      "bytes": 36884,
+      "sha256": "49bf701bcd0f2cc8693d1a84a8e3418f0840a5b63638ef3a6f8534f4a560d251",
+      "mountTarget": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/inputs/owners/35.sqlinc"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/inputs/owners/36.sqlinc",
+      "bytes": 19083,
+      "sha256": "954a8288e2fed8880e7df06d427cf34646b263250fa1ff4c75d181ad991d4f71",
+      "mountTarget": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/inputs/owners/36.sqlinc"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/inputs/owners/37.sqlinc",
+      "bytes": 12882,
+      "sha256": "f62727e880288024562eed90d2f67486059301512767fd47b8d1ce4c513a1565",
+      "mountTarget": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/inputs/owners/37.sqlinc"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/payload/scripts/healthroster-same-separate-type-review.mjs",
+      "bytes": 13314,
+      "sha256": "7234379079c1bdf1d09653682a2ea82ceb8a669c08266a0834a0d1a4c63a702f",
+      "mountTarget": "scripts/healthroster-same-separate-type-review.mjs"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/prepare-proof.mjs",
+      "bytes": 11104,
+      "sha256": "b2509afbc4e68068f9ba5cd36bb336c15e77859bad076c763be319f5e8663955"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/prior-review.mjs",
+      "bytes": 3977,
+      "sha256": "16c5df6f3b8ec01d571bf56ec710b9adcfd37f33496e78310881126ab382ea76"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/PROOF_INPUTS.json",
+      "bytes": 665892,
+      "sha256": "be797b30e3be43420c6c0fac2bd816c95b1d4fbfa41fcb33ffb8a3a43a8ba1b4"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/README.md",
+      "bytes": 9813,
+      "sha256": "1b3ca791d3706b02ea59852d2c4bb93eb3e690228f05ec45bf430b962c79a6e0"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/SCHEMA_AST.json",
+      "bytes": 3958,
+      "sha256": "b8b528581dae324a47585341b41a244acfef6560f5b50e1ff9fca2467e1b9a7f"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/schema-proof.py",
+      "bytes": 2743,
+      "sha256": "f6f928b80770a6b09fab7b34d2545f9686c733672fc9395bee7c456c613eba02"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/TEST_RESULTS.json",
+      "bytes": 2762,
+      "sha256": "f21da89e5a41823a36380626aef52dcb9a92e4edac98910c58bbbe3639c1008b"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/test.mjs",
+      "bytes": 10244,
+      "sha256": "d1e4762aa182f6c1572c3b8d247b5b21ea3c304758b335631274db7401a20974"
+    },
+    {
+      "file": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017/verify-complete-loader.mjs",
+      "bytes": 10102,
+      "sha256": "f1ea7e732a5e1d7ef7d2e4f681d3c89efd5c49b8e516d63b4877e9dfe68ba8ee"
+    }
+  ],
+  "native": "NOT_RUN",
+  "fullF23Gate": "ROOT_OWNED_NOT_RUN_HERE",
+  "catalogueDependentBodies": "FOUR_UNIQUE_SIX_PHYSICAL_NOT_PROVED",
+  "existingUntrackedPreserved": true,
+  "retainedPreliminaryUntrackedFilesExcluded": true,
+  "bankingBodiesRead": 0,
+  "dbConnections": 0,
+  "rootWrites": 0,
+  "gitMutationPolicy": {
+    "taskScopedOnly": true,
+    "gcAuto": 0,
+    "maintenanceAuto": false,
+    "metadataRepairPruneResetRecreate": false
+  }
+}

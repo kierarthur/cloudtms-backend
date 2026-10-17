@@ -1,0 +1,52 @@
+{
+  "parent": "ef3d20f4513a6f9fd1aa5e4cf6a69d258f6cd87c",
+  "metadataCommit": "b9c1d0bad2e52ce95f7aa6b8e7f98ecbbd1fc832",
+  "selectionSha256": "0adf915b6d71f190267740c3356729c4710927962bf78c9dda16c070a6044a74",
+  "base": {
+    "migrations": 424,
+    "repeatables": 1091
+  },
+  "candidate": {
+    "migrations": 425,
+    "repeatables": 1092
+  },
+  "newMigration": "supabase/migrations/17102026_0231_weekly_source_paid_same_separate_10_footprint.sql",
+  "newRoot": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health_v1.sql",
+  "uppercaseOriginals": [
+    "supabase/migrations/13072026_1648_MIGRATION.SQL",
+    "supabase/migrations/26052026_1525_INDEX_OUTBOX.SQL"
+  ],
+  "exactDailyChains": 6,
+  "fullRegistryReversalEdits": 67,
+  "otherChainsUnchanged": true,
+  "droppedDailyMetadataRefused": true,
+  "actualCommittedSqlFilesAndInventory": true,
+  "actualCommittedFinalOwnerChecks": true,
+  "verified": {
+    "signatures": 3035,
+    "registered": 1648,
+    "roots": 1092,
+    "pendingRoots": [
+      "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health_v1.sql"
+    ]
+  },
+  "scriptPins": [
+    {
+      "path": "scripts/cloudtms-db-release-lib.mjs",
+      "sha256": "22b3a5cd4ab5ca93f59f891c03187a6f5214e6f4bb99381e203700c52b413bbf"
+    },
+    {
+      "path": "scripts/cloudtms-managed-release-sql.mjs",
+      "sha256": "ff391fccf7f690d4d476e935870d740667e4dfd92b972bfd5d7d80b1b3bb912b"
+    },
+    {
+      "path": "scripts/bpay-next-final-definers.mjs",
+      "sha256": "51ab7fd6d5c582ee7f4cab612502c4fc7ac11088cb1a996dd2cf1e6561468d09"
+    }
+  ],
+  "opaqueOwnershipScanOnly": true,
+  "bankBodySemanticInspection": false,
+  "foreignWrites": 0,
+  "databaseConnections": 0,
+  "native": "NOT_RUN"
+}

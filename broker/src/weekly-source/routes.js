@@ -13,6 +13,7 @@ import { validateRuleSetValues } from './rule-set-validation.js';
 import {checklistReadRequest,decodeChecklistRead,ChecklistReadError} from './checklist-read.mjs';
 import {missingAcceptPrepareRequest,missingAcceptContextRequest,positiveDecimal} from './missing-accept.mjs';
 import{validateKeptPayContextCommand,parseKeptPayContextCommand,decodeKeptPayContext}from'./kept-pay-context.mjs';
+import{isPaidMatchCommand,validatePaidMatchCommand,parsePaidMatchCommand}from'./same-separate-command.mjs';
 import {CONTACT_PAUSE_RPC_COMMANDS,isContactPauseCommand,parseContactPauseCommandBody,handleContactPauseOfficeCommand} from './contact-pause-office.mjs';
 import { contactReminderRefusal } from './contact-reminder-refusal.mjs';
 import {CONTACT_MANUAL_ENQUIRY_RPC_COMMANDS,isContactManualEnquiryCommand,parseContactManualEnquiryBody,handleContactManualEnquiryOfficeCommand} from './contact-manual-enquiry-office.mjs';
@@ -266,6 +267,7 @@ async function readJsonBody(req, maximumBytes = MAX_COMMAND_BYTES) {
     const parsed = plainObject(JSON.parse(text || '{}'), 'WEEKLY_SOURCE_REQUEST_INVALID', 'Request');
     if(typeof parsed.action==='string'&&parsed.action.trim().toUpperCase()==='KEEP_AS_PAID')return parseKeptPayCommand(text);
     if(typeof parsed.action==='string'&&parsed.action.trim().toUpperCase()==='KEEP_AS_PAID_CONTEXT')return parseKeptPayContextCommand(text);
+    if(isPaidMatchCommand(parsed)){try{return parsePaidMatchCommand(text);}catch{fail('WEEKLY_SOURCE_PAID_MATCH_COMMAND_INVALID','Refresh the paid-shift comparison before choosing.',400);}}
     if(isContactManualEnquiryCommand(typeof parsed.action==='string' ? parsed.action.trim().toUpperCase() : null))return parseContactManualEnquiryBody(text);
     return isContactPauseCommand(typeof parsed.action==='string' ? parsed.action.trim().toUpperCase() : null)
       ? parseContactPauseCommandBody(text) : parsed;
@@ -824,6 +826,7 @@ async function handleCommand(req, env, ctx, dependencies, user) {
   }
 
   if (action === 'RECHECK_SOURCE') {
+    if(isPaidMatchCommand(body)){try{validatePaidMatchCommand(body);}catch{fail('WEEKLY_SOURCE_PAID_MATCH_COMMAND_INVALID','Refresh the paid-shift comparison before choosing.',400);}}
     if (typeof dependencies.recheckUpload !== 'function') {
       fail('WEEKLY_SOURCE_RECHECK_UNAVAILABLE', 'Source rechecking is unavailable.', 503);
     }

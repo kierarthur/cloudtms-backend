@@ -16,6 +16,15 @@ const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
 // compiler review; the four immutable migration packets remain checked below.
 export function prebodyDependencySource(input,value){
  const source=canonical(value);
+ // The reviewed Same/Separate adapter has no compiler or migration-packet effect.
+ // Reconstruct its exact complete prior bytes for this historical proof only.
+ if(input.file==='broker/src/weekly-source/off-rule-native-proxy.mjs'
+  &&input.sha256==='4606dc7e262d1870c548f7382a259ffb48a0d06729fa4b8adbcf184495b3cdef'&&digest(source)!==input.sha256){
+  if(digest(source)!=='c46b57f1b923e57674a13a7d0b2d19a0745bd583257174aea0aecf86d0ac4a0c')fail('BOUND_SOURCE_CHANGED');
+  const changes=[["const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;","const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;"],["export const sourceOperations=Object.freeze(['weekly_source_upload_context_v1'","export const sourceOperations=Object.freeze(['weekly_source_office_recheck_begin_v1','weekly_source_upload_context_v1'"],["'weekly_exceptional_pay_stage_c1_request_v1']);","'weekly_exceptional_pay_stage_c1_request_v1','weekly_source_missing_accept_context_v1','weekly_source_missing_accept_prepare_atomic_v1','weekly_source_later_change_decide_atomic_v1']);"]];let reversed=source;
+  for(const[before,after]of changes){if(reversed.split(after).length!==2)fail('BOUND_SOURCE_CHANGED');reversed=reversed.replace(after,()=>before);}
+  if(digest(reversed)!==input.sha256)fail('BOUND_SOURCE_CHANGED');return reversed;
+ }
  const prior='069e6d1d2361c6c8026b193116db565d40503b9a2e338ddb75c4b1dadb15d415';
  if(input.file!=='scripts/cloudtms-managed-execution-policy.mjs'||input.sha256!==prior||digest(source)===prior)return source;
  if(digest(source)!=='ba1ed5d23cdd639e814c7e009bfa07502dd633511e9e0be265d2a8486fa495d1')fail('BOUND_SOURCE_CHANGED');

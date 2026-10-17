@@ -1,0 +1,82 @@
+{
+  "version": "SAME_SEPARATE_PREBODY_FORWARD_INDEPENDENT_PEER_V1",
+  "sourceCheckpoint": "4c74f5fe8aed042945eb663b6a0baa0d7cac3644",
+  "ownFrozenClassifier": "37fb0a383750930d428cd760a80d6849e8e2313b",
+  "checks": [
+    {
+      "name": "all three forward records reverse complete source bytes to independent committed parents",
+      "status": "PASS"
+    },
+    {
+      "name": "historical classification bytes and all 95 complete dependency bindings remain exact",
+      "status": "PASS"
+    },
+    {
+      "name": "three proxy edits reconstruct exact genuine committed complete predecessor",
+      "status": "PASS"
+    },
+    {
+      "name": "actual new dependency binding admits only after whole historical module reconstruction",
+      "status": "PASS"
+    },
+    {
+      "name": "genuine old dependency remains usable without the forward receipt",
+      "status": "PASS"
+    },
+    {
+      "name": "same process refuses outside-hunk prebody drift and every other dependency drift",
+      "status": "PASS"
+    },
+    {
+      "name": "absent, malformed and edited forward evidence refuses instead of trusting a source hash",
+      "status": "PASS"
+    },
+    {
+      "name": "frozen classification edits cannot create a foreign dependency allowance",
+      "status": "PASS"
+    },
+    {
+      "name": "four original raw/mapped packet records and complete producers remain committed bytes",
+      "status": "PASS"
+    }
+  ],
+  "reviewedFiles": [
+    {
+      "file": "scripts/healthroster-prebody-dynamic-review.mjs",
+      "beforeSha256": "079ea08052ad96600ee0f9bdfee70dbeccaa8d85acb8eaf51483a1be5e5f99c1",
+      "afterSha256": "3504d0e858e1fdefe95edae2c86f14324944a96e1f27dc1a5caf097266898eef"
+    },
+    {
+      "file": "scripts/healthroster-same-separate-type-review.mjs",
+      "beforeSha256": "7234379079c1bdf1d09653682a2ea82ceb8a669c08266a0834a0d1a4c63a702f",
+      "afterSha256": "897df1661b265921f960c107f5189470475866ad8311aec358b15f8841391259"
+    },
+    {
+      "file": "tests/healthroster-kept-entry-verifier.test.mjs",
+      "beforeSha256": "cd4673b310232efd457ee771a674b6d28ec33ed268861ed996076001520ffd5a",
+      "afterSha256": "785601b4cb3daa4f962adcdf324a2fa860fefb0bfb3d00993b9380d0b4ba535e"
+    }
+  ],
+  "sourceRecords": [
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/SAME_SEPARATE_PREBODY_DEPENDENCY_FORWARD_20261017.json",
+      "sha256": "6a349f504746da2545af40e7b83144c3e4b8312606761489cb6e396098cde4d9"
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/SAME_SEPARATE_F23_PREBODY_BINDING_FORWARD_20261017.json",
+      "sha256": "3775098243086e0ea97fba64927592e03092d80e9ec5c79a3afbde10205fa8cf"
+    },
+    {
+      "file": "docs/healthroster-build/v6-owner-delivery-20261016/SAME_SEPARATE_VERIFIER_TEST_PARENT_FORWARD_20261017.json",
+      "sha256": "ed225c1d043c90882df9eb88d260b8321cab0e562e23cb6550459bc7b100a6b6"
+    }
+  ],
+  "historicalDependencies": 95,
+  "originalPacketVariants": 4,
+  "frozenClassificationSha256": "f338e3eaf7f3ce2ff027cd2728cc5f16f0724ea4ce7eeea139f5217ee949766d",
+  "runtimeSQLChangedByTheseForwards": false,
+  "newHazardAllowances": 0,
+  "bankingBodiesRead": 0,
+  "databaseConnections": 0,
+  "native": "NOT_RUN"
+}

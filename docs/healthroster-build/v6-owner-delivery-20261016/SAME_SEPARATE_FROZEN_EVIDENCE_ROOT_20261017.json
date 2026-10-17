@@ -1,0 +1,37 @@
+{
+  "version": "SAME_SEPARATE_FROZEN_EVIDENCE_ROOT_V1",
+  "verifiedWholeBytes": true,
+  "totalFiles": 534,
+  "sources": [
+    {
+      "commit": "9c791fa971c97a198c09c4e3579c01b589486c14",
+      "folder": "docs/healthroster-build/proposals/same-separate-health-current-successor-20261017",
+      "files": 343
+    },
+    {
+      "commit": "b9c1d0bad2e52ce95f7aa6b8e7f98ecbbd1fc832",
+      "folder": "docs/healthroster-build/proposals/same-separate-daily-parent-forward-20261017",
+      "files": 13
+    },
+    {
+      "commit": "a7e4522cb87ae6961cb40efcb83e4e69b12fbd6c",
+      "folder": "docs/healthroster-build/proposals/same-separate-counter-forward-20261017",
+      "files": 83
+    },
+    {
+      "commit": "09279bfeeff28e1a52f321edb2ec3760478c3729",
+      "folder": "docs/healthroster-build/proposals/source-paid-overlap-independent-review-20261017",
+      "files": 22
+    },
+    {
+      "commit": "37fb0a383750930d428cd760a80d6849e8e2313b",
+      "folder": "docs/healthroster-build/proposals/same-separate-f23-classification-20261017",
+      "files": 58
+    },
+    {
+      "commit": "dd9ec8e4e8a65406e0600805eddc927136e478c8",
+      "folder": "docs/healthroster-build/proposals/same-separate-prebody-forward-peer-20261017",
+      "files": 15
+    }
+  ]
+}

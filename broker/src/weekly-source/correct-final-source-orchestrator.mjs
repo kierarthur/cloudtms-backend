@@ -1,3 +1,4 @@
+import{decodePaidMatchQuestion,positivePaidCounter}from'./same-separate-command.mjs';
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SHA256_PATTERN = /^[0-9a-f]{64}$/i;
 
@@ -100,6 +101,17 @@ function integer(value, code, label, status = 409, minimum = 0) {
   }
   return result;
 }
+
+// The new paid context uses canonical decimal strings. Legacy native numeric
+// receipts are accepted only while exactly representable; no unsafe Number is
+// converted into an apparently exact bigint token.
+function counterToken(value,code,label,status=409){
+  if(typeof value==='number'){if(!Number.isSafeInteger(value)||value<1)fail(code,`${label} is invalid.`,status);return String(value);}
+  if(!positivePaidCounter(value))fail(code,`${label} is invalid.`,status);return value;
+}
+function counterValue(value,code,label,status=409){const token=counterToken(value,code,label,status);return typeof value==='number'?value:token;}
+function counterEqual(a,b){return counterToken(a,'WEEKLY_SOURCE_CORRECTION_VERSION_INVALID','Correction version',502)===counterToken(b,'WEEKLY_SOURCE_CORRECTION_VERSION_INVALID','Correction version',502);}
+function counterOffsetEqual(actual,expected,offset){const a=counterToken(actual,'WEEKLY_SOURCE_CORRECTION_VERSION_INVALID','Correction version',502),e=counterToken(expected,'WEEKLY_SOURCE_CORRECTION_VERSION_INVALID','Correction version',502),next=BigInt(e)+BigInt(offset);return next<=9223372036854775807n&&BigInt(a)===next;}
 
 function jsonClone(value, code, label) {
   try {
@@ -237,7 +249,7 @@ function normaliseCorrectionContext(value) {
       'WEEKLY_SOURCE_CORRECTION_REQUEST_INVALID',
       'Replacement comparison',
     ),
-    expectedAuthorityScopeVersion: integer(
+    expectedAuthorityScopeVersion: counterValue(
       context.expected_authority_scope_version,
       'WEEKLY_SOURCE_CORRECTION_REQUEST_INVALID',
       'Authority version',
@@ -264,14 +276,14 @@ function normaliseCorrectionContext(value) {
       'WEEKLY_SOURCE_CORRECTION_REQUEST_INVALID',
       'Correction review proof',
     ),
-    expectedSessionVersion: integer(
+    expectedSessionVersion: counterValue(
       context.expected_session_version,
       'WEEKLY_SOURCE_CORRECTION_REQUEST_INVALID',
       'Correction version',
       400,
       1,
     ),
-    reviewExpectedSessionVersion: integer(
+    reviewExpectedSessionVersion: counterValue(
       context.review_expected_session_version,
       'WEEKLY_SOURCE_CORRECTION_REQUEST_INVALID',
       'Correction review version',
@@ -410,7 +422,7 @@ function validateOpened(value, expectedActor) {
       'Correction session',
       502,
     ),
-    version: integer(
+    version: counterValue(
       opened.version,
       'WEEKLY_SOURCE_CORRECTION_OPEN_RESULT_INVALID',
       'Correction session version',
@@ -454,7 +466,7 @@ function validateStaged(value, correctionSessionId) {
       'Replacement comparison',
       502,
     ),
-    expected_authority_scope_version: integer(
+    expected_authority_scope_version: counterValue(
       staged.expected_authority_scope_version,
       'WEEKLY_SOURCE_CORRECTION_STAGE_RESULT_INVALID',
       'Authority scope version',
@@ -479,7 +491,7 @@ function validateStaged(value, correctionSessionId) {
       'Replacement issue proof',
       502,
     ),
-    version: integer(
+    version: counterValue(
       staged.version,
       'WEEKLY_SOURCE_CORRECTION_STAGE_RESULT_INVALID',
       'Staged correction version',
@@ -572,7 +584,7 @@ function validatePrepared(value, normalized, opened, staged) {
       'Prepared final source',
       502,
     ),
-    version: integer(
+    version: counterValue(
       prepared.version,
       'WEEKLY_SOURCE_CORRECTION_PREPARE_RESULT_INVALID',
       'Prepared correction version',
@@ -602,6 +614,73 @@ function plainPreviewRow(value, fields, label) {
   )])));
 }
 
+function normaliseCorrectFinalPaidQuestions(value) {
+  if(value===undefined)return Object.freeze([]);
+  if(!Array.isArray(value)||value.length>10000)fail('WEEKLY_SOURCE_CORRECTION_PREVIEW_RESULT_INVALID','Paid-shift questions are invalid.',502);
+  const seen=new Set();return Object.freeze(value.map(raw=>{
+    const row=plainObject(raw,'WEEKLY_SOURCE_CORRECTION_PREVIEW_RESULT_INVALID','Paid-shift question',502);
+    if(!sameJson(Object.keys(row).sort(),['candidate','client','shift','system_hours','paid_match_question'].sort()))fail('WEEKLY_SOURCE_CORRECTION_PREVIEW_RESULT_INVALID','Paid-shift question is invalid.',502);
+    let q;try{q=decodePaidMatchQuestion(row.paid_match_question);}catch{fail('WEEKLY_SOURCE_CORRECTION_PREVIEW_RESULT_INVALID','Paid-shift question is invalid.',502);}
+    if(q.state!=='READY'||seen.has(q.upload_row_id))fail('WEEKLY_SOURCE_CORRECTION_PREVIEW_RESULT_INVALID','Paid-shift question is invalid.',502);seen.add(q.upload_row_id);
+    return Object.freeze({candidate:text(row.candidate,'WEEKLY_SOURCE_CORRECTION_PREVIEW_RESULT_INVALID','Candidate',502),client:text(row.client,'WEEKLY_SOURCE_CORRECTION_PREVIEW_RESULT_INVALID','Client',502),shift:text(row.shift,'WEEKLY_SOURCE_CORRECTION_PREVIEW_RESULT_INVALID','Shift',502),system_hours:text(row.system_hours,'WEEKLY_SOURCE_CORRECTION_PREVIEW_RESULT_INVALID','Imported hours',502),paid_match_question:Object.freeze({...q,choices:Object.freeze(q.choices.map(c=>Object.freeze({...c})))})});
+  }));
+}
+
+// Finite internal consumer of actual native begin/publish receipts. The existing
+// public review owner independently rederives every pointer/hash/session CAS.
+export async function reviewWeeklyCorrectFinalPaidMatchRecheck(dependencies, request, begun, published) {
+  const frame = plainObject(begun?.correction_review_identity,
+    'WEEKLY_SOURCE_CORRECTION_REBUILD_IDENTITY_MISMATCH', 'Saved correction scope', 502);
+  const fields = ['schema_version','correction_session_id','source_cycle_id',
+    'expected_current_final_revision_id','expected_final_manifest_hash','authority_scope_kind','report_scope_id'];
+  if (!sameJson(Object.keys(frame).sort(), fields.sort())
+    || frame.schema_version !== 'WEEKLY_SOURCE_PAID_MATCH_CORRECTION_RECHECK_CONTEXT_V1'
+    || !['CYCLE','NHSP_REPORT_SCOPE'].includes(frame.authority_scope_kind)
+    || (frame.authority_scope_kind==='CYCLE'?frame.report_scope_id!==null:typeof frame.report_scope_id!=='string'||!UUID_PATTERN.test(frame.report_scope_id))
+    || !sameJson(published.correction_review_identity,frame)
+    || begun.purpose !== 'FINAL_SOURCE_CORRECTION'
+    || frame.correction_session_id !== request.correction_session_id
+    || begun.correction_session_id !== frame.correction_session_id
+    || begun.upload_id !== request.upload_id || published.upload_id !== request.upload_id
+    || published.status !== 'CORRECTION_READY' || published.ok !== true
+    || published.publication_id !== begun.publication_id
+    || !counterEqual(published.authority_scope_version,request.expected_authority_scope_version)) {
+    fail('WEEKLY_SOURCE_CORRECTION_REBUILD_IDENTITY_MISMATCH', 'The saved correction scope changed.', 409);
+  }
+  const actorUserId = uuid(request.actor_user_id,'WEEKLY_SOURCE_ACTOR_REQUIRED','Office user');
+  const identity = Object.freeze({
+    sourceCycleId: uuid(frame.source_cycle_id,'WEEKLY_SOURCE_CORRECTION_REQUEST_INVALID','Source cycle'),
+    scopeKind: frame.authority_scope_kind, reportScopeId: frame.report_scope_id,
+    correctionSessionId: uuid(frame.correction_session_id,'WEEKLY_SOURCE_CORRECTION_REQUEST_INVALID','Correction session'),
+    expectedCurrentFinalRevisionId: uuid(frame.expected_current_final_revision_id,
+      'WEEKLY_SOURCE_CORRECTION_REQUEST_INVALID','Current final source'),
+    expectedFinalManifestHash: sha256(frame.expected_final_manifest_hash,
+      'WEEKLY_SOURCE_CORRECTION_REQUEST_INVALID','Current final-source proof'),
+    replacementUploadId: uuid(published.upload_id,'WEEKLY_SOURCE_CORRECTION_REQUEST_INVALID','Replacement upload'),
+    replacementProjectionPublicationId: uuid(published.publication_id,
+      'WEEKLY_SOURCE_CORRECTION_REQUEST_INVALID','Replacement comparison'),
+    expectedAuthorityScopeVersion: counterToken(published.authority_scope_version,
+      'WEEKLY_SOURCE_CORRECTION_REQUEST_INVALID','Authority version',502,1),
+    expectedRowManifestHash: sha256(request.expected_row_manifest_hash,
+      'WEEKLY_SOURCE_CORRECTION_REQUEST_INVALID','Replacement row proof'),
+    expectedComparisonManifestHash: sha256(published.comparison_manifest_hash,
+      'WEEKLY_SOURCE_CORRECTION_REQUEST_INVALID','Replacement comparison proof'),
+    expectedIssueSetHash: sha256(published.issue_set_hash,
+      'WEEKLY_SOURCE_CORRECTION_REQUEST_INVALID','Replacement issue proof'),
+  });
+  const version=counterToken(published.ready_session_version,
+    'WEEKLY_SOURCE_CORRECTION_VERSION_INVALID','Saved correction version',502,1);
+  const reviewKey=uuid(request.request_id,'WEEKLY_SOURCE_CORRECTION_REQUEST_INVALID','Saved recheck reference')+':review';
+  const reviewed=validateReviewed(await rpc({...dependencies,dataRpc:dependencies.dataRpc??dependencies.rpc},'weekly_source_correct_final_review_atomic_v1',
+    reviewRequest(actorUserId,identity,version,reviewKey)),identity,version);
+  const context=correctionContext(identity,version,reviewKey,reviewed);
+  return Object.freeze({ok:true,status:reviewed.status,correction_session_id:identity.correctionSessionId,
+    changes:reviewed.office_preview.changes,blockers:reviewed.office_preview.blockers,
+    confirmation_text:reviewed.office_preview.confirmation_text,
+    paid_match_questions:reviewed.office_preview.paid_match_questions ?? Object.freeze([]),
+    review_context:context,apply_context:reviewed.status==='READY_FOR_CONFIRMATION'?context:null});
+}
+
 function normaliseOfficePreview(value) {
   const preview = plainObject(
     value,
@@ -613,11 +692,19 @@ function normaliseOfficePreview(value) {
     fail('WEEKLY_SOURCE_CORRECTION_PREVIEW_RESULT_INVALID', 'Correction review is invalid.', 502);
   }
   return Object.freeze({
-    changes: Object.freeze(preview.changes.map((row) => plainPreviewRow(
-      row,
-      ['candidate', 'day_date', 'current_final', 'replacement', 'result'],
-      'Correction change',
-    ))),
+    changes: Object.freeze(preview.changes.map((row) => {
+      const fields=['candidate','day_date','current_final','replacement','result',
+        'current_final_amount','replacement_amount','amount_changed'];
+      if (!row || typeof row!=='object' || Array.isArray(row)
+        || !sameJson(Object.keys(row).sort(),fields.sort()) || typeof row.amount_changed!=='boolean'
+        || fields.filter(key=>key!=='amount_changed').some(key=>typeof row[key]!=='string')) {
+        fail('WEEKLY_SOURCE_CORRECTION_PREVIEW_RESULT_INVALID','Correction change is invalid.',502);
+      }
+      const strings=plainPreviewRow(Object.fromEntries(fields.filter(key=>key!=='amount_changed').map(key=>[key,row[key]])),
+        fields.filter(key=>key!=='amount_changed'),'Correction change');
+      return Object.freeze({...strings,amount_changed:row.amount_changed});
+    })),
+    paid_match_questions: normaliseCorrectFinalPaidQuestions(preview.paid_match_questions),
     blockers: Object.freeze(preview.blockers.map((row) => plainPreviewRow(
       row,
       ['candidate', 'day_date', 'problem', 'action'],
@@ -667,14 +754,14 @@ function validateReviewed(value, identity, expectedRequestVersion) {
       ) !== identity.replacementUploadId) {
     fail('WEEKLY_SOURCE_CORRECTION_PREVIEW_RESULT_INVALID', 'The correction review changed.', 409);
   }
-  const version = integer(
+  const version = (typeof expectedRequestVersion==='string'?counterToken:counterValue)(
     reviewed.version,
     'WEEKLY_SOURCE_CORRECTION_PREVIEW_RESULT_INVALID',
     'Correction version',
     502,
     1,
   );
-  if (version !== expectedRequestVersion + 1) {
+  if (!counterOffsetEqual(version,expectedRequestVersion,1)) {
     fail('WEEKLY_SOURCE_CORRECTION_PREVIEW_RESULT_INVALID', 'The correction review version changed.', 409);
   }
   const officePreview = normaliseOfficePreview(reviewed.office_preview);
@@ -889,7 +976,7 @@ export async function orchestrateWeeklyCorrectFinalPreview(input = {}) {
       ctx: input.ctx,
     }), priorIdentity.correctionSessionId);
     if (rebuilt.replacement_upload_id !== priorIdentity.replacementUploadId
-        || rebuilt.expected_authority_scope_version !== priorIdentity.expectedAuthorityScopeVersion
+        || !counterEqual(rebuilt.expected_authority_scope_version,priorIdentity.expectedAuthorityScopeVersion)
         || rebuilt.expected_row_manifest_hash !== priorIdentity.expectedRowManifestHash
         || rebuilt.replacement_projection_publication_id
           === priorIdentity.replacementProjectionPublicationId) {
@@ -926,6 +1013,7 @@ export async function orchestrateWeeklyCorrectFinalPreview(input = {}) {
       ok: true,
       status: reviewed.status,
       correction_session_id: identity.correctionSessionId,
+      paid_match_questions: reviewed.office_preview.paid_match_questions,
       changes: reviewed.office_preview.changes,
       blockers: reviewed.office_preview.blockers,
       confirmation_text: reviewed.office_preview.confirmation_text,
@@ -999,6 +1087,7 @@ export async function orchestrateWeeklyCorrectFinalPreview(input = {}) {
     ok: true,
     status: reviewed.status,
     correction_session_id: opened.correction_session_id,
+    paid_match_questions: reviewed.office_preview.paid_match_questions,
     changes: reviewed.office_preview.changes,
     blockers: reviewed.office_preview.blockers,
     confirmation_text: reviewed.office_preview.confirmation_text,
@@ -1026,7 +1115,7 @@ export async function orchestrateWeeklyCorrectFinalApply(input = {}) {
       context.reviewIdempotencyKey,
     ),
   ), context, context.reviewExpectedSessionVersion);
-  if (reviewed.version !== context.expectedSessionVersion
+  if (!counterEqual(reviewed.version,context.expectedSessionVersion)
       || reviewed.office_preview.preview_hash !== context.expectedPreviewHash
       || reviewed.office_preview.confirmation_text !== normalized.confirmationText
       || reviewed.office_preview.blockers.length
@@ -1059,7 +1148,7 @@ export async function orchestrateWeeklyCorrectFinalApply(input = {}) {
     'weekly_source_correct_final_prepare_atomic_v1',
     prepareRequest(normalized, context),
   ), replayNormalized, opened, staged);
-  if (prepared.version !== context.expectedSessionVersion + 2
+  if (!counterOffsetEqual(prepared.version,context.expectedSessionVersion,2)
       || prepared.office_preview.preview_hash !== context.expectedPreviewHash
       || prepared.office_preview.confirmation_text !== normalized.confirmationText
       || prepared.office_preview.blockers.length) {
