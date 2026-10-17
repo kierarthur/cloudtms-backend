@@ -1,0 +1,12 @@
+{
+  "path": "payload/supabase/migrations/17102026_0749_source_current_read_private_admission.sql",
+  "sha256": "7cbb76d9b28d83349b0713186a5bdaca9613865bceca0294230d37bb4c7cb2a2",
+  "statements": 1,
+  "exactParsedPrograms": 1,
+  "newRoutineDefinitions": 0,
+  "parser": "pglast v7.20",
+  "PostgreSQLGrammar": "17.7",
+  "native": "NOT_RUN",
+  "catalogue": "NOT_RUN",
+  "dbConnections": 0
+}

@@ -1,0 +1,300 @@
+{
+  "parent": "af933e3e611a0b83d361a185bfda269cb6543bc8",
+  "SameFunctionalParent": "a7e4522cb87ae6961cb40efcb83e4e69b12fbd6c",
+  "files": [
+    {
+      "target": "native/03_complete_native_gate.sqlinc",
+      "signature": "private.weekly_source_pay_decision_native_normal_gate_v1(uuid,uuid,uuid,text)",
+      "input": {
+        "commit": "af933e3e611a0b83d361a185bfda269cb6543bc8",
+        "path": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "wholePhysicalSha256": "733636ad7e9e1a4c003f8b5ddd5598688432fff05a1fbcdb19792a945eec377b",
+        "sha256": "cd33b1dd1177b4a96256281b5599fa93d0db65d16a10b27920c47559ec7d393c",
+        "bytes": 4588,
+        "definitionOnly": true
+      },
+      "outputSha256": "cc35fb07a93c6139c0ab1a36f9d4f761c899de06d62146c2775bfc3c6cf46628",
+      "outputBytes": 4681,
+      "hunks": [
+        {
+          "before": "v_source:=private.bpay_next_source_decision_native_status_v1(p_family_id,p_run_id,p_actor_user_id);",
+          "after": "v_source:=private.weekly_source_pay_decision_native_status_child_v1(\n  private.bpay_next_source_decision_native_status_v1(p_family_id,p_run_id,p_actor_user_id),p_family_id,p_run_id,null,null);"
+        }
+      ],
+      "fullRawReverse": true,
+      "savedWholeOutput": true
+    },
+    {
+      "target": "native/04_complete_internal_source_read.sqlinc",
+      "signature": "private.weekly_source_pay_decision_read_source_v1(uuid,uuid,uuid)",
+      "input": {
+        "commit": "af933e3e611a0b83d361a185bfda269cb6543bc8",
+        "path": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "wholePhysicalSha256": "733636ad7e9e1a4c003f8b5ddd5598688432fff05a1fbcdb19792a945eec377b",
+        "sha256": "8b4ce285782595b7f1d111bb498eb44157991af69badaf3306275551f1fedc45",
+        "bytes": 5188,
+        "definitionOnly": true
+      },
+      "outputSha256": "ca20e394d6c5bbc4067cdf1e76e09b5c691bb2c62c3e14a7bb6bc7d3acd99d96",
+      "outputBytes": 9103,
+      "hunks": [
+        {
+          "before": "applications jsonb;native jsonb;cut jsonb;",
+          "after": "applications jsonb;native jsonb;cut jsonb;current_request uuid;"
+        },
+        {
+          "before": "begin\n if p_actor is null",
+          "after": "begin\n perform private.weekly_source_pay_decision_read_access_v1(p_decision,p_request,p_actor);\n if p_actor is null"
+        },
+        {
+          "before": " if j.receipt_json->>'version' is distinct from 'SOURCE_PAY_DECISION_RECEIPT_V1'",
+          "after": " if not exists(select 1 from private.weekly_source_pay_decision_requests original_request\n   where original_request.request_id=d.accept_request_id and original_request.decision_id=d.id and original_request.request_kind='ACCEPT'\n    and original_request.metadata_state='COMMITTED' and original_request.receipt_json=d.receipt_json\n    and original_request.request_hash=private.weekly_source_sha256_jsonb_v1('SOURCE_PAY_DECISION_CONFIRMATION_V1',original_request.request_json)\n    and d.receipt_json->>'request_id'=original_request.request_id::text\n    and d.receipt_json->>'review_id'=original_request.review_id::text\n    and d.receipt_json->>'actor_user_id'=original_request.actor_user_id::text) then\n  raise exception 'SOURCE_PAY_DECISION_SAVED_RECEIPT_INVALID' using errcode='23514';end if;\n if j.receipt_json->>'version' is distinct from 'SOURCE_PAY_DECISION_RECEIPT_V1'"
+        },
+        {
+          "before": "   where a.decision_id=d.id and a.state='COMMITTED';",
+          "after": "   where a.decision_id=d.id and a.state='COMMITTED';\n if not exists(select 1 from private.weekly_source_pay_decision_acceptance_applications current_application\n   join private.bpay_next_source_pay_decision_cut current_cut on current_cut.id=current_application.cut_id\n    and current_cut.decision_id=current_application.decision_id and current_cut.review_id=current_application.review_id\n   where current_application.decision_id=d.id and current_application.cut_id=d.current_financial_cut_id\n    and current_application.state='COMMITTED' and current_application.application_sha256 is not null)\n  or exists(select 1 from private.weekly_source_pay_decision_acceptance_applications application\n   left join private.weekly_source_pay_decision_requests request on request.request_id=application.request_id\n    and request.decision_id=application.decision_id and request.review_id=application.review_id and request.metadata_state='COMMITTED'\n   left join private.bpay_next_source_pay_decision_cut application_cut on application_cut.id=application.cut_id\n    and application_cut.decision_id=application.decision_id and application_cut.review_id=application.review_id\n   where application.decision_id=d.id and (application.state<>'COMMITTED' or application.application_sha256 is null\n    or request.request_id is null or application_cut.id is null\n    or request.receipt_json#>>'{financial_publications,cut_id}' is distinct from application.cut_id::text)) then\n  raise exception 'SOURCE_PAY_DECISION_SAVED_APPLICATION_INVALID' using errcode='23514';end if;"
+        },
+        {
+          "before": "   on a.id=n.application_id where a.decision_id=d.id and (a.state<>'COMMITTED' or n.native_result_sha256 is distinct from",
+          "after": "   on a.id=n.application_id where a.decision_id=d.id and (a.state<>'COMMITTED'\n    or n.decision_id is distinct from a.decision_id or n.review_id is distinct from a.review_id\n    or not exists(select 1 from private.weekly_source_pay_decision_unprotect_preparations preparation\n     where preparation.id=n.preparation_id and preparation.decision_id=a.decision_id and preparation.review_id=a.review_id\n      and preparation.accept_or_resume_request_id=a.request_id and preparation.member_key=n.member_key and preparation.route=n.route)\n    or (n.native_result_json is not null and (n.native_result_json->>'application_id' is distinct from a.id::text\n     or n.native_result_json->>'decision_id' is distinct from a.decision_id::text\n     or n.native_result_json->>'request_id' is distinct from a.request_id::text\n     or n.native_result_json->>'review_id' is distinct from a.review_id::text\n     or n.native_result_json->>'member_key' is distinct from n.member_key\n     or n.native_result_json->>'preparation_id' is distinct from n.preparation_id::text\n     or n.native_result_json->>'origin' is distinct from n.origin or n.native_result_json->>'route' is distinct from n.route))\n    or n.native_result_sha256 is distinct from"
+        },
+        {
+          "before": " select jsonb_build_object('cut_id',c.id,'cut_no',c.cut_no::text,'review_id',c.review_id,'qualification_state',c.qualification_state,",
+          "after": " select application.request_id into strict current_request\n  from private.weekly_source_pay_decision_acceptance_applications application\n  where application.decision_id=d.id and application.cut_id=d.current_financial_cut_id and application.state='COMMITTED';\n if current_request is distinct from j.request_id then\n  perform private.weekly_source_pay_decision_read_access_v1(d.id,current_request,p_actor);\n end if;\n select jsonb_build_object('cut_id',c.id,'cut_no',c.cut_no::text,'review_id',c.review_id,'qualification_state',c.qualification_state,"
+        }
+      ],
+      "fullRawReverse": true,
+      "savedWholeOutput": true
+    },
+    {
+      "target": "native/05_complete_internal_service_read.sqlinc",
+      "signature": "public.weekly_source_pay_decision_read_source_v1(jsonb)",
+      "input": {
+        "commit": "af933e3e611a0b83d361a185bfda269cb6543bc8",
+        "path": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "wholePhysicalSha256": "733636ad7e9e1a4c003f8b5ddd5598688432fff05a1fbcdb19792a945eec377b",
+        "sha256": "2bcd4443c44da324b3501f7329d6275b27e1c92ae0b2ff05086a804c130c616f",
+        "bytes": 1018,
+        "definitionOnly": true
+      },
+      "outputSha256": "cb1f689948af82d39e798e95060e3810729c09c2009636659b2135f1c75c67c5",
+      "outputBytes": 1371,
+      "hunks": [
+        {
+          "before": "begin\n if coalesce",
+          "after": "declare k text;\nbegin\n if coalesce"
+        },
+        {
+          "before": " return private.weekly_source_pay_decision_read_source_v1((p_request->>'decision_id')::uuid,(p_request->>'request_id')::uuid,(p_request->>'actor_user_id')::uuid);",
+          "after": " foreach k in array array['decision_id','request_id','actor_user_id'] loop\n  if jsonb_typeof(p_request->k) is distinct from 'string'\n   or coalesce(p_request->>k,'') !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then\n   raise exception 'SOURCE_PAY_DECISION_REQUEST_INVALID' using errcode='22023';end if;\n end loop;\n return private.weekly_source_pay_decision_read_source_v1((p_request->>'decision_id')::uuid,(p_request->>'request_id')::uuid,(p_request->>'actor_user_id')::uuid);"
+        }
+      ],
+      "fullRawReverse": true,
+      "savedWholeOutput": true
+    },
+    {
+      "target": "native/06_complete_public_source_accept_read.sqlinc",
+      "signature": "public.weekly_source_pay_decision_accept_v1(jsonb)",
+      "input": {
+        "commit": "af933e3e611a0b83d361a185bfda269cb6543bc8",
+        "path": "supabase/repeatable/16102026_1100_nhsp_v6_source_pay_authority/01_complete_source_authorities.sqlinc",
+        "wholePhysicalSha256": "733636ad7e9e1a4c003f8b5ddd5598688432fff05a1fbcdb19792a945eec377b",
+        "sha256": "6ce4e6f1b8ae8a63e18e40455662fcb3659a651289fe83b6548ea03962fcd683",
+        "bytes": 23442,
+        "definitionOnly": true
+      },
+      "outputSha256": "7e3cf0899c3876f26f9b4354fb3423704427a87b8163a4b47334963475cd313f",
+      "outputBytes": 23930,
+      "hunks": [
+        {
+          "before": "  perform private.weekly_source_pay_decision_read_source_v1((body->>'decision_id')::uuid,(body->>'request_id')::uuid,actor);",
+          "after": "  select request.* into j from private.weekly_source_pay_decision_requests request\n   where request.request_id=(body->>'request_id')::uuid and request.decision_id=(body->>'decision_id')::uuid\n    and request.request_kind in('ACCEPT','RESUME_FINANCIAL');\n  if not found then raise exception 'SOURCE_PAY_DECISION_SAVED_RESULT_NOT_FOUND' using errcode='22023';end if;\n  if j.metadata_state='COMMITTED' then\n   perform private.weekly_source_pay_decision_read_source_v1(j.decision_id,j.request_id,actor);\n  else\n   perform private.weekly_source_pay_decision_read_access_v1(j.decision_id,j.request_id,actor);\n  end if;"
+        }
+      ],
+      "fullRawReverse": true,
+      "savedWholeOutput": true
+    },
+    {
+      "target": "broker/src/weekly-source/source-pay-decision-worker.mjs",
+      "signature": null,
+      "input": {
+        "commit": "af933e3e611a0b83d361a185bfda269cb6543bc8",
+        "path": "broker/src/weekly-source/source-pay-decision-worker.mjs",
+        "wholePhysicalSha256": "a24113b69ce4d05889a2742b0d91ed615e96981e7781d7c79f9eb2fdc7bc22b2",
+        "sha256": "a24113b69ce4d05889a2742b0d91ed615e96981e7781d7c79f9eb2fdc7bc22b2",
+        "bytes": 5789,
+        "definitionOnly": false
+      },
+      "outputSha256": "21a6ea07e67d7d1cdb76c55e3fdf3d02fe7601252d22047ef771d16ff8bb02c4",
+      "outputBytes": 6546,
+      "hunks": [
+        {
+          "before": "",
+          "after": "\n// Actual public READ_RESULT service path. The approved public current-result\n// envelope/B051 financial child is not supplied. Do not promote internal9, an\n// accepted15 receipt, or opaque native JSON when a producer unexpectedly returns.\nexport async function readCurrentSourcePayDecision({request,actorUserId,...provided}){\n const body=decodeSourcePayDecisionBrowserRequest(request,'READ_RESULT'),owner=dependencies(actorUserId,provided);\n await owner.dataRpc('weekly_source_pay_decision_accept_v1',{p_request:{...body,actor_user_id:actorUserId,\n  preview_assembly_ref:null,unprotect_preparations:[]}});\n const error=new Error('The Source pay decision result is invalid.');error.code='SOURCE_PAY_DECISION_RESULT_INVALID';error.status=502;throw error;\n}\n"
+        }
+      ],
+      "fullRawReverse": true,
+      "savedWholeOutput": true
+    },
+    {
+      "target": "broker/src/weekly-source/source-pay-decision-http.mjs",
+      "signature": null,
+      "input": {
+        "commit": "af933e3e611a0b83d361a185bfda269cb6543bc8",
+        "path": "broker/src/weekly-source/source-pay-decision-http.mjs",
+        "wholePhysicalSha256": "4e6e5f84839bce46b71fce26389a2a988e5ac073ca0b4bb29bb22345dd9a042d",
+        "sha256": "4e6e5f84839bce46b71fce26389a2a988e5ac073ca0b4bb29bb22345dd9a042d",
+        "bytes": 7885,
+        "definitionOnly": false
+      },
+      "outputSha256": "4f671072a398b6e8e64640b75c29dcc7c0b6339f55ac2ee85ef394fbdd78086f",
+      "outputBytes": 8327,
+      "hunks": [
+        {
+          "before": "preview,confirm,readSource})",
+          "after": "preview,confirm,readResult})"
+        },
+        {
+          "before": "   if(typeof readSource!=='function')fail('SOURCE_PAY_DECISION_DEPENDENCY_REQUIRED',503);\n   // Authenticate/reprove exact saved request/current SQL scope through its\n   // already declared real owner. Its private nine-key result is never sent.\n   await readSource({request,actorUserId:user.id});\n   fail('SOURCE_PAY_DECISION_READ_PROJECTION_DEPENDENCY_REQUIRED',503);",
+          "after": "   if(typeof readResult!=='function')fail('SOURCE_PAY_DECISION_DEPENDENCY_REQUIRED',503);\n   // The genuine public SQL READ_RESULT arm owns saved request/current scope\n   // and native-child validation. It returns the exact dependency refusal until\n   // the separately missing public envelope/financial child is supplied.\n   await readResult({request,actorUserId:user.id});\n   fail('SOURCE_PAY_DECISION_RESULT_INVALID',502);"
+        },
+        {
+          "before": " SOURCE_PAY_DECISION_READ_PROJECTION_DEPENDENCY_REQUIRED:['55000',503]\n",
+          "after": " SOURCE_PAY_DECISION_READ_PROJECTION_DEPENDENCY_REQUIRED:['55000',503],\n SOURCE_PAY_DECISION_SCOPE_DENIED:['42501',403],SOURCE_PAY_DECISION_SAVED_RESULT_NOT_FOUND:['22023',404],\n SOURCE_PAY_DECISION_SAVED_RECEIPT_INVALID:['23514',502],SOURCE_PAY_DECISION_SAVED_APPLICATION_INVALID:['23514',502],\n SOURCE_PAY_DECISION_SAVED_NATIVE_RESULT_INVALID:['23514',502],SOURCE_NATIVE_STATUS_INVALID:['55000',502],\n SOURCE_NATIVE_OWNERSHIP_CONTRADICTION:['55000',502]\n"
+        }
+      ],
+      "fullRawReverse": true,
+      "savedWholeOutput": true
+    },
+    {
+      "target": "broker/src/weekly-source/source-pay-decision-contract.mjs",
+      "signature": null,
+      "input": {
+        "commit": "af933e3e611a0b83d361a185bfda269cb6543bc8",
+        "path": "broker/src/weekly-source/source-pay-decision-contract.mjs",
+        "wholePhysicalSha256": "93bddf11b81dbb36ba42b05a7073981b36b1814d44e0665bd0d8b3b1450a1380",
+        "sha256": "93bddf11b81dbb36ba42b05a7073981b36b1814d44e0665bd0d8b3b1450a1380",
+        "bytes": 17252,
+        "definitionOnly": false
+      },
+      "outputSha256": "19b64546a74f1838cdb21b9caa2ccc56468e6e97ed1ffeec94497e5025cce9ec",
+      "outputBytes": 19219,
+      "hunks": [
+        {
+          "before": " const cut=v.current_cut;",
+          "after": " // Internal Source evidence remains separate from the public accepted receipt.\n if(v.accepted_receipt.decision!==v.request_receipt.decision\n  ||v.accepted_receipt.reason!==v.request_receipt.reason\n  ||BigInt(v.accepted_receipt.state_revision)>BigInt(v.request_receipt.state_revision))invalid();\n const acceptedMembers=new Map(v.accepted_receipt.members.map(m=>[m.member_key,m]));\n if(acceptedMembers.size!==v.request_receipt.members.length)invalid();\n // Original Source-only NULL family/event evidence stays in accepted_receipt.\n // A later genuine native binding belongs to its separate request receipt;\n // current SQL proves that association. Do not equate absence with current IDs.\n for(const m of v.request_receipt.members){const original=acceptedMembers.get(m.member_key);\n  if(!original||!['scope_kind','scope_mode','source_row_id'].every(k=>same(m[k],original[k])))invalid();}\n const cut=v.current_cut;"
+        },
+        {
+          "before": " list(v.native_members,n=>{",
+          "after": " const requestApplication=v.applications.filter(a=>a.request_id===v.request_id),\n  acceptedApplication=v.applications.filter(a=>a.request_id===v.accepted_receipt.request_id),\n  currentApplication=v.applications.filter(a=>a.cut_id===cut.cut_id&&a.review_id===cut.review_id);\n if(new Set(v.applications.map(a=>a.request_id)).size!==v.applications.length\n  ||new Set(v.applications.map(a=>a.cut_id)).size!==v.applications.length\n  ||new Set(v.applications.map(a=>a.review_id)).size!==v.applications.length\n  ||requestApplication.length!==1||acceptedApplication.length!==1||currentApplication.length!==1\n  ||requestApplication[0].review_id!==v.request_receipt.review_id\n  ||requestApplication[0].cut_id!==v.request_receipt.financial_publications.cut_id\n  ||acceptedApplication[0].review_id!==v.accepted_receipt.review_id\n  ||acceptedApplication[0].cut_id!==v.accepted_receipt.financial_publications.cut_id)invalid();\n list(v.native_members,n=>{"
+        },
+        {
+          "before": "  if(n.origin==='NOT_APPLIED_DEPENDENCY')",
+          "after": "  if(!acceptedMembers.has(n.member_key))return false;\n  const application=v.applications.find(a=>a.application_id===n.application_id);\n  if(n.origin==='NOT_APPLIED_DEPENDENCY')"
+        },
+        {
+          "before": "decodeSourceNativeComposedResult(n.original_native_result,{application_id:n.application_id,decision_id:v.decision_id,request_id:n.request_id,member_key:n.member_key,",
+          "after": "decodeSourceNativeComposedResult(n.original_native_result,{application_id:n.application_id,decision_id:v.decision_id,request_id:n.request_id,review_id:application.review_id,member_key:n.member_key,"
+        }
+      ],
+      "fullRawReverse": true,
+      "savedWholeOutput": true
+    },
+    {
+      "target": "broker/src/weekly-source/routes.js",
+      "signature": null,
+      "input": {
+        "commit": "9c791fa971c97a198c09c4e3579c01b589486c14",
+        "path": "docs/healthroster-build/proposals/same-separate-health-current-successor-20261017/payload/broker/src/weekly-source/routes.js",
+        "wholePhysicalSha256": "67a369464490aafe4035c06adb1c06d7e4e367d12dd93f05567a03b7bcf61786",
+        "sha256": "67a369464490aafe4035c06adb1c06d7e4e367d12dd93f05567a03b7bcf61786",
+        "bytes": 73120,
+        "definitionOnly": false
+      },
+      "outputSha256": "196fefff89b45583c46ddea1cae5d4d22ea4f02d2f5089899a95e39e2601d9fe",
+      "outputBytes": 73121,
+      "hunks": [
+        {
+          "before": "readSource: dependencies.readSourcePayDecisionSource,",
+          "after": "readResult: dependencies.readCurrentSourcePayDecision,"
+        }
+      ],
+      "fullRawReverse": true,
+      "savedWholeOutput": true
+    },
+    {
+      "target": "broker/src/index.js",
+      "signature": null,
+      "input": {
+        "commit": "af933e3e611a0b83d361a185bfda269cb6543bc8",
+        "path": "broker/src/index.js",
+        "wholePhysicalSha256": "1385684e3983f734b7570499edf6672b1cfe790542a5b468bed0b53a6f6cb76a",
+        "sha256": "1385684e3983f734b7570499edf6672b1cfe790542a5b468bed0b53a6f6cb76a",
+        "bytes": 8936781,
+        "definitionOnly": false
+      },
+      "outputSha256": "a360e1147b0f6e7902c16b4c6109df0db203af36a981600f84371c17d0e1f6db",
+      "outputBytes": 8936784,
+      "hunks": [
+        {
+          "before": "previewSourcePayDecision,confirmSourcePayDecision,readSourcePayDecisionSource",
+          "after": "previewSourcePayDecision,confirmSourcePayDecision,readCurrentSourcePayDecision"
+        },
+        {
+          "before": "        readSourcePayDecisionSource: ({ request, actorUserId }) => readSourcePayDecisionSource({",
+          "after": "        readCurrentSourcePayDecision: ({ request, actorUserId }) => readCurrentSourcePayDecision({"
+        }
+      ],
+      "fullRawReverse": true,
+      "savedWholeOutput": false
+    },
+    {
+      "target": "native/98_complete_current_classification.sqlinc",
+      "signature": null,
+      "input": {
+        "commit": "9c791fa971c97a198c09c4e3579c01b589486c14",
+        "path": "docs/healthroster-build/proposals/same-separate-health-current-successor-20261017/payload/supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health/98_complete_current_classification.sqlinc",
+        "wholePhysicalSha256": "22df3a8119af2f398bf5273a758d4643ec18a4883432ba3c6cda1ebfb43025f6",
+        "sha256": "22df3a8119af2f398bf5273a758d4643ec18a4883432ba3c6cda1ebfb43025f6",
+        "bytes": 89732,
+        "definitionOnly": false
+      },
+      "outputSha256": "43978ebb8373d40c7bd972151be3215fc0070299256e5cdee8d70383f7bab338",
+      "outputBytes": 90188,
+      "hunks": [
+        {
+          "before": "    ('private.weekly_source_keep_as_paid_scope_rows_v1(uuid,uuid,uuid,uuid,uuid,date)'),",
+          "after": "    ('private.weekly_source_keep_as_paid_scope_rows_v1(uuid,uuid,uuid,uuid,uuid,date)'),\n    ('private.weekly_source_pay_decision_native_normal_gate_v1(uuid,uuid,uuid,text)'),\n    ('private.weekly_source_pay_decision_native_status_child_v1(jsonb,uuid,uuid,uuid,uuid)'),\n    ('private.weekly_source_pay_decision_read_access_v1(uuid,uuid,uuid)'),\n    ('private.weekly_source_pay_decision_read_source_v1(uuid,uuid,uuid)'),"
+        },
+        {
+          "before": "('public.weekly_source_audit_guard_refusal_record_v1(jsonb)'),",
+          "after": "('public.weekly_source_pay_decision_accept_v1(jsonb)'),\n    ('public.weekly_source_pay_decision_read_source_v1(jsonb)'),\n    ('public.weekly_source_audit_guard_refusal_record_v1(jsonb)'),"
+        }
+      ],
+      "fullRawReverse": true,
+      "savedWholeOutput": true
+    }
+  ],
+  "newPrivate": [
+    "private.weekly_source_pay_decision_native_status_child_v1(jsonb,uuid,uuid,uuid,uuid)",
+    "private.weekly_source_pay_decision_read_access_v1(uuid,uuid,uuid)"
+  ],
+  "newService": [],
+  "newRelations": [],
+  "expectedClassificationDelta": {
+    "newPrivate": [
+      "private.weekly_source_pay_decision_native_status_child_v1(jsonb,uuid,uuid,uuid,uuid)",
+      "private.weekly_source_pay_decision_read_access_v1(uuid,uuid,uuid)"
+    ],
+    "existingPrivate": [
+      "private.weekly_source_pay_decision_native_normal_gate_v1(uuid,uuid,uuid,text)",
+      "private.weekly_source_pay_decision_read_source_v1(uuid,uuid,uuid)"
+    ],
+    "existingService": [
+      "public.weekly_source_pay_decision_accept_v1(jsonb)",
+      "public.weekly_source_pay_decision_read_source_v1(jsonb)"
+    ]
+  },
+  "publicResultSuccess": "HELD_EXACT_B051_CHILD_AND_OUTER_SCHEMA_NOT_SUPPLIED",
+  "native": "NOT_RUN"
+}

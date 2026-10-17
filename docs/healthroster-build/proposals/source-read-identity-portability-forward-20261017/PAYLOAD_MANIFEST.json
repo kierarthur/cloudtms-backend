@@ -1,0 +1,29 @@
+{
+  "requiredRead": "083f144b3fa1658fc9296c9fd7f8bd4afcd20f6f",
+  "requiredClassification": "3f01b8f1782175c3f2be3b167b296a478e3a042a",
+  "files": [
+    {
+      "target": "broker/src/weekly-source/source-pay-decision-contract.mjs",
+      "sourcePath": "payload/broker/src/weekly-source/source-pay-decision-contract.mjs",
+      "sha256": "0443bd80fce1be5e324cc53135c018f2470add6b6830daffca017962cef3e7bb",
+      "bytes": 19778
+    },
+    {
+      "target": "supabase/migrations/17102026_0749_source_current_read_private_admission.sql",
+      "sourcePath": "payload/supabase/migrations/17102026_0749_source_current_read_private_admission.sql",
+      "sha256": "7cbb76d9b28d83349b0713186a5bdaca9613865bceca0294230d37bb4c7cb2a2",
+      "bytes": 644
+    },
+    {
+      "target": "supabase/release/migration-lock.json",
+      "sourcePath": "payload/supabase/release/migration-lock.json",
+      "sha256": "6b0b4a3d518a3d80a2dff6ab9a17dfe347efb6c073574c4cf5014581ada2f250",
+      "bytes": 79483
+    }
+  ],
+  "evidenceLoaderForward": "forward/loader.mjs",
+  "evidenceParentRawReverse": "CURRENT_OWNER_EDITS.json",
+  "oneTimeAdmission": "NAMESPACE_ADMISSION.json",
+  "noFrozenHistoryRewrite": true,
+  "native": "NOT_RUN"
+}

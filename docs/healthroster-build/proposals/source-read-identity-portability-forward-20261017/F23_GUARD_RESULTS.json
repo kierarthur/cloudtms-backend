@@ -1,0 +1,9 @@
+{
+  "file": "supabase/migrations/17102026_0749_source_current_read_private_admission.sql",
+  "sha256": "7cbb76d9b28d83349b0713186a5bdaca9613865bceca0294230d37bb4c7cb2a2",
+  "gateSha256": "0ae982224fda89dc77d6f6bd606acdaa6a37ccf126db01b87d5134f4612f2dda",
+  "rawOccurrences": 0,
+  "sqlWriteAndExactNumericGuards": "PASS",
+  "noAllowancesAdded": true,
+  "native": "NOT_RUN"
+}

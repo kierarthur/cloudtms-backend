@@ -1,0 +1,169 @@
+{
+  "files": [
+    {
+      "path": "build.mjs",
+      "bytes": 10859,
+      "sha256": "8772a52576ed2524bedef7fcf8fb6d3dbede7095ceddf270cde35818ab4b7a50"
+    },
+    {
+      "path": "CURRENT_OWNER_EDITS.json",
+      "bytes": 2453,
+      "sha256": "7e66a9448abec58b42629ef6887a4db76ddf35041e30d3ba0414bb2e1c2d550e"
+    },
+    {
+      "path": "current/broker/src/weekly-source/source-pay-decision-contract.mjs",
+      "bytes": 19219,
+      "sha256": "19b64546a74f1838cdb21b9caa2ccc56468e6e97ed1ffeec94497e5025cce9ec"
+    },
+    {
+      "path": "current/loader.mjs",
+      "bytes": 2555,
+      "sha256": "15f694b262108bd0b57dc8ea2aec1d0b762f65b4a11a19227504132a98d3dd85"
+    },
+    {
+      "path": "current/supabase/release/migration-lock.json",
+      "bytes": 79294,
+      "sha256": "655bbb55095a64a586fc448e1e654fd843564b55ca584f9f79967cb5c1a8eb14"
+    },
+    {
+      "path": "F23_GUARD_RESULTS.json",
+      "bytes": 374,
+      "sha256": "8a9ebfabb1906456dca40a3187a0205c425a4da3e102cb5704eb395f94a6cf47"
+    },
+    {
+      "path": "forward/loader.mjs",
+      "bytes": 2778,
+      "sha256": "c34260f6c003d03ac41cb123907e595b17ea0552fac3ffe3300a6c3df1e6b574"
+    },
+    {
+      "path": "freeze.mjs",
+      "bytes": 2062,
+      "sha256": "b61c1dc84e58794ffce6cfbfb79e39197f551bf01fd38b280f896b6c155e3791"
+    },
+    {
+      "path": "GRAMMAR_RESULTS.json",
+      "bytes": 387,
+      "sha256": "61db499a0ca751bda66485b9cf1f9302c1b18790ac9cdf894b42512994263cb3"
+    },
+    {
+      "path": "grammar.py",
+      "bytes": 837,
+      "sha256": "2611d57191b43e0d05810af7340dcda733e2835bc07236484442c3c89e27537f"
+    },
+    {
+      "path": "INHERITED_INDEX_EDITS.json",
+      "bytes": 22806,
+      "sha256": "30947ebe52ee4bbc6a5c8580e4dfa0b830bd67fa6912886697d0e4650a43a699"
+    },
+    {
+      "path": "INTEGRATION.md",
+      "bytes": 4026,
+      "sha256": "8b3039d9170f1642cef419418e96653222ede4d6bb5ec3ea0712d97ac4f8ce07"
+    },
+    {
+      "path": "loader.mjs",
+      "bytes": 2783,
+      "sha256": "030891433f7cbe4841ac44846ecfc6af06cdeec80f2eb61ab1dbf0c87a426815"
+    },
+    {
+      "path": "LOCK_EDITS.json",
+      "bytes": 1584,
+      "sha256": "40f54ccd6d5366f40075d16acd8af8e2ecb64b8e0fe5db8b81dcb16648ead0a7"
+    },
+    {
+      "path": "MOUNT_FILENAMES.json",
+      "bytes": 350,
+      "sha256": "85bb33c97f55902e88c3747459fafdf0f513f4ca02cae85dd409a555f47d2ced"
+    },
+    {
+      "path": "NAMESPACE_ADMISSION.json",
+      "bytes": 2590,
+      "sha256": "44e052839721fa828c0fd88ddc20d128d66e29ffa7d7de0fc5bec9b3a020b496"
+    },
+    {
+      "path": "PAYLOAD_MANIFEST.json",
+      "bytes": 1212,
+      "sha256": "30b1092ad6551ccdbc105bcf67b819b225a0416ba8eb05e31d20e397b1df9b20"
+    },
+    {
+      "path": "payload/broker/src/weekly-source/source-pay-decision-contract.mjs",
+      "bytes": 19778,
+      "sha256": "0443bd80fce1be5e324cc53135c018f2470add6b6830daffca017962cef3e7bb"
+    },
+    {
+      "path": "payload/supabase/migrations/17102026_0749_source_current_read_private_admission.sql",
+      "bytes": 644,
+      "sha256": "7cbb76d9b28d83349b0713186a5bdaca9613865bceca0294230d37bb4c7cb2a2"
+    },
+    {
+      "path": "payload/supabase/release/migration-lock.json",
+      "bytes": 79483,
+      "sha256": "6b0b4a3d518a3d80a2dff6ab9a17dfe347efb6c073574c4cf5014581ada2f250"
+    },
+    {
+      "path": "PORTABILITY_RESULTS.json",
+      "bytes": 808,
+      "sha256": "7ed4c652c4627482eeecc8553019333583aa3f9fa55075a74d9eb73835516034"
+    },
+    {
+      "path": "portability-bootstrap.mjs",
+      "bytes": 768,
+      "sha256": "a0a546f31aaa0335aaed9c85927d96e057e5e01f7f208a06595fe24b60103e42"
+    },
+    {
+      "path": "portability-tests.mjs",
+      "bytes": 2495,
+      "sha256": "b2197df91a08b1ae382ae1008cc9cb297b8ac03abaefd28b49e8057a63700d8c"
+    },
+    {
+      "path": "prepare-proofs.mjs",
+      "bytes": 1767,
+      "sha256": "0a02e0a2652e7c6bd64d5576b69176e62fbc77bc2a3fd48135d5eafbf3b54599"
+    },
+    {
+      "path": "REGRESSION_RESULTS.json",
+      "bytes": 1657,
+      "sha256": "517f6c2783d582bb6bf39850db85afe49136c92f553dc3aab9329a30306e5804"
+    },
+    {
+      "path": "run-regressions.mjs",
+      "bytes": 1673,
+      "sha256": "27a014653a856115ca08e9b06046e2cd7fe248f158e7afae7ab14986f6427b3f"
+    },
+    {
+      "path": "SOURCE_CHECK_RESULTS.json",
+      "bytes": 21901,
+      "sha256": "d2630953418c2ce5e2125c8845c1d9f72c5d4f88f6850d114044bd18e6d544d4"
+    },
+    {
+      "path": "SOURCE_TEST_RESULTS.json",
+      "bytes": 581,
+      "sha256": "6dd507166537625c369702b1ef10695c8c0157a98a86634105a7c115b761b9ab"
+    },
+    {
+      "path": "source-check.mjs",
+      "bytes": 9491,
+      "sha256": "f6593b97f37fd921a9514a1ae3385bb1e05952675b955067dd48d684dc1f3fa5"
+    },
+    {
+      "path": "source-tests.mjs",
+      "bytes": 3543,
+      "sha256": "556aeae76d9ca8762207697b9a84ff03505ff01bd3901eee851ab860c867f979"
+    },
+    {
+      "path": "TEST_RESULTS.json",
+      "bytes": 7045,
+      "sha256": "e095fd9fa200dd462e4b3b3b04198ecc87fc13f2049c59910026e4b2f9620185"
+    },
+    {
+      "path": "tests.mjs",
+      "bytes": 15368,
+      "sha256": "52c3988c1ff10dd95d9f248b8d5460f05512033a23681ea708f6dab74a19ba65"
+    }
+  ],
+  "payloadManifestSha256": "30b1092ad6551ccdbc105bcf67b819b225a0416ba8eb05e31d20e397b1df9b20",
+  "qualification": "SOURCE_ONLY_NAMESPACE_NATIVE_PREFLIGHT_NOT_RUN",
+  "rootWrites": 0,
+  "dbConnections": 0,
+  "native": "NOT_RUN"
+}
