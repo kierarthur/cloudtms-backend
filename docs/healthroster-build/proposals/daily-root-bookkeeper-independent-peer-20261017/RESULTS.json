@@ -1,0 +1,18 @@
+{
+  "verdict": "ACCEPT_BOUNDED_SOURCE_HELPER",
+  "authorCommit": "bee869c3a333be050fe345612318da95ee36a02b",
+  "authorManifestSha256": "b737600654f64127a47eb0fd6af759e16de8c30625ad465e86bbc960c1ba5c0e",
+  "parentsSha256": "ed204aed5b7ab0d77b981e7a056b38592d667fa381ba6cdae069345992501c9f",
+  "frozenFiles": 27,
+  "completeCurrentHistoricalParents": 15,
+  "fixedRuntimeBodies": 12,
+  "originalControlledTests": 15,
+  "independentControlledTests": 5,
+  "automaticEffectDossiers": 0,
+  "actualBookkeeperRun": "NOT_RUN",
+  "actualK4": "NOT_PROVIDED",
+  "actualPrefix": "NOT_PROVIDED",
+  "native": "NOT_RUN",
+  "privateTargetAccess": "NONE",
+  "reviewer": "GPT-6.1-sol/xhigh"
+}

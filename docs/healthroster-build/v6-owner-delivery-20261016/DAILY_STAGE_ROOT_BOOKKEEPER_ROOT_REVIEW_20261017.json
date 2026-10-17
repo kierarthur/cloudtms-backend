@@ -1,0 +1,35 @@
+{
+  "version": "DAILY_STAGE_ROOT_BOOKKEEPER_ROOT_REVIEW_V1",
+  "rootParent": "01d930d49f18c88841165876b7344131e4c31618",
+  "recordedAt": "2026-10-17T13:45:48.435605+00:00",
+  "packs": [
+    {
+      "folder": "docs/healthroster-build/proposals/daily-genuine-stage-root-bookkeeper-20261017",
+      "commit": "bee869c3a333be050fe345612318da95ee36a02b",
+      "manifestSha256": "b737600654f64127a47eb0fd6af759e16de8c30625ad465e86bbc960c1ba5c0e",
+      "files": 27
+    },
+    {
+      "folder": "docs/healthroster-build/proposals/daily-root-bookkeeper-independent-peer-20261017",
+      "commit": "3288046c6d6bcb0cc9fdff387405dfaa261f8b9e",
+      "manifestSha256": "473512aa9f0e170283fc4da0a8f288820cb3cefd625fad7069abf662cbe1e42a",
+      "files": 5
+    }
+  ],
+  "verdict": "ACCEPT_BOUNDED_SOURCE_HELPER",
+  "rootRead": "Complete README/core/bookkeeper, original owner predicates and independent review/replay",
+  "proofs": {
+    "authorTests": 15,
+    "independentTests": 5,
+    "completeCurrentHistoricalParents": 15,
+    "fixedRuntimeBodies": 12
+  },
+  "guardScope": "Original complete11 scopes/fresh30s/historicalBefore180s/sameAandactor/currentReportHEAD; exactsetupappend and isolatedGitcommit/push. Separate actual root effect dossiers required; helper creates no effect-positive descriptor. PUBLISH adds actual closed originalqualifier/releasedsummary and committednativebindings, retaining historical timestamps.",
+  "actualK4": "NOT_PROVIDED",
+  "actualCompletedPrefix": "NOT_PROVIDED",
+  "authOrPrivateTargetAccess": "NONE",
+  "native": "NOT_RUN",
+  "productRuntimeEdits": 0,
+  "install2": "NOT_INSTALLED",
+  "finalCritics": "NOT_RUN"
+}

@@ -1,0 +1,25 @@
+{
+  "version": "DAILY_ROOT_BOOKKEEPER_INDEPENDENT_PEER_V1",
+  "files": [
+    {
+      "file": "extra.test.mjs",
+      "bytes": 4253,
+      "sha256": "39b39a75bb98d01f0af2e641701f44d1d48bfbb4660ee924ea2af0f1e2a5b08b"
+    },
+    {
+      "file": "replay.py",
+      "bytes": 1727,
+      "sha256": "ec6097848b37a868082b0b9db2c877fc4b9b42c96731cfdf12e379b9f9bac53e"
+    },
+    {
+      "file": "RESULTS.json",
+      "bytes": 673,
+      "sha256": "a2bdf395b165b8c0068bd6f6249750911f8b9282719a6d4caafd66772425e6f9"
+    },
+    {
+      "file": "REVIEW.md",
+      "bytes": 4485,
+      "sha256": "30d1487a84017a56efa8c063e116c29ea947984ad389abe6d5cbd158c5c89468"
+    }
+  ]
+}

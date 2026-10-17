@@ -1,0 +1,22 @@
+{
+  "version": "DAILY_OBSERVER_RECEIPT_REAL_IDENTITY_FINDING_V1",
+  "actualPublicGeneratedInput": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\.codex-tmp\\daily-genuine-stages-20261017-19e9cbc3e098ecf3a4887386b51f2d16\\S0_BEFORE_INPUT.json",
+  "actualPublicReceiptStage": "S0",
+  "actualPublicReceiptPhase": "BEFORE",
+  "observedIdentityKeys": [
+    "physicalDatabase",
+    "databaseOid",
+    "backendPid",
+    "turnId",
+    "key",
+    "takenAt",
+    "task"
+  ],
+  "sourceConstructor": "scripts/healthroster-rehearsal-turn.mjs line102 includes takenAt and task; original turn-control assertTurnIdentity accepts these.",
+  "affectedSourceProposal": "6389be83a2989c2828965c13783cabbd2fa4efd5",
+  "finding": "Bridge and copied fixed builders require exactly five identity keys and would reject a genuine seven-key turn receipt. Synthetic five-key tests did not cover actual producer shape.",
+  "disposition": "REQUESTED_FINITE_IMMUTABLE_SEVEN_KEY_SUCCESSOR_AND_REAL_FACTORY_SHAPE_TESTS_BEFORE_NATIVE_USE",
+  "oldProposalMountedOrExecuted": false,
+  "privateAuthBindingOrJournalRead": false,
+  "native": "NOT_RUN"
+}
