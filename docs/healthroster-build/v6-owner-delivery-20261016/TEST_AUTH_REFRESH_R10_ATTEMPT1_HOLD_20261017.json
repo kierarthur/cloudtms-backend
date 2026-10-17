@@ -1,0 +1,44 @@
+{
+  "version": "TEST_AUTH_REFRESH_R10_ATTEMPT1_HOLD_V1",
+  "executionRootCommit": "7b2640df56e4ed8e3bfac70a7cb01a85a887fd5f",
+  "executableReportCommit": "62226fa587bf5ad977043d6abd9d103002212b65",
+  "ownedDirectory": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/.codex-tmp/test-auth-refresh-20261017-63ff73f90ab5e4851c0b6f25c5c86e76",
+  "processExitCode": 1,
+  "actualClosedResult": {
+    "version": "TEST_AUTH_REFRESH_PRIVATE_RESULT_V3",
+    "status": "HOLD",
+    "code": "AUTH_READY_HELD",
+    "browserClosed": true,
+    "loginRequests": 0,
+    "refreshRequests": 0,
+    "blockedReadRequests": 0,
+    "forbiddenWriteRequests": 0,
+    "refusedRequests": 0,
+    "suppressedStartupRequests": 0,
+    "diagnostic": {
+      "phase": "BEFORE_EXPLICIT_ADMISSION",
+      "admission": null,
+      "blockedWriteLabel": "NONE",
+      "blockedWriteMethod": "NONE"
+    }
+  },
+  "followupReady": {
+    "observedAt": "2026-10-17T15:51:57.190Z",
+    "status": 200,
+    "ready": true,
+    "backend_ready": true,
+    "processor_ready": true,
+    "dispatcher_ready": true,
+    "interactive_async_ready": true,
+    "scheduled_async_ready": false,
+    "scheduled_async_enabled": false
+  },
+  "diagnosis": "Original worker source requires /readyz HTTP200 before creating the page or loading credentials. Its closed diagnostic does not retain the non-200 status/body; exact first response/cause is unobserved. Current direct readiness is healthy. No evidence of a PostgreSQL restart or stale pool, and no pool refresh or background-job change performed.",
+  "rootDiagnosticCorrection": "Combined health reader incorrectly assumed /healthz JSON; actual body was plain ok. Parse failure preserved in tool history; one subsequent /readyz-only GET captured the bounded real JSON above.",
+  "retryDisposition": "One fresh approved auth attempt after observed readiness recovery; original readiness/network/auth/closure predicates remain.",
+  "nativeIntervalActive": false,
+  "businessFixturesCreated": false,
+  "privateStateContentsReadOrHashedByParent": false,
+  "install2": "NOT_INSTALLED",
+  "finalCritics": "NOT_RUN"
+}
