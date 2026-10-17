@@ -1,0 +1,30 @@
+{
+  "version": "DAILY_AUTH_R9_PUBLIC_SOURCE_RECIPE_ROOT_REVIEW_V1",
+  "verdict": "ACCEPT_NINE_EXACT_IMAGES_AFTER_GENUINE_PUBLIC_AUTH_RECEIPT",
+  "authorCommit": "0576cc8ac64f295fde418c6b3c94407b28f77fbe",
+  "authorManifestSha256": "5b1d2acc46b5741c74c624888c41b131a3043a3f8fef499d210b1263326b8359",
+  "peerCommit": "59b2fe95c42cafa5562dd17ff3d19975c2f4adcf",
+  "peerManifestSha256": "f90a086eace9a86f1a86ff21b36d4984621eb37ec64cc8adc5e4722064b58bb5",
+  "files": 79,
+  "rootAuthorTests": 17,
+  "rootIndependentTests": 6,
+  "genuineParentCaptures": 23,
+  "wholeRawImageInverses": 9,
+  "actualCommitPhases": [
+    "OPERATOR3",
+    "HOLDER2",
+    "COORDINATOR2",
+    "CONTINUATION2"
+  ],
+  "parentReportRuntime": "00548ecadba24f9d088182f427f622a307abddd6",
+  "f739FullBatchBodyUnchanged": {
+    "bytes": 17997,
+    "sha256": "25b77b9234a879fd2ca18bca7d8cf10547ad644a83513ccf050dab171a011426"
+  },
+  "originalNetworkPrivacyP1OneShotCurrentnessNativeCapsRetained": true,
+  "futurePublicReceipt": "docs/healthroster-build/v6-owner-delivery-20261016/TEST_AUTH_REFRESH_R9_SUCCESS_20261017.json",
+  "actualR9": "NOT_RUN",
+  "actualFutureSourceAdmission": "NOT_RUN",
+  "privateStateTargetsReadStatHashedCopied": false,
+  "nativeCalls": 0
+}

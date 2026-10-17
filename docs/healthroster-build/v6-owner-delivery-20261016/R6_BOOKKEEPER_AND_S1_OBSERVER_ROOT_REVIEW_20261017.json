@@ -1,0 +1,51 @@
+{
+  "version": "ROOT_R6_AND_S1_OBSERVER_SOURCE_REVIEW_V1",
+  "recordedAt": "2026-10-17T13:29:48.510463+00:00",
+  "rootParent": "62c1308695ea9f069b23cd61cc66b665d17ae966",
+  "packs": [
+    {
+      "folder": "docs/healthroster-build/proposals/daily-genuine-s0-r6-bookkeeper-independent-peer-20261017",
+      "commit": "61027c186f0218c9d4abe77a6849ea225fc56409",
+      "manifestSha256": "16b40482ac41638b80640ba491b5ab11badde7e99944caef25e9a87252d02236",
+      "files": 8
+    },
+    {
+      "folder": "docs/healthroster-build/proposals/daily-health-s1-scoped-effects-observer-20261017",
+      "commit": "30ecfec7f7ca813ccc417ec1fac98d8059088cf6",
+      "manifestSha256": "c1e9570187c001a49932d5d8d003ed9c289a4193e7fdf19e92459a650737dc6a",
+      "files": 28
+    },
+    {
+      "folder": "docs/healthroster-build/proposals/daily-s1-observer-independent-peer-20261017",
+      "commit": "0f07b1f54e36e9ada19469c5893e772440013ed2",
+      "manifestSha256": "bd24c6226f510bc993f48f6ba8f3511e6714cd252ac97029d7ef79ab9ede436b",
+      "files": 33
+    }
+  ],
+  "r6": {
+    "verdict": "ACCEPT_BOUNDED_SOURCE_ONLY",
+    "wholeInverse": true,
+    "positiveGuardVectors": 9,
+    "negativeGuardVectors": 20,
+    "bookkeeperExecuted": false,
+    "native": "NOT_RUN"
+  },
+  "s1": {
+    "verdict": "ACCEPT_BOUNDED_SOURCE_ONLY",
+    "rootRead": "complete observer, exact effect map, author verification and independent review/replay read",
+    "authorTestsPassed": 6,
+    "independentTestsPassed": 6,
+    "fixedPg17Inputs": 2,
+    "readonlyAstRefusals": 6,
+    "completeCurrentHistoricalParents": 15,
+    "runtimeTargets": 0,
+    "native": "NOT_RUN",
+    "completeCallbackEffects": "NOT_PROVED",
+    "rootAdmission": "Fixed METADATA observer may be prepared under original actual root-owned shared turn; native envelope authentication and actual auxiliary metadata review must precede EFFECTS. Shape validation alone is insufficient. No business POST qualified."
+  },
+  "capsChanged": false,
+  "bankSemanticBodiesRead": false,
+  "privateAuthBindingOrJournalRead": false,
+  "install2": "NOT_INSTALLED",
+  "finalCritics": "NOT_RUN"
+}
