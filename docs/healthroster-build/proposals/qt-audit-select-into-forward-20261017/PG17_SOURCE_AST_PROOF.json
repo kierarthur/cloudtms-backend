@@ -1,0 +1,48 @@
+{
+  "version": "QT_ONE_BINDING_PG17_SOURCE_AST_PROOF_V1",
+  "parser": "v7.20",
+  "postgresql": [
+    17,
+    7
+  ],
+  "completeAssertionOuterStatements": 3,
+  "programmes": {
+    "CONTACT_CONSTRUCTORS_V1": 21,
+    "QT_ADMIN_CONTROLS_V1": 51
+  },
+  "inputs": {
+    "CONTACT_CONSTRUCTORS_V1": {
+      "sql": 34,
+      "verification_sql": 4
+    },
+    "QT_ADMIN_CONTROLS_V1": {
+      "sql": 64,
+      "verification_sql": 4
+    }
+  },
+  "originalBinding": "PLpgSQL_stmt_assign",
+  "candidateBinding": "PLpgSQL_stmt_execsql",
+  "aggregateSelectAstEqual": true,
+  "aggregateArgumentSortAstEqual": true,
+  "foundConsumers": 0,
+  "finalIfPath": [
+    "exec_stmt_if",
+    "exec_eval_boolean",
+    "exec_eval_expr",
+    "CURSOR_OPT_PARALLEL_OK",
+    "exec_run_select"
+  ],
+  "counterexamples": [
+    "filter",
+    "differentOrder",
+    "differentSeparator",
+    "differentEmptyValue",
+    "differentWholeRow",
+    "differentBinding",
+    "differentHash",
+    "distinct"
+  ],
+  "parallelPlan": "NOT_OBSERVED",
+  "performance": "NOT_PROVED",
+  "native": "NOT_RUN"
+}

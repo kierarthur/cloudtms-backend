@@ -1,0 +1,78 @@
+{
+  "version": "QT_ONE_AUDIT_BINDING_ROOT_REVIEW_V1",
+  "recordedAt": "2026-10-17T13:32:07.059953+00:00",
+  "rootParent": "c0507d6963d3a9cd792fef9f2a9acd6c1823babf",
+  "packs": [
+    {
+      "folder": "docs/healthroster-build/proposals/qt-audit-select-into-forward-20261017",
+      "commit": "ef3fbd69c5540a8b7b4157da0b72a537a3a033a1",
+      "files": 49,
+      "manifestSha256": "db2a391ad6a3ea390bd3757cd63f54b6cc1a99d272672fdaba4b3ab857dece41"
+    },
+    {
+      "folder": "docs/healthroster-build/proposals/qt-audit-binding-independent-peer-20261017",
+      "commit": "33a3b6e1e12b02319828e5936fc0d44513b6a81c",
+      "files": 5,
+      "manifestSha256": "dff6c14a8202ed489112f7be5eb89f965e4db8173ab09d60bdd3d72489cb5dd8"
+    }
+  ],
+  "verdict": "ACCEPT_FOUR_EXACT_IMAGES_FOR_ONE_BOUNDED_NEW_NATIVE_TRIAL",
+  "rootTests": {
+    "authorTests": 12,
+    "completeCurrentHistoricalParents": 19,
+    "currentAdapterImages": 51,
+    "independentFullPlAstInverse": true,
+    "validAstAdversarialRefusals": 6,
+    "twoCompleteAuditDigestsRetained": true
+  },
+  "change": "Same first full digest SELECT INTO original audits_before, at original snapshot position. Whole final IF/equality/remaining assertions raw unchanged. No FOUND/ROW_COUNT consumer. Original assignment cursorOptions0 versus SELECT-INTO PARALLEL_OK; final IF already PARALLEL_OK. Eligibility alone is not an observed parallel plan or performance proof.",
+  "targets": [
+    {
+      "target": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/qt-assertions.sql",
+      "payload": "payload/qt-assertions.sql",
+      "parent": "reference/adapter/qt-assertions.sql",
+      "beforeBytes": 12046,
+      "beforeSha256": "2839d6cd132af55b1545217f005a0578e99544f30f642ccddaf298d9731149ec",
+      "bytes": 12048,
+      "sha256": "e39b2cbcab6d8baab8a9d7287a1869984def0e6aa1c4137088d3eafcbeb7b209"
+    },
+    {
+      "target": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/PROGRAMMES.json",
+      "payload": "payload/PROGRAMMES.json",
+      "parent": "reference/adapter/PROGRAMMES.json",
+      "beforeBytes": 58956,
+      "beforeSha256": "8c006889bf628d350fd94b5826c6aa6beb0477f40900e98383bbc29904343d42",
+      "bytes": 58958,
+      "sha256": "775163889bac34792c74207019127f2f59d020a23186452d21d2a01f5dc898bf"
+    },
+    {
+      "target": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/OFFLINE_INPUTS.json",
+      "payload": "payload/OFFLINE_INPUTS.json",
+      "parent": "reference/adapter/OFFLINE_INPUTS.json",
+      "beforeBytes": 113699,
+      "beforeSha256": "e681fe29f07ccf90da8633872b6f46388d4a7c7d3770722a3bc67f49ef4b73f7",
+      "bytes": 113701,
+      "sha256": "c716b2484f54be5f757ec7dc21d7dcc87e3d16c00c85b063892391581fce137e"
+    },
+    {
+      "target": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/MANIFEST.json",
+      "payload": "payload/MANIFEST.json",
+      "parent": "reference/adapter/MANIFEST.json",
+      "beforeBytes": 8530,
+      "beforeSha256": "0d55920b597bf8873e8f03dad06841f0bad381bc2ebf76889bd9a744e779e2e8",
+      "bytes": 8530,
+      "sha256": "53c41e6077a995b3712ba55f67e5f00f605743c6629cdae886c56d9c8005b351"
+    }
+  ],
+  "statementCapMs": 30000,
+  "cStatementCapMs": 45000,
+  "childMs": 70000,
+  "workMs": 120000,
+  "wholeMs": 180000,
+  "native": "NOT_RUN_AT_MOUNT",
+  "performance": "NOT_PROVED",
+  "earlierR1": "Preserved native57014 first audit assignment, rollback/fresh fixture absence; no C-after/restoration promotion",
+  "bankSemanticBodiesRead": false,
+  "install2": "NOT_INSTALLED",
+  "finalCritics": "NOT_RUN"
+}

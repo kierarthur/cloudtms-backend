@@ -22,7 +22,7 @@ declare
 begin
  global_before:=(select to_jsonb(s) from public.weekly_source_global_settings s where singleton);
  defaults_before:=(select jsonb_agg(to_jsonb(s) order by s.id) from public.settings_defaults s);
- audits_before:=(select md5(coalesce(string_agg(md5(to_jsonb(a)::text),'|' order by md5(to_jsonb(a)::text)),'')) from public.audit_events a);
+ select md5(coalesce(string_agg(md5(to_jsonb(a)::text),'|' order by md5(to_jsonb(a)::text)),'')) into audits_before from public.audit_events a;
  insert into public.tms_users(id,email,role,is_active,password_hash,payment_authoriser,payment_golden_key) values
  (ids[1],'daily-health-actor-admin-20261017@example.invalid','admin',true,'!DAILY_HEALTH_ACTOR_ROLLBACK_ONLY!',false,false),
  (ids[2],'daily-health-actor-authoriser-20261017@example.invalid','user',true,'!DAILY_HEALTH_ACTOR_ROLLBACK_ONLY!',true,false),

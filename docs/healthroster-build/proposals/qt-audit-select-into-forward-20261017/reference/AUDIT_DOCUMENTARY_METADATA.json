@@ -1,0 +1,288 @@
+{
+  "qualification": "DOCUMENTARY_SOURCE_NOT_FRESH_NATIVE_OR_CALLBACK_EFFECT_PROOF",
+  "source": "supabase/release/current-contract.json",
+  "wholeSha256": "da0e0870442c151534c04d108757a0d76a812879aafae71f01486c7077ce674a",
+  "relation": {
+    "acl": [
+      {
+        "grantee": "postgres",
+        "grantable": false,
+        "privilege": "DELETE"
+      },
+      {
+        "grantee": "postgres",
+        "grantable": false,
+        "privilege": "INSERT"
+      },
+      {
+        "grantee": "postgres",
+        "grantable": false,
+        "privilege": "MAINTAIN"
+      },
+      {
+        "grantee": "postgres",
+        "grantable": false,
+        "privilege": "REFERENCES"
+      },
+      {
+        "grantee": "postgres",
+        "grantable": false,
+        "privilege": "SELECT"
+      },
+      {
+        "grantee": "postgres",
+        "grantable": false,
+        "privilege": "TRIGGER"
+      },
+      {
+        "grantee": "postgres",
+        "grantable": false,
+        "privilege": "TRUNCATE"
+      },
+      {
+        "grantee": "postgres",
+        "grantable": false,
+        "privilege": "UPDATE"
+      },
+      {
+        "grantee": "service_role",
+        "grantable": false,
+        "privilege": "DELETE"
+      },
+      {
+        "grantee": "service_role",
+        "grantable": false,
+        "privilege": "INSERT"
+      },
+      {
+        "grantee": "service_role",
+        "grantable": false,
+        "privilege": "MAINTAIN"
+      },
+      {
+        "grantee": "service_role",
+        "grantable": false,
+        "privilege": "REFERENCES"
+      },
+      {
+        "grantee": "service_role",
+        "grantable": false,
+        "privilege": "SELECT"
+      },
+      {
+        "grantee": "service_role",
+        "grantable": false,
+        "privilege": "TRIGGER"
+      },
+      {
+        "grantee": "service_role",
+        "grantable": false,
+        "privilege": "TRUNCATE"
+      },
+      {
+        "grantee": "service_role",
+        "grantable": false,
+        "privilege": "UPDATE"
+      }
+    ],
+    "rls": true,
+    "kind": "r",
+    "name": "audit_events",
+    "owner": "postgres",
+    "schema": "public",
+    "columns": [
+      {
+        "name": "action",
+        "type": "text",
+        "default": null,
+        "identity": "",
+        "not_null": true,
+        "generated": ""
+      },
+      {
+        "name": "actor_display",
+        "type": "text",
+        "default": null,
+        "identity": "",
+        "not_null": false,
+        "generated": ""
+      },
+      {
+        "name": "actor_role_at_time",
+        "type": "text",
+        "default": null,
+        "identity": "",
+        "not_null": false,
+        "generated": ""
+      },
+      {
+        "name": "actor_user_id",
+        "type": "uuid",
+        "default": null,
+        "identity": "",
+        "not_null": false,
+        "generated": ""
+      },
+      {
+        "name": "after_json",
+        "type": "jsonb",
+        "default": null,
+        "identity": "",
+        "not_null": false,
+        "generated": ""
+      },
+      {
+        "name": "before_json",
+        "type": "jsonb",
+        "default": null,
+        "identity": "",
+        "not_null": false,
+        "generated": ""
+      },
+      {
+        "name": "correlation_id",
+        "type": "text",
+        "default": null,
+        "identity": "",
+        "not_null": false,
+        "generated": ""
+      },
+      {
+        "name": "event_sequence",
+        "type": "bigint",
+        "default": null,
+        "identity": "a",
+        "not_null": true,
+        "generated": ""
+      },
+      {
+        "name": "event_sequence_is_authoritative",
+        "type": "boolean",
+        "default": "true",
+        "identity": "",
+        "not_null": true,
+        "generated": ""
+      },
+      {
+        "name": "id",
+        "type": "uuid",
+        "default": "gen_random_uuid()",
+        "identity": "",
+        "not_null": true,
+        "generated": ""
+      },
+      {
+        "name": "ip",
+        "type": "text",
+        "default": null,
+        "identity": "",
+        "not_null": false,
+        "generated": ""
+      },
+      {
+        "name": "object_id_text",
+        "type": "text",
+        "default": null,
+        "identity": "",
+        "not_null": false,
+        "generated": ""
+      },
+      {
+        "name": "object_type",
+        "type": "text",
+        "default": null,
+        "identity": "",
+        "not_null": true,
+        "generated": ""
+      },
+      {
+        "name": "reason",
+        "type": "text",
+        "default": null,
+        "identity": "",
+        "not_null": false,
+        "generated": ""
+      },
+      {
+        "name": "ts_utc",
+        "type": "timestamp with time zone",
+        "default": "now()",
+        "identity": "",
+        "not_null": true,
+        "generated": ""
+      },
+      {
+        "name": "user_agent",
+        "type": "text",
+        "default": null,
+        "identity": "",
+        "not_null": false,
+        "generated": ""
+      }
+    ],
+    "indexes": [
+      {
+        "name": "audit_events_event_sequence_uq",
+        "definition": "CREATE UNIQUE INDEX audit_events_event_sequence_uq ON public.audit_events USING btree (event_sequence)"
+      },
+      {
+        "name": "audit_events_object_sequence_idx",
+        "definition": "CREATE INDEX audit_events_object_sequence_idx ON public.audit_events USING btree (object_type, object_id_text, event_sequence)"
+      },
+      {
+        "name": "audit_events_pkey",
+        "definition": "CREATE UNIQUE INDEX audit_events_pkey ON public.audit_events USING btree (id)"
+      },
+      {
+        "name": "idx_audit_actor",
+        "definition": "CREATE INDEX idx_audit_actor ON public.audit_events USING btree (actor_user_id, ts_utc DESC)"
+      },
+      {
+        "name": "idx_audit_candidate_auth_mutation_receipt_v1",
+        "definition": "CREATE INDEX idx_audit_candidate_auth_mutation_receipt_v1 ON public.audit_events USING btree (object_type, object_id_text, correlation_id, ts_utc DESC, id DESC) WHERE (object_type = 'candidate_auth_mutation_receipt'::text)"
+      },
+      {
+        "name": "idx_audit_candidate_workflow_mutation_receipt_v1",
+        "definition": "CREATE INDEX idx_audit_candidate_workflow_mutation_receipt_v1 ON public.audit_events USING btree (object_type, object_id_text, correlation_id, ts_utc DESC, id DESC) WHERE (object_type = 'candidate_workflow_mutation_receipt'::text)"
+      },
+      {
+        "name": "idx_audit_candidate_workflow_mutation_request_v1",
+        "definition": "CREATE INDEX idx_audit_candidate_workflow_mutation_request_v1 ON public.audit_events USING btree (correlation_id, ts_utc DESC, id DESC) WHERE (object_type = 'candidate_workflow_mutation_receipt'::text)"
+      },
+      {
+        "name": "idx_audit_import_correction_source_v1",
+        "definition": "CREATE INDEX idx_audit_import_correction_source_v1 ON public.audit_events USING btree (((after_json ->> 'shift_id'::text)), ((after_json ->> 'external_row_key'::text)), ((after_json ->> 'correction_id'::text)), action, ts_utc DESC, id) WHERE ((object_type = ANY (ARRAY['timesheets'::text, 'invoices'::text, 'contract_weeks'::text])) AND (action = ANY (ARRAY['NHSP_IMPORT_CORRECTION_APPLIED'::text, 'HR_IMPORT_CORRECTION_APPLIED'::text])))"
+      },
+      {
+        "name": "idx_audit_lookup",
+        "definition": "CREATE INDEX idx_audit_lookup ON public.audit_events USING btree (object_type, object_id_text, ts_utc DESC)"
+      },
+      {
+        "name": "idx_weekly_source_later_change_receipt_v1",
+        "definition": "CREATE INDEX idx_weekly_source_later_change_receipt_v1 ON public.audit_events USING btree (((after_json ->> 'idempotency_key'::text)), ts_utc, id) WHERE (action = 'WEEKLY_SOURCE_LATER_CHANGE_DECIDED'::text)"
+      }
+    ],
+    "options": [],
+    "force_rls": false,
+    "constraints": [
+      {
+        "name": "audit_events_actor_user_id_fkey",
+        "type": "f",
+        "deferred": false,
+        "validated": true,
+        "deferrable": false,
+        "definition": "FOREIGN KEY (actor_user_id) REFERENCES tms_users(id) ON DELETE SET NULL"
+      },
+      {
+        "name": "audit_events_pkey",
+        "type": "p",
+        "deferred": false,
+        "validated": true,
+        "deferrable": false,
+        "definition": "PRIMARY KEY (id)"
+      }
+    ],
+    "view_definition_sha256": null
+  },
+  "triggers": []
+}

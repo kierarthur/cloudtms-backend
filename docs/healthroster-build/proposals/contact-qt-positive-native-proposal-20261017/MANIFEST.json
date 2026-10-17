@@ -93,8 +93,8 @@
     },
     {
       "file": "OFFLINE_INPUTS.json",
-      "bytes": 113699,
-      "sha256": "e681fe29f07ccf90da8633872b6f46388d4a7c7d3770722a3bc67f49ef4b73f7"
+      "bytes": 113701,
+      "sha256": "c716b2484f54be5f757ec7dc21d7dcc87e3d16c00c85b063892391581fce137e"
     },
     {
       "file": "PLAN_SOURCE_SCOPES.json",
@@ -118,13 +118,13 @@
     },
     {
       "file": "PROGRAMMES.json",
-      "bytes": 58956,
-      "sha256": "8c006889bf628d350fd94b5826c6aa6beb0477f40900e98383bbc29904343d42"
+      "bytes": 58958,
+      "sha256": "775163889bac34792c74207019127f2f59d020a23186452d21d2a01f5dc898bf"
     },
     {
       "file": "qt-assertions.sql",
-      "bytes": 12046,
-      "sha256": "2839d6cd132af55b1545217f005a0578e99544f30f642ccddaf298d9731149ec"
+      "bytes": 12048,
+      "sha256": "e39b2cbcab6d8baab8a9d7287a1869984def0e6aa1c4137088d3eafcbeb7b209"
     },
     {
       "file": "READER_PARENT_REVERSE.json",
