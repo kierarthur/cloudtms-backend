@@ -1,9 +1,9 @@
 [
   {
     "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/MANIFEST.json",
-    "commit": "6457ca6251dba3ea0687ee8a227f37f61e43cdb2",
+    "commit": "d678877b165c27bbb045e5d097cbac76c574d39b",
     "bytes": 24285,
-    "sha256": "e973886a39a594ca8886286ac74aeb72039458bb9fe1a127bb05740d928bbdda"
+    "sha256": "40fc8d9713983be12a7399b61d467d954f9e33353a0e3c114a4067aa93e1f0cb"
   },
   {
     "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/ADMISSION_FULL_PARENT_FORWARD.json",
@@ -793,9 +793,9 @@
   },
   {
     "file": "docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/git-image-batch.mjs",
-    "commit": "070d6522a32177f8e2b5a046db30e74e79c3fc27",
-    "bytes": 17997,
-    "sha256": "25b77b9234a879fd2ca18bca7d8cf10547ad644a83513ccf050dab171a011426"
+    "commit": "d678877b165c27bbb045e5d097cbac76c574d39b",
+    "bytes": 23257,
+    "sha256": "ae3053a74df75781fdf155c1c94fd3bd55bbd617d59336ed6f414732bdf0eaec"
   },
   {
     "file": "docs/healthroster-build/proposals/daily-health-s0-catalogue-holder-20261017/MANIFEST.json",
