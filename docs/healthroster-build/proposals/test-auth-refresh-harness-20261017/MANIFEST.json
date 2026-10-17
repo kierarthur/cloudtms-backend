@@ -1,0 +1,97 @@
+{
+  "version": "TEST_AUTH_REFRESH_PUBLIC_SOURCE_FREEZE_V1",
+  "privateContentsIncluded": false,
+  "auth": "NOT_RUN",
+  "files": [
+    {
+      "file": "admission.mjs",
+      "bytes": 1255,
+      "sha256": "9530585f413b8c36807a7af8530f68f4f2afe87ca5f654a67cf23d7606b12447"
+    },
+    {
+      "file": "credentials-child.mjs",
+      "bytes": 771,
+      "sha256": "9a8be0bc76302102dafbb697b474c3ce61e7b48fd8baafc7e2e39045a6afc894"
+    },
+    {
+      "file": "forward/authenticate.mjs",
+      "bytes": 2476,
+      "sha256": "c6211563a69da5605684c308917dfe06d5ed61579a2a1afa0b08d45218e46370"
+    },
+    {
+      "file": "forward/config.mjs",
+      "bytes": 607,
+      "sha256": "698c3c746c6f63e642171a748cc270b53832f66ed77f59dd929afbe04ba59de6"
+    },
+    {
+      "file": "FULL_PARENT_TRANSFERS.json",
+      "bytes": 6802,
+      "sha256": "0212f4962a2a5b0f7ea675433a7e71e90ec875693d2b4eb3c34757beb534f3d2"
+    },
+    {
+      "file": "INDEPENDENT_EXPECTATIONS.json",
+      "bytes": 1890,
+      "sha256": "92460d46f4a850820a64754c80ac31d9c5736629692f94de9a4a090b5383cc4d"
+    },
+    {
+      "file": "OFFLINE_RESULTS.json",
+      "bytes": 405,
+      "sha256": "7a08e6c91c5887c1fe53f6994152c78fe85aeee0302780058ee92331c9f33b31"
+    },
+    {
+      "file": "policy.mjs",
+      "bytes": 4542,
+      "sha256": "d72eee8fc975a806a4d0cbbf9ecbbbca6d076897de5a5ef215a1b8cf8fe420e3"
+    },
+    {
+      "file": "README.md",
+      "bytes": 5444,
+      "sha256": "e610c573dba8edd1397e771c50341d57f518bd78ae1fcc2da1b4ccbad41940b1"
+    },
+    {
+      "file": "reference/auth.setup.ts",
+      "bytes": 1989,
+      "sha256": "ce6324a65869d6b4d58a3038b4f3b8e0204ff2dda49e80ef95c249817c1fe9ef"
+    },
+    {
+      "file": "reference/health-query-workspace-schema.js.txt",
+      "bytes": 6398,
+      "sha256": "77495c4ffb9b05ec0ec4ce3bf5cf96c5d9c9ea1a74911dcfa81460626b7dc1aa"
+    },
+    {
+      "file": "reference/playwright.config.ts",
+      "bytes": 790,
+      "sha256": "4648b57b4a5d78e86f96ee3f7472e9cdb99977bba3fbc22750ad363a8475036b"
+    },
+    {
+      "file": "run-auth-refresh.mjs",
+      "bytes": 8354,
+      "sha256": "b6def16fa074a21d96014fbdab935145f00e49aa2484bab530ca87057db8d05a"
+    },
+    {
+      "file": "secure-owned.ps1",
+      "bytes": 1349,
+      "sha256": "b9bbeabb5ea8cee109a08a866d8590cac8c22b2d2dc52d83562e257789daf211"
+    },
+    {
+      "file": "SOURCE_PINS.json",
+      "bytes": 2719,
+      "sha256": "d8dfd7d2e09197208a30a8d51c02310fbc5523c402b12c11de15d1a9727bb913"
+    },
+    {
+      "file": "test.mjs",
+      "bytes": 10023,
+      "sha256": "e696f5188bfdf08da5af0ec75fa15896dbc5020cf82f088c0e8a8674387ee5ea"
+    },
+    {
+      "file": "verify.py",
+      "bytes": 7037,
+      "sha256": "3ccd880b9a356e44b32fcb885077a17d4b9bf20237fe15070fd16e69270a687f"
+    },
+    {
+      "file": "worker.mjs",
+      "bytes": 5291,
+      "sha256": "40661ff677ab7387103f1a68d6da5352c7c9d0dfdb5a856bb169f4a0f97fbb7d"
+    }
+  ]
+}

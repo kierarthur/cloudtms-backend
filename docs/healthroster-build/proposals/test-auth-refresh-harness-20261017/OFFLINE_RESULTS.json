@@ -1,0 +1,14 @@
+{
+  "status": "PASS_SOURCE_ONLY",
+  "publicSourceChecksBeforeManifest": 61,
+  "protocolTests": 11,
+  "fullCompleteParentReversals": 2,
+  "actualWindowsSdkAndConfigImports": "PASS_NO_BROWSER_LAUNCH",
+  "powerShellAclSource": "PARSED_ONLY_NOT_EXECUTED",
+  "privateContentsRead": false,
+  "auth": "NOT_RUN",
+  "browser": "NOT_RUN",
+  "network": "NOT_RUN",
+  "stateExport": "NOT_RUN",
+  "native": "NOT_RUN"
+}

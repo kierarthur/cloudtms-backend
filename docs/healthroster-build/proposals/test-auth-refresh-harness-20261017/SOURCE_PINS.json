@@ -35,5 +35,29 @@
     }
   ],
   "credentialsRead": false,
-  "stateContentsRead": false
+  "stateContentsRead": false,
+  "localRuntime": [
+    {
+      "file": "D:/Development/GitHub/TEST-Frontend/node_modules/@playwright/test/package.json",
+      "bytes": 754,
+      "sha256": "cf92117ef1d8cbf1e4b2dffb63a0da552c0173bd6052f0f45711c0f00b79dc99"
+    },
+    {
+      "file": "D:/Development/GitHub/TEST-Frontend/node_modules/playwright/lib/index.js",
+      "bytes": 34490,
+      "sha256": "36faa53b7c6fa8f76788f2bcfa21d72edc22e5f528c45328b71d07e215d79a32"
+    }
+  ],
+  "querySchemaSource": {
+    "root": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-office-13102026",
+    "commit": "ac112422e529aefbcba0fc0147d2b28123751823",
+    "file": "js/weekly-source/import-workspace.js",
+    "sha256": "2d9a658b46745e58f56df6d6b5125a3aa4cdff4a4a5e5cf17199494795c435f3",
+    "selectedCompleteFunctions": [
+      "normalisePage",
+      "normaliseWorkspace"
+    ],
+    "captured": "reference/health-query-workspace-schema.js.txt",
+    "capturedSha256": "77495c4ffb9b05ec0ec4ce3bf5cf96c5d9c9ea1a74911dcfa81460626b7dc1aa"
+  }
 }
