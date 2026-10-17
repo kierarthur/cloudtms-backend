@@ -1371,3 +1371,10 @@ SEND_7 turn: {"chat":"HealthRoster","task":"CONTACT_QT_POSITIVE_QT_ADMIN_CONTROL
 
 
 17 October QT one-binding source ef3/independent33a3 accepted and four exact images mounted after full parents/inverses/12author+6independent AST refusals. Both full audit digests and complete finalIF/assertions remain, same read position, no FOUND consumer; original30s B/45s C/70s child/120work/180whole caps unchanged. Parallel eligibility distinction proved from PG17.11 source, physical plan/wholeDO timing NOT_PROVED. OriginalR1 57014 HOLD retained. Actual committed admission then one bounded new trial follows; Install2 NOT_INSTALLED/finalcritics NOT_RUN/no ownerquestion.
+
+SEND_7 turn: {"chat":"HealthRoster","task":"CONTACT_QT_POSITIVE_QT_ADMIN_CONTROLS_V1","status":"TAKEN","takenAt":"2026-10-17T13:32:31.237Z","key":[20261013,1]}
+
+SEND_7 turn: {"chat":"HealthRoster","task":"CONTACT_QT_POSITIVE_QT_ADMIN_CONTROLS_V1","status":"RELEASED","takenAt":"2026-10-17T13:32:31.237Z","releasedAt":"2026-10-17T13:34:11.816Z","explicitUnlockConfirmed":true,"connectionClosed":true,"proved":false,"key":[20261013,1]}
+
+
+17 October QT/Admin R2 actualHOLD on7422 despite exactSELECTINTO change: first58statements complete; statement59 still57014 at firstfullauditSELECTINTO/DOline23 under original30s cap. ActualBcall32.489s; beforeREADY62.832s; no actualparallelplan/bottleneck inferred. Serverrollback/freshTEST/customer-null/LEGACY1/noAPPLYING/markerabsent/all6users0/QTobjectsabsent PASS. OwnA explicitunlock/close13:34:11.816Z/provedfalse/exit1; CafterNOTRUN/canonicalrestorationHOLD. No unchangedretry/cap increase/job pause. Source diagnosis separate while genuine fixture/sourceimplementation continues; Install2 NOT_INSTALLED/finalcritics NOT_RUN/no ownerquestion.
