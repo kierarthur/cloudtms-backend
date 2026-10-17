@@ -1,0 +1,41 @@
+-- One-time CloudTMS schema/data migration: nhsp_v6_native_pending_allocation
+-- State the exact authority, safety boundary, and verification before implementation.
+
+\set ON_ERROR_STOP on
+
+begin;
+
+-- New finite correction: existing7d bytes/keys/FKs/UNIQUE remain unchanged.
+-- Root must allocate an actual db:new migration; this BODY has no mutable include.
+alter table private.timesheet_contract_current_placements alter column current_timesheet_id drop not null;
+create or replace function private.timesheet_contract_native_pending_commit_guard_v1()
+returns trigger language plpgsql security definer set search_path=pg_catalog,public,private,pg_temp
+as $function$
+declare actual private.timesheet_contract_current_placements%rowtype;
+begin
+ select p.* into strict actual from private.timesheet_contract_current_placements p
+  where p.family_root_id=new.family_root_id and p.member_key=new.member_key;
+ if actual.current_timesheet_id is null and private.timesheet_contract_native_pending_v1(to_jsonb(actual),false) is null then
+  raise exception 'CURRENT_PLACEMENT_NATIVE_PENDING_UNBOUND' using errcode='23514';end if;
+ if actual.current_timesheet_id is not null then
+  if private.timesheet_contract_native_allocation_binding_v1(to_jsonb(actual),true)
+    and not private.timesheet_contract_native_allocation_binding_v1(to_jsonb(actual),false) then
+   raise exception 'CURRENT_PLACEMENT_NATIVE_ALLOCATION_NOT_PROCESSED' using errcode='23514';end if;
+  perform private.timesheet_contract_current_placement_v1(actual.current_timesheet_id);
+ end if;
+ return null;
+end;
+$function$;
+alter function private.timesheet_contract_native_pending_commit_guard_v1() owner to postgres;
+revoke all on function private.timesheet_contract_native_pending_commit_guard_v1() from public,anon,authenticated,service_role;
+create constraint trigger timesheet_contract_native_pending_commit_guard after insert or update on private.timesheet_contract_current_placements
+ deferrable initially deferred for each row execute function private.timesheet_contract_native_pending_commit_guard_v1();
+create index timesheet_contract_native_pending_audit_lookup on public.audit_events
+ ((after_json#>>'{native_contract_placement,placement,family_root_id}'),
+  (after_json#>>'{native_contract_placement,placement,member_key}'),
+  (after_json#>>'{native_contract_placement,placement,placement_revision}'))
+ where action='CANDIDATE_SUBMISSION_WITHDRAWN_TO_CONTRACT_WEEK'
+  and after_json#>>'{native_contract_placement,version}'='CANDIDATE_NATIVE_PENDING_PLACEMENT_V1';
+
+
+commit;

@@ -1,0 +1,64 @@
+{
+  "parent": {
+    "name": "private.daily_rate_correction_public_assert_v1",
+    "physical": "supabase/repeatable/16102026_1342_nhsp_v6_daily_public_services/01_public_services.sqlinc",
+    "savedCompleteDeclarationSha256": "b0c2b80c7a497bd5f147e1bd58226e9cfa179a46ea721c1868876e51d7465eb2",
+    "output": "inputs/private__daily_rate_correction_public_assert_v1.sqlinc"
+  },
+  "completeInputSha256": "b0c2b80c7a497bd5f147e1bd58226e9cfa179a46ea721c1868876e51d7465eb2",
+  "completeOutputDeclarationSha256": "94648fdf17ce208d58a634ef52cf4635ca90be9b73e251c51800efbe98f49a7c",
+  "finiteReplacements": [
+    {
+      "before": "private.daily_rate_correction_public_assert_v1",
+      "after": "private.timesheet_contract_move_public_assert_v1",
+      "count": 14
+    },
+    {
+      "before": "DAILY_RATE_PUBLIC_RESPONSE_INVALID",
+      "after": "CORRECTION_PUBLIC_RESPONSE_INVALID",
+      "count": 24
+    },
+    {
+      "before": "'DAILY_RATE_CORRECTION_V1'",
+      "after": "'TIMESHEET_CONTRACT_CORRECTION_V3'",
+      "count": 3
+    },
+    {
+      "before": "'DAILY_RATE_CORRECTION'",
+      "after": "'CONTRACT_CORRECTION'",
+      "count": 1
+    },
+    {
+      "before": "'current_timesheet_id','summary','known_blockers'",
+      "after": "'current_timesheet_id','to_contract_id','summary','known_blockers'",
+      "count": 1
+    },
+    {
+      "before": "ids:=array['operation_id','review_id','current_timesheet_id'];",
+      "after": "ids:=array['operation_id','review_id','current_timesheet_id','to_contract_id'];",
+      "count": 1
+    },
+    {
+      "before": "not in('REVIEWED','COMPLETE','SUPERSEDED')",
+      "after": "not in('REVIEWED','COMPLETE','SUPERSEDED','PENDING_PLACEMENT')",
+      "count": 1
+    },
+    {
+      "before": "ids:=array['original_timesheet_id','current_timesheet_id'];\n  nullable_ids:=array['receipt_id'];",
+      "after": "ids:=array['original_timesheet_id'];\n  nullable_ids:=array['receipt_id','current_timesheet_id'];",
+      "count": 1
+    },
+    {
+      "before": "not in('NOT_COMMITTED','COMMITTED')\n   or p_value->'original_timesheet_id' is distinct from p_value->'current_timesheet_id'",
+      "after": "not in('NOT_COMMITTED','COMMITTED','NATIVE_PENDING')\n   or (p_value->>'status'<>'NATIVE_PENDING' and p_value->'current_timesheet_id'='null'::jsonb)",
+      "count": 1
+    },
+    {
+      "before": "  for child in select value from jsonb_array_elements((p_value->'next_actions')||(p_value->'links')) loop",
+      "after": "  if (p_value#>>'{placement,status}'='NATIVE_PENDING') is distinct from (p_value->>'state'='PENDING_PLACEMENT') then raise exception 'CORRECTION_PUBLIC_RESPONSE_INVALID' using errcode='23514';end if;\n  for child in select value from jsonb_array_elements((p_value->'next_actions')||(p_value->'links')) loop",
+      "count": 1
+    }
+  ],
+  "fullReversePASS": true,
+  "authority": "MOVE_STAGE_CONTRACT sections8/8.1; same Health ACTION/EFFECT/Financial/Billing closed shapes; exact native pending remains a reader proof, not a structural-validator authority."
+}

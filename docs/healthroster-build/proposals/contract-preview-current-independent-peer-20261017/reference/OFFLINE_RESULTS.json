@@ -1,0 +1,99 @@
+{
+  "assembly": {
+    "pinnedCurrentFiles": 19,
+    "completeHealthDeclarations": 19,
+    "actualFinalOwners": 19,
+    "newHealthDefinitions": 7,
+    "completeOriginalOwnersChanged": 0,
+    "unprovidedBankOwnerBlocks": 4,
+    "runtimeSQLFilesEmitted": 0,
+    "native": "NOT_RUN",
+    "API": "NOT_RUN",
+    "sourceAssembly": "HELD_UNPROVIDED_GENUINE_OWNER_JOINS"
+  },
+  "sourceDriftRefuses": true,
+  "pretendOwnerFlagRefuses": true,
+  "runtimeEmissionRefusesBeforeWrite": true,
+  "parserVersion": "v7.20",
+  "postgresGrammar": [
+    17,
+    7
+  ],
+  "programs": [
+    {
+      "file": "one-time/00_admission.sqlinc",
+      "statements": 1,
+      "plpgsqlBodies": 1,
+      "nativeExecuted": false,
+      "unprovidedBlocksGrammarRefusalOnly": false
+    },
+    {
+      "file": "health/00_public_assert.sqlinc",
+      "statements": 2,
+      "plpgsqlBodies": 1,
+      "nativeExecuted": false,
+      "unprovidedBlocksGrammarRefusalOnly": false
+    },
+    {
+      "file": "health/01_projection.sqlinc",
+      "statements": 4,
+      "plpgsqlBodies": 2,
+      "nativeExecuted": false,
+      "unprovidedBlocksGrammarRefusalOnly": false
+    },
+    {
+      "file": "templates/10_preview_read.sql.tmpl",
+      "statements": 4,
+      "plpgsqlBodies": 2,
+      "nativeExecuted": false,
+      "unprovidedBlocksGrammarRefusalOnly": true
+    },
+    {
+      "file": "templates/20_preview.sql.tmpl",
+      "statements": 2,
+      "plpgsqlBodies": 1,
+      "nativeExecuted": false,
+      "unprovidedBlocksGrammarRefusalOnly": true
+    },
+    {
+      "file": "templates/30_current_result.sql.tmpl",
+      "statements": 2,
+      "plpgsqlBodies": 1,
+      "nativeExecuted": false,
+      "unprovidedBlocksGrammarRefusalOnly": true
+    },
+    {
+      "file": "verification/99_owner_only.sqlinc",
+      "statements": 1,
+      "plpgsqlBodies": 1,
+      "nativeExecuted": false,
+      "unprovidedBlocksGrammarRefusalOnly": false
+    },
+    {
+      "file": "reverse/complete_additive_reverse.sqlinc",
+      "statements": 7,
+      "plpgsqlBodies": 0,
+      "nativeExecuted": false,
+      "unprovidedBlocksGrammarRefusalOnly": false
+    }
+  ],
+  "exactAdditiveForwardReverse": true,
+  "invoiceAssignmentASTVectors": 8,
+  "resultAssignmentASTVectors": 8,
+  "actualProtocolVectors": {
+    "assertions": 109,
+    "source": "ACTUAL_UNCHANGED_ROOT_V3_DECODER",
+    "projectionASTFixtures": 16,
+    "nativeAuthorityProved": false
+  },
+  "actualExistingContractTestExitCode": 0,
+  "actualExistingContractTestSummary": [
+    "# tests 12",
+    "# pass 12",
+    "# fail 0"
+  ],
+  "native": "NOT_RUN",
+  "API": "NOT_RUN",
+  "inApp": "NOT_RUN",
+  "runtimeSQLFilesEmitted": 0
+}

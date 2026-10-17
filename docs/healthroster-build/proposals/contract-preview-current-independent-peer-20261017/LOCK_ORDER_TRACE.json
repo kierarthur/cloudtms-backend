@@ -1,0 +1,29 @@
+{
+  "finding": "CONTRACT_PREVIEW_IMMEDIATE_FK_LOCK_UPGRADE",
+  "scope": "SOURCE_COUNTEREXAMPLE_NOT_NATIVE_REPRODUCTION",
+  "authorCommit": "2d1c81cf5a6939b8ab05d4b3d8db398037c13ed4",
+  "physicalSchemaSha256": "d46481d0cd53880041b126c554d34dccc39854ff3bf31ac98883f85949cc1d82",
+  "operationCandidateFk": "candidate_id uuid not null references public.candidates(id)",
+  "nativeOwner": "private.timesheet_contract_move_family_lock_v1(uuid)",
+  "nativeOwnerRawSha256": "8fc91c710e6ca1ddb26d814c3e02662ade9c769b40f084496a58459d3ea54888",
+  "waitGraph": [
+    {
+      "from": "PREVIEW_A",
+      "to": "PREVIEW_B",
+      "row": "public.candidates(actual same Candidate)",
+      "requested": "UPDATE",
+      "held": "KEY_SHARE"
+    },
+    {
+      "from": "PREVIEW_B",
+      "to": "PREVIEW_A",
+      "row": "public.candidates(actual same Candidate)",
+      "requested": "UPDATE",
+      "held": "KEY_SHARE"
+    }
+  ],
+  "conclusion": "HOLD_TEMPLATE20_CONCURRENCY_UNQUALIFIED",
+  "BankBodyAssumptions": 0,
+  "native": "NOT_RUN",
+  "requiredBoundary": "Acquire the complete actual native lock domain before any immediate business FK check; preserve exact replay and current native Bank-before-Health order, shared request mutex last. A future composition-local contract may express missing producer lock requirements, but no callable ABI or safe ordering is supplied here."
+}

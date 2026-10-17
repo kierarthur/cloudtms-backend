@@ -1,0 +1,419 @@
+{
+  "checks": 101,
+  "results": [
+    {
+      "name": "exact frozen saved/Git: assemble.py",
+      "status": "PASS"
+    },
+    {
+      "name": "exact frozen saved/Git: ASSEMBLY_STATE.json",
+      "status": "PASS"
+    },
+    {
+      "name": "exact frozen saved/Git: AST_PROJECTION_VECTORS.json",
+      "status": "PASS"
+    },
+    {
+      "name": "exact frozen saved/Git: freeze.py",
+      "status": "PASS"
+    },
+    {
+      "name": "exact frozen saved/Git: health/00_public_assert.sqlinc",
+      "status": "PASS"
+    },
+    {
+      "name": "exact frozen saved/Git: health/01_projection.sqlinc",
+      "status": "PASS"
+    },
+    {
+      "name": "exact frozen saved/Git: inputs/16102026_0159_nhsp_v6_01_physical_source_review_schema.sql",
+      "status": "PASS"
+    },
+    {
+      "name": "exact frozen saved/Git: inputs/16102026_1003_nhsp_v6_native_pending_allocation.sql",
+      "status": "PASS"
+    },
+    {
+      "name": "exact frozen saved/Git: inputs/private__daily_rate_correction_public_assert_v1.sqlinc",
+      "status": "PASS"
+    },
+    {
+      "name": "exact frozen saved/Git: inputs/private__invoice_contract_move_billing_read_v1.sqlinc",
+      "status": "PASS"
+    },
+    {
+      "name": "exact frozen saved/Git: inputs/private__invoice_contract_move_inspect_v1.sqlinc",
+      "status": "PASS"
+    },
+    {
+      "name": "exact frozen saved/Git: inputs/private__invoice_contract_move_inspect_v1__3arg.sqlinc",
+      "status": "PASS"
+    },
+    {
+      "name": "exact frozen saved/Git: inputs/private__invoice_contract_move_preflight_v1.sqlinc",
+      "status": "PASS"
+    },
+    {
+      "name": "exact frozen saved/Git: inputs/private__timesheet_contract_current_placement_v1.sqlinc",
+      "status": "PASS"
+    },
+    {
+      "name": "exact frozen saved/Git: inputs/private__timesheet_contract_move_commit_guard_v1.sqlinc",
+      "status": "PASS"
+    },
+    {
+      "name": "exact frozen saved/Git: inputs/private__timesheet_contract_move_evidence_v1.sqlinc",
+      "status": "PASS"
+    },
+    {
+      "name": "exact frozen saved/Git: inputs/private__timesheet_contract_move_operation_guard_v1.sqlinc",
+      "status": "PASS"
+    },
+    {
+      "name": "exact frozen saved/Git: inputs/private__timesheet_contract_move_reason_v1.sqlinc",
+      "status": "PASS"
+    },
+    {
+      "name": "exact frozen saved/Git: inputs/private__timesheet_contract_move_request_assert_v1.sqlinc",
+      "status": "PASS"
+    },
+    {
+      "name": "exact frozen saved/Git: inputs/private__timesheet_contract_move_request_guard_v1.sqlinc",
+      "status": "PASS"
+    },
+    {
+      "name": "exact frozen saved/Git: inputs/private__timesheet_contract_move_request_hash_v1.sqlinc",
+      "status": "PASS"
+    },
+    {
+      "name": "exact frozen saved/Git: inputs/private__timesheet_contract_move_review_members_v1.sqlinc",
+      "status": "PASS"
+    },
+    {
+      "name": "exact frozen saved/Git: inputs/private__timesheet_contract_move_scope_v1.sqlinc",
+      "status": "PASS"
+    },
+    {
+      "name": "exact frozen saved/Git: inputs/private__timesheet_contract_move_stage_v1.sqlinc",
+      "status": "PASS"
+    },
+    {
+      "name": "exact frozen saved/Git: inputs/private__timesheet_contract_native_pending_v1.sqlinc",
+      "status": "PASS"
+    },
+    {
+      "name": "exact frozen saved/Git: inputs/private__timesheet_correction_entry_subject_v1.sqlinc",
+      "status": "PASS"
+    },
+    {
+      "name": "exact frozen saved/Git: inputs/public__timesheet_contract_move_accept_v1.sqlinc",
+      "status": "PASS"
+    },
+    {
+      "name": "exact frozen saved/Git: NATIVE_REQUIRED.md",
+      "status": "PASS"
+    },
+    {
+      "name": "exact frozen saved/Git: offline-checks.py",
+      "status": "PASS"
+    },
+    {
+      "name": "exact frozen saved/Git: OFFLINE_RESULTS.json",
+      "status": "PASS"
+    },
+    {
+      "name": "exact frozen saved/Git: one-time/00_admission.sqlinc",
+      "status": "PASS"
+    },
+    {
+      "name": "exact frozen saved/Git: OWNER_BLOCKS.json",
+      "status": "PASS"
+    },
+    {
+      "name": "exact frozen saved/Git: protocol-vectors.mjs",
+      "status": "PASS"
+    },
+    {
+      "name": "exact frozen saved/Git: README.md",
+      "status": "PASS"
+    },
+    {
+      "name": "exact frozen saved/Git: reverse/complete_additive_reverse.sqlinc",
+      "status": "PASS"
+    },
+    {
+      "name": "exact frozen saved/Git: SOURCE_EXPECTATIONS.json",
+      "status": "PASS"
+    },
+    {
+      "name": "exact frozen saved/Git: SOURCE_PINS.json",
+      "status": "PASS"
+    },
+    {
+      "name": "exact frozen saved/Git: templates/10_preview_read.sql.tmpl",
+      "status": "PASS"
+    },
+    {
+      "name": "exact frozen saved/Git: templates/20_preview.sql.tmpl",
+      "status": "PASS"
+    },
+    {
+      "name": "exact frozen saved/Git: templates/30_current_result.sql.tmpl",
+      "status": "PASS"
+    },
+    {
+      "name": "exact frozen saved/Git: VALIDATOR_DERIVATION.json",
+      "status": "PASS"
+    },
+    {
+      "name": "exact frozen saved/Git: verification/99_owner_only.sqlinc",
+      "status": "PASS"
+    },
+    {
+      "name": "exact frozen saved/Git: MANIFEST.json",
+      "status": "PASS"
+    },
+    {
+      "name": "exact complete current input: supabase/migrations/16102026_0159_nhsp_v6_01_physical_source_review_schema.sql",
+      "status": "PASS"
+    },
+    {
+      "name": "exact complete current input: supabase/migrations/16102026_1003_nhsp_v6_native_pending_allocation.sql",
+      "status": "PASS"
+    },
+    {
+      "name": "exact complete current input: supabase/repeatable/includes/nhsp_v6_health_composition_wrappers.sqlinc",
+      "status": "PASS"
+    },
+    {
+      "name": "exact complete current input: supabase/repeatable/includes/nhsp_v6_health_review_context.sqlinc",
+      "status": "PASS"
+    },
+    {
+      "name": "exact complete current input: supabase/repeatable/includes/nhsp_v6_health_native_apply.sqlinc",
+      "status": "PASS"
+    },
+    {
+      "name": "exact complete current input: supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
+      "status": "PASS"
+    },
+    {
+      "name": "exact complete current input: supabase/repeatable/16102026_0955_nhsp_v6_invoice_native_authority/01_complete_invoice_authorities.sqlinc",
+      "status": "PASS"
+    },
+    {
+      "name": "exact complete current input: supabase/repeatable/16102026_1342_nhsp_v6_daily_public_services/01_public_services.sqlinc",
+      "status": "PASS"
+    },
+    {
+      "name": "exact complete current input: supabase/repeatable/17102026_0135_correction_entry_reader/01_complete_entry_reader.sqlinc",
+      "status": "PASS"
+    },
+    {
+      "name": "exact complete current input: broker/src/contract-correction-v3.mjs",
+      "status": "PASS"
+    },
+    {
+      "name": "exact complete current input: tests/contract-correction-v3.test.mjs",
+      "status": "PASS"
+    },
+    {
+      "name": "complete selected native declaration: inputs/private__timesheet_contract_move_reason_v1.sqlinc",
+      "status": "PASS"
+    },
+    {
+      "name": "complete selected native declaration: inputs/private__timesheet_contract_move_request_assert_v1.sqlinc",
+      "status": "PASS"
+    },
+    {
+      "name": "complete selected native declaration: inputs/private__timesheet_contract_move_request_hash_v1.sqlinc",
+      "status": "PASS"
+    },
+    {
+      "name": "complete selected native declaration: inputs/public__timesheet_contract_move_accept_v1.sqlinc",
+      "status": "PASS"
+    },
+    {
+      "name": "complete selected native declaration: inputs/private__timesheet_contract_move_operation_guard_v1.sqlinc",
+      "status": "PASS"
+    },
+    {
+      "name": "complete selected native declaration: inputs/private__timesheet_contract_move_request_guard_v1.sqlinc",
+      "status": "PASS"
+    },
+    {
+      "name": "complete selected native declaration: inputs/private__timesheet_contract_move_commit_guard_v1.sqlinc",
+      "status": "PASS"
+    },
+    {
+      "name": "complete selected native declaration: inputs/private__timesheet_contract_move_review_members_v1.sqlinc",
+      "status": "PASS"
+    },
+    {
+      "name": "complete selected native declaration: inputs/private__timesheet_contract_move_stage_v1.sqlinc",
+      "status": "PASS"
+    },
+    {
+      "name": "complete selected native declaration: inputs/private__timesheet_contract_current_placement_v1.sqlinc",
+      "status": "PASS"
+    },
+    {
+      "name": "complete selected native declaration: inputs/private__timesheet_contract_move_scope_v1.sqlinc",
+      "status": "PASS"
+    },
+    {
+      "name": "complete selected native declaration: inputs/private__timesheet_contract_move_evidence_v1.sqlinc",
+      "status": "PASS"
+    },
+    {
+      "name": "complete selected native declaration: inputs/private__timesheet_contract_native_pending_v1.sqlinc",
+      "status": "PASS"
+    },
+    {
+      "name": "complete selected native declaration: inputs/private__invoice_contract_move_inspect_v1.sqlinc",
+      "status": "PASS"
+    },
+    {
+      "name": "complete selected native declaration: inputs/private__invoice_contract_move_preflight_v1.sqlinc",
+      "status": "PASS"
+    },
+    {
+      "name": "complete selected native declaration: inputs/private__invoice_contract_move_billing_read_v1.sqlinc",
+      "status": "PASS"
+    },
+    {
+      "name": "complete selected native declaration: inputs/private__daily_rate_correction_public_assert_v1.sqlinc",
+      "status": "PASS"
+    },
+    {
+      "name": "complete selected native declaration: inputs/private__timesheet_correction_entry_subject_v1.sqlinc",
+      "status": "PASS"
+    },
+    {
+      "name": "complete selected native declaration: inputs/private__invoice_contract_move_inspect_v1__3arg.sqlinc",
+      "status": "PASS"
+    },
+    {
+      "name": "final-owner registration: private.timesheet_contract_move_reason_v1(text,text)",
+      "status": "PASS"
+    },
+    {
+      "name": "final-owner registration: private.timesheet_contract_move_request_assert_v1(jsonb,text)",
+      "status": "PASS"
+    },
+    {
+      "name": "final-owner registration: private.timesheet_contract_move_request_hash_v1(jsonb,text)",
+      "status": "PASS"
+    },
+    {
+      "name": "final-owner registration: public.timesheet_contract_move_accept_v1(jsonb)",
+      "status": "PASS"
+    },
+    {
+      "name": "final-owner registration: private.timesheet_contract_move_operation_guard_v1()",
+      "status": "PASS"
+    },
+    {
+      "name": "final-owner registration: private.timesheet_contract_move_request_guard_v1()",
+      "status": "PASS"
+    },
+    {
+      "name": "final-owner registration: private.timesheet_contract_move_commit_guard_v1()",
+      "status": "PASS"
+    },
+    {
+      "name": "final-owner registration: private.timesheet_contract_move_review_members_v1(uuid,jsonb)",
+      "status": "PASS"
+    },
+    {
+      "name": "final-owner registration: private.timesheet_contract_move_stage_v1(uuid,uuid,bytea)",
+      "status": "PASS"
+    },
+    {
+      "name": "final-owner registration: private.timesheet_contract_current_placement_v1(uuid)",
+      "status": "PASS"
+    },
+    {
+      "name": "final-owner registration: private.timesheet_contract_move_scope_v1(uuid,boolean)",
+      "status": "PASS"
+    },
+    {
+      "name": "final-owner registration: private.timesheet_contract_move_evidence_v1(uuid)",
+      "status": "PASS"
+    },
+    {
+      "name": "final-owner registration: private.timesheet_contract_native_pending_v1(jsonb,boolean)",
+      "status": "PASS"
+    },
+    {
+      "name": "final-owner registration: private.invoice_contract_move_inspect_v1(jsonb,jsonb,uuid,boolean)",
+      "status": "PASS"
+    },
+    {
+      "name": "final-owner registration: private.invoice_contract_move_inspect_v1(jsonb,uuid,boolean)",
+      "status": "PASS"
+    },
+    {
+      "name": "final-owner registration: private.invoice_contract_move_preflight_v1(uuid,uuid,boolean)",
+      "status": "PASS"
+    },
+    {
+      "name": "final-owner registration: private.invoice_contract_move_billing_read_v1(uuid,uuid)",
+      "status": "PASS"
+    },
+    {
+      "name": "final-owner registration: private.daily_rate_correction_public_assert_v1(jsonb,text)",
+      "status": "PASS"
+    },
+    {
+      "name": "final-owner registration: private.timesheet_correction_entry_subject_v1(uuid,uuid)",
+      "status": "PASS"
+    },
+    {
+      "name": "additional family-lock exact current owner",
+      "status": "PASS"
+    },
+    {
+      "name": "actual operation Candidate immediate FK",
+      "status": "PASS"
+    },
+    {
+      "name": "actual operation immediate Timesheet and Contract FKs",
+      "status": "PASS"
+    },
+    {
+      "name": "actual member immediate native FK checks",
+      "status": "PASS"
+    },
+    {
+      "name": "operation/member insertion precedes owner/native lock stages",
+      "status": "PASS"
+    },
+    {
+      "name": "exact native scope invokes final1003 family lock",
+      "status": "PASS"
+    },
+    {
+      "name": "exact Health family lock requires Candidate FOR UPDATE",
+      "status": "PASS"
+    },
+    {
+      "name": "adversarial two distinct Preview Candidate upgrades cycle",
+      "status": "PASS"
+    },
+    {
+      "name": "no own runtime SQL or guessed producer signature",
+      "status": "PASS"
+    }
+  ],
+  "completeFrozenFiles": 43,
+  "completeCurrentOwners": 19,
+  "additionalNativeFamilyOwner": 1,
+  "findings": 1,
+  "verdict": "HOLD_SOURCE_LOCK_ORDER",
+  "native": "NOT_RUN",
+  "dbConnections": 0,
+  "rootWrites": 0,
+  "OfficeWrites": 0,
+  "BankBodySemanticReads": 0
+}

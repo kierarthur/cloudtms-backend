@@ -1,0 +1,21 @@
+create or replace function private.invoice_contract_move_preflight_v1(p_review_id uuid,p_actor_user_id uuid,p_lock boolean)
+returns jsonb language plpgsql volatile security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare r private.timesheet_contract_move_reviews%rowtype;v_facts jsonb;v_hash text;v_invoice_certificate jsonb;
+begin
+ select v.* into strict r from private.timesheet_contract_move_reviews v where v.id=p_review_id;
+ v_facts:=private.invoice_contract_move_inspect_v1(r.manifest_json->'physical',r.manifest_json->'daily',p_actor_user_id,p_lock);
+ if p_lock and v_facts is distinct from r.manifest_json->'invoice' then
+  raise exception 'REVIEW_STALE' using errcode='40001';end if;
+ v_invoice_certificate:=private.timesheet_contract_move_invoice_certificate_v1(r.operation_id,p_lock);
+ if v_invoice_certificate->'complete' is distinct from 'true'::jsonb then
+  v_facts:=jsonb_set(v_facts,'{known_blockers}',(v_facts->'known_blockers')||jsonb_build_array(jsonb_build_object(
+   'code','INVOICE_COVERAGE_UNPROVED','native_owner','HEALTH','field_key',null,'permitted_action',null)));end if;
+ v_hash:=v_facts->>'certificate_digest';
+ return jsonb_build_object('version','CONTRACT_CORRECTION_PREFLIGHT_V1','review_id',r.id,
+  'ready_to_confirm',jsonb_array_length(v_facts->'known_blockers')=0,'required_capabilities',v_facts->'required_capabilities',
+  'source_digest',coalesce(v_facts#>>'{source_certificate,hash}',encode(private.weekly_source_sha256_jsonb_v1('EMPTY_SOURCE_INVOICE_V1','[]'::jsonb),'hex')),'group_digest',coalesce(v_facts#>>'{native_group_facts,digest}',v_hash),'reference_digest',encode(private.weekly_source_sha256_jsonb_v1('CONTRACT_MOVE_NATIVE_REFERENCE_V1',coalesce(v_facts->'native_group_manifest','[]'::jsonb)),'hex'),
+  'evidence_digest',v_invoice_certificate->>'current_evidence_digest','document_input_digest',coalesce(v_facts#>>'{document_inputs,digest}',v_invoice_certificate->>'document_input_digest'),'known_blockers',v_facts->'known_blockers','certificate_digest',v_hash);
+end;
+$function$;

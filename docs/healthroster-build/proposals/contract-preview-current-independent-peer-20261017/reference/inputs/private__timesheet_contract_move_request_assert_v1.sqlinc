@@ -1,0 +1,38 @@
+create or replace function private.timesheet_contract_move_request_assert_v1(p_args jsonb,p_kind text)
+returns void language plpgsql immutable security definer set search_path='pg_catalog','pg_temp'
+as $function$
+declare required text[]; permitted text[]; k text; uuid_keys text[];
+begin
+ if jsonb_typeof(p_args) is distinct from 'object' or p_kind is null or p_kind not in('PREVIEW','ACCEPT','READ_RESULT')
+  or p_args->>'version' is distinct from 'TIMESHEET_CONTRACT_CORRECTION_V3' then
+  raise exception 'CORRECTION_REQUEST_INVALID' using errcode='22023';end if;
+ if p_kind='PREVIEW' then
+  required:=array['version','request_id','timesheet_id','to_contract_id','actor_user_id'];permitted:=required||array['reason'];
+  uuid_keys:=array['request_id','timesheet_id','to_contract_id','actor_user_id'];
+ elsif p_kind='ACCEPT' then
+  required:=array['version','request_id','operation_id','review_id','review_digest','expected_state_revision','actor_user_id'];permitted:=required;
+  uuid_keys:=array['request_id','operation_id','review_id','actor_user_id'];
+ else
+  required:=array['version','action','operation_id','request_id','actor_user_id'];permitted:=required;
+  uuid_keys:=array['request_id','operation_id','actor_user_id'];
+  if p_args->>'action' is distinct from 'READ_RESULT' then raise exception 'CORRECTION_REQUEST_INVALID' using errcode='22023';end if;
+ end if;
+ if not (p_args ?& required) or p_args-permitted<>'{}'::jsonb then raise exception 'CORRECTION_REQUEST_INVALID' using errcode='22023';end if;
+ foreach k in array uuid_keys loop
+  if jsonb_typeof(p_args->k) is distinct from 'string'
+   or p_args->>k !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then
+   raise exception 'CORRECTION_REQUEST_INVALID' using errcode='22023';end if;
+ end loop;
+ if p_kind='PREVIEW' and p_args ? 'reason' then
+  if jsonb_typeof(p_args->'reason') is distinct from 'string' then raise exception 'CORRECTION_REQUEST_INVALID' using errcode='22023';end if;
+  perform private.timesheet_contract_move_reason_v1(p_args->>'reason');
+ end if;
+ if p_kind='ACCEPT' then
+  if jsonb_typeof(p_args->'review_digest') is distinct from 'string' or p_args->>'review_digest' !~ '^[0-9a-f]{64}$'
+   or jsonb_typeof(p_args->'expected_state_revision') is distinct from 'string'
+   or p_args->>'expected_state_revision' !~ '^[1-9][0-9]*$' or length(p_args->>'expected_state_revision')>19 then
+   raise exception 'CORRECTION_REQUEST_INVALID' using errcode='22023';end if;
+  if (p_args->>'expected_state_revision')::numeric>9223372036854775807 then raise exception 'CORRECTION_REQUEST_INVALID' using errcode='22023';end if;
+ end if;
+end;
+$function$;

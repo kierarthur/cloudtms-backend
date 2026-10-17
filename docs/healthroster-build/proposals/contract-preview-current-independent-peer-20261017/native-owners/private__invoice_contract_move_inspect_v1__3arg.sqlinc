@@ -1,0 +1,15 @@
+create or replace function private.invoice_contract_move_inspect_v1(p_physical jsonb,p_actor_user_id uuid,p_lock boolean)
+returns jsonb language plpgsql volatile security definer
+set search_path to 'pg_catalog','public','private','pg_temp'
+as $function$
+declare v_daily jsonb;
+begin
+ if p_physical->>'version'='DAILY_RATE_SCOPE_V1' then
+  select r.manifest_json->'daily' into strict v_daily from private.timesheet_contract_move_reviews r
+   join private.timesheet_contract_move_operations o on o.id=r.operation_id
+   where o.id=(p_physical->>'operation_id')::uuid and (o.accepted_review_id is null or r.id=o.accepted_review_id)
+   order by r.review_no desc limit 1;
+ end if;
+ return private.invoice_contract_move_inspect_v1(p_physical,v_daily,p_actor_user_id,p_lock);
+end;
+$function$;

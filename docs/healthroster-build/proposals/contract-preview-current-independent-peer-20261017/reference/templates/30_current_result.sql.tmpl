@@ -1,0 +1,143 @@
+-- Complete Health current-result reader; never installed with unbound slots.
+create or replace function private.timesheet_contract_move_read_v1(p_operation_id uuid,p_actor_user_id uuid)
+returns jsonb language plpgsql volatile security definer set search_path=pg_catalog,public,private,pg_temp
+as $function$
+declare o private.timesheet_contract_move_operations%rowtype; r private.timesheet_contract_move_reviews%rowtype;
+ q private.timesheet_contract_move_requests%rowtype; anchor private.timesheet_contract_family_aliases%rowtype;
+ pointer private.timesheet_contract_current_placements%rowtype; member jsonb; m private.timesheet_contract_move_members%rowtype;
+ current_placement jsonb; native_pending jsonb; original uuid; placement jsonb; billing jsonb; result jsonb;
+ actor_hash bytea; reader_hash bytea; invoice_visible boolean; result_state text; members integer; status text;
+ -- No guessed function/return contract. The missing native owner blocks must
+ -- supply genuine current Financial/Effect/actions and their actual permission.
+ bank_financial jsonb; bank_financial_visible boolean; bank_actions jsonb; bank_links jsonb; bank_rechecked boolean;
+begin
+ if current_setting('transaction_isolation') is distinct from 'read committed' then
+  raise exception 'CORRECTION_CURRENT_READ_ISOLATION_REQUIRED' using errcode='55000';end if;
+ select private.timesheet_contract_move_row_hash_v1(to_jsonb(u)) into actor_hash
+  from public.tms_users u where u.id=p_actor_user_id and u.is_active;
+ if actor_hash is null then raise exception 'CORRECTION_RESULT_NOT_VISIBLE' using errcode='42501';end if;
+ select x.* into o from private.timesheet_contract_move_operations x where x.id=p_operation_id;
+ if o.id is null or o.purpose is distinct from 'CONTRACT_CORRECTION' or o.from_contract_id is null
+  or o.to_contract_id is null or o.from_contract_id=o.to_contract_id
+  or not exists(select 1 from public.timesheets t join public.contracts c on c.id=t.contract_id
+   where t.timesheet_id=o.from_timesheet_id and t.sheet_scope::text='WEEKLY'
+    and c.candidate_id=o.candidate_id and c.client_id=o.actual_client_id)
+  or not exists(select 1 from public.contracts c where c.id=o.to_contract_id
+    and c.candidate_id=o.candidate_id and c.client_id=o.actual_client_id) then
+  raise exception 'CORRECTION_RESULT_NOT_VISIBLE' using errcode='42501';end if;
+ select x.* into anchor from private.timesheet_contract_family_aliases x where x.timesheet_id=o.from_timesheet_id;
+ original:=coalesce(anchor.original_timesheet_id,o.from_timesheet_id);
+ current_placement:=private.timesheet_contract_current_placement_v1(o.from_timesheet_id);
+ if current_placement->>'version' is distinct from 'CURRENT_CONTRACT_PLACEMENT_V1'
+  or current_placement->>'family_root_id' is distinct from o.family_root_id::text then
+  raise exception 'CORRECTION_NATIVE_RESULT_UNAVAILABLE' using errcode='55000';end if;
+ result_state:=o.state;status:='NOT_COMMITTED';
+ if o.state in('COMPLETE','SUPERSEDED') then
+  -- Original accepted terms/receipt are verified privately and never returned.
+  select x.* into r from private.timesheet_contract_move_reviews x where x.id=o.accepted_review_id and x.operation_id=o.id;
+  select x.* into q from private.timesheet_contract_move_requests x where x.request_id=o.accept_request_id and x.operation_id=o.id;
+  if r.id is null or r.review_digest is distinct from o.accepted_review_digest or r.scope_hash is distinct from o.expected_scope_hash
+   or r.pay_cut_hash is distinct from o.before_pay_cut_hash or r.invoice_hash is distinct from o.before_invoice_hash
+   or r.manifest_json->>'reason' is distinct from o.reason or q.request_kind is distinct from 'ACCEPT'
+   or q.request_hash is distinct from o.accept_request_hash or q.review_id is distinct from r.id
+   or o.receipt_json->>'version' is distinct from 'CONTRACT_CORRECTION_ACCEPTED_V3'
+   or o.receipt_json->>'operation_id' is distinct from o.id::text or o.receipt_json->>'request_id' is distinct from o.accept_request_id::text
+   or o.receipt_json->>'review_id' is distinct from r.id::text
+   or o.receipt_json->>'placement_receipt_id' is distinct from o.placement_receipt_json->>'receipt_id'
+   or o.receipt_json->>'financial_command_id' is distinct from o.financial_command_id::text
+   or o.receipt_json->>'billing_revision' is distinct from o.billing_revision::text
+   or o.receipt_json->>'preparation_operation_id' is distinct from o.preparation_operation_id::text
+   or o.placement_receipt_json->>'version' is distinct from 'CONTRACT_MOVE_PLACEMENT_RECEIPT_V1'
+   or o.placement_receipt_json->>'operation_id' is distinct from o.id::text
+   or o.placement_receipt_json->>'review_id' is distinct from r.id::text
+   or o.placement_receipt_json->>'current_timesheet_id' is distinct from o.to_timesheet_id::text
+   or o.placement_receipt_json->>'unchanged_work_sha256' is distinct from encode(o.unchanged_work_sha256,'hex')
+   or private.timesheet_contract_move_row_hash_v1(r.manifest_json#>'{physical,members}') is distinct from o.unchanged_work_sha256
+   or jsonb_typeof(o.placement_receipt_json->'members') is distinct from 'array' then
+   raise exception 'CORRECTION_NATIVE_RESULT_UNAVAILABLE' using errcode='55000';end if;
+  members:=jsonb_array_length(o.placement_receipt_json->'members');
+  if members not between 1 and 100 or members<>(select count(*) from private.timesheet_contract_move_members x where x.operation_id=o.id)
+   or members<>(select count(distinct x->>'member_key') from jsonb_array_elements(o.placement_receipt_json->'members') x) then
+   raise exception 'CORRECTION_NATIVE_RESULT_UNAVAILABLE' using errcode='55000';end if;
+  for member in select value from jsonb_array_elements(o.placement_receipt_json->'members') loop
+   select x.* into m from private.timesheet_contract_move_members x where x.operation_id=o.id and x.member_key=member->>'member_key';
+   if m.operation_id is null or m.family_root_id is distinct from o.family_root_id or m.role is distinct from member->>'role'
+    or m.from_timesheet_id::text is distinct from member->>'from_timesheet_id' or m.from_version::text is distinct from member->>'from_version'
+    or m.to_timesheet_id::text is distinct from member->>'to_timesheet_id' or m.to_version::text is distinct from member->>'to_version'
+    or m.to_contract_id is distinct from o.to_contract_id
+    or m.member_hash is distinct from private.timesheet_contract_move_row_hash_v1(member-array['to_timesheet_id','to_version','current_booking_id','additional_seq','contract_week_id'])
+    or not exists(select 1 from public.timesheets t where t.timesheet_id=m.to_timesheet_id and t.version=m.to_version
+      and t.contract_id=m.to_contract_id and t.sheet_scope::text='WEEKLY') then
+    raise exception 'CORRECTION_NATIVE_RESULT_UNAVAILABLE' using errcode='55000';end if;
+  end loop;
+  -- Exact flat index/final1003 proof supports genuine rotations and later
+  -- accepted corrections; never restore the historical accepted B snapshot.
+  select x.* into pointer from private.timesheet_contract_current_placements x
+   where x.family_root_id=o.family_root_id and x.member_key=anchor.member_key;
+  if pointer.operation_id is null or pointer.placement_revision::text is distinct from current_placement->>'placement_revision'
+   or pointer.placement_receipt_id::text is distinct from current_placement->>'placement_receipt_id'
+   or pointer.current_timesheet_id::text is distinct from current_placement->>'current_timesheet_id' then
+   raise exception 'CORRECTION_NATIVE_RESULT_UNAVAILABLE' using errcode='55000';end if;
+  if current_placement->'current_timesheet_id'='null'::jsonb then
+   native_pending:=private.timesheet_contract_native_pending_v1(to_jsonb(pointer),false);
+   if native_pending is null or pointer.operation_id is distinct from o.id then
+    -- An older operation cannot be relabelled as another operation's pending
+    -- acceptance. The original current owner remains the recovery authority.
+    raise exception 'CORRECTION_NATIVE_RESULT_UNAVAILABLE' using errcode='55000';end if;
+   result_state:='PENDING_PLACEMENT';status:='NATIVE_PENDING';
+  else
+   status:='COMMITTED';
+   if pointer.operation_id is distinct from o.id then result_state:='SUPERSEDED';
+   elsif pointer.placement_receipt_id::text is distinct from o.placement_receipt_json->>'receipt_id' then
+    raise exception 'CORRECTION_NATIVE_RESULT_UNAVAILABLE' using errcode='55000';end if;
+  end if;
+ end if;
+ placement:=jsonb_build_object('status',status,'original_timesheet_id',original,
+  'current_timesheet_id',current_placement->'current_timesheet_id','placement_revision',current_placement->'placement_revision',
+  'receipt_id',case when status='COMMITTED' then current_placement->'placement_receipt_id' else 'null'::jsonb end);
+ @@BANK_RESULT@@
+ if bank_financial_visible is null or jsonb_typeof(bank_actions) is distinct from 'array' or jsonb_typeof(bank_links) is distinct from 'array' then
+  raise exception 'CORRECTION_NATIVE_RESULT_UNAVAILABLE' using errcode='55000';end if;
+ perform private.timesheet_contract_move_public_assert_v1(bank_financial,'FINANCIAL');
+ if not bank_financial_visible and (bank_financial->'command_id' is distinct from 'null'::jsonb
+  or bank_financial->'cut_id' is distinct from 'null'::jsonb or bank_financial->'summary' is distinct from 'null'::jsonb
+   and bank_financial->'summary' is distinct from '{"visibility":"REDACTED"}'::jsonb) then
+  raise exception 'CORRECTION_FINANCIAL_PROJECTION_DENIED' using errcode='42501';end if;
+ perform private.timesheet_contract_move_actions_assert_v1(bank_actions);perform private.timesheet_contract_move_actions_assert_v1(bank_links);
+ billing:=private.invoice_contract_move_billing_read_v1(o.id,p_actor_user_id);
+ invoice_visible:=exists(select 1 from public.tms_users u where u.id=p_actor_user_id and u.is_active and upper(u.role::text)='ADMIN');
+ if not invoice_visible and (billing->'group_id' is distinct from 'null'::jsonb or billing->'visible_summary' is distinct from 'null'::jsonb
+  and billing->'visible_summary' is distinct from '{"visibility":"REDACTED"}'::jsonb) then
+  raise exception 'CORRECTION_INVOICE_PROJECTION_DENIED' using errcode='42501';end if;
+ -- Defense in depth around the genuine owner-supplied authorized target set:
+ -- denied IDs cannot survive inside an action URL/target. Fresh completed V3
+ -- never turns its readback into a financial-repair or second Confirm wizard.
+ select coalesce(jsonb_agg(a order by n),'[]'::jsonb) into bank_actions
+  from jsonb_array_elements(bank_actions) with ordinality e(a,n)
+  where (invoice_visible or a->>'target_type'<>'INVOICE')
+   and (bank_financial_visible or a->>'target_type' not in('BANKING_RUN','NATIVE_TRANSFER','FINANCE_CASE','CONTRACT_MOVE_HISTORY','SOURCE_PAY_DECISION_HISTORY','NATIVE_UNPROTECT_RUN')
+    and a->>'kind'<>'RESUME_FINANCIAL')
+   and (o.state='REVIEWED' or a->>'kind' not in('REVIEW_RATES','REVIEW_EARLIER_PAYMENT','RESUME_FINANCIAL'));
+ select coalesce(jsonb_agg(a order by n),'[]'::jsonb) into bank_links
+  from jsonb_array_elements(bank_links) with ordinality e(a,n)
+  where (invoice_visible or a->>'target_type'<>'INVOICE')
+   and (bank_financial_visible or a->>'target_type' not in('BANKING_RUN','NATIVE_TRANSFER','FINANCE_CASE','CONTRACT_MOVE_HISTORY','SOURCE_PAY_DECISION_HISTORY','NATIVE_UNPROTECT_RUN')
+    and a->>'kind'<>'RESUME_FINANCIAL')
+   and (o.state='REVIEWED' or a->>'kind' not in('REVIEW_RATES','REVIEW_EARLIER_PAYMENT','RESUME_FINANCIAL'));
+ if private.invoice_contract_move_billing_read_v1(o.id,p_actor_user_id) is distinct from billing then raise exception 'REVIEW_STALE' using errcode='40001';end if;
+ @@BANK_RESULT_RECHECK@@
+ if bank_rechecked is distinct from true then raise exception 'CORRECTION_NATIVE_RESULT_UNAVAILABLE' using errcode='55000';end if;
+ select private.timesheet_contract_move_row_hash_v1(to_jsonb(u)) into reader_hash from public.tms_users u where u.id=p_actor_user_id and u.is_active;
+ if actor_hash is distinct from reader_hash
+  or to_jsonb(o) is distinct from(select to_jsonb(x) from private.timesheet_contract_move_operations x where x.id=o.id)
+  or private.timesheet_contract_current_placement_v1(o.from_timesheet_id) is distinct from current_placement then
+  raise exception 'REVIEW_STALE' using errcode='40001';end if;
+ result:=jsonb_build_object('version','TIMESHEET_CONTRACT_CORRECTION_V3','purpose','CONTRACT_CORRECTION','operation_id',o.id,
+  'state',result_state,'state_revision',o.state_revision::text,'placement',placement,'financial',bank_financial,'billing',billing,
+  'next_actions',bank_actions,'links',bank_links);
+ return private.timesheet_contract_move_public_assert_v1(result,'RESULT');
+ -- No writes/locks/Accept branch, no raw private receipt/manifest or creator-role
+ -- projection, no preparation retry, command allocation or history rewrite.
+end;
+$function$;
+revoke all on function private.timesheet_contract_move_read_v1(uuid,uuid) from public,anon,authenticated,service_role;
