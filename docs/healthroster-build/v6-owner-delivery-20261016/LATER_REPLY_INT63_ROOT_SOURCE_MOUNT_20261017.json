@@ -1,0 +1,87 @@
+{
+  "version": "LATER_REPLY_INT63_ROOT_MANAGED_SOURCE_MOUNT_V1",
+  "status": "SOURCE_MOUNTED_NATIVE_NOT_RUN",
+  "rootParentCommit": "8971881e6347f4597a8547aabeb404fe578011c0",
+  "authorCommit": "3e728640408e3bd7e62edeac0715fb5da9c115f5",
+  "authorManifestSha256": "1d8c1068d6161245410f3bbb37583fe0345c927775abce81faafeb6226b213fe",
+  "managedScaffoldCommand": "npm run db:new:repeatable -- --name=weekly_source_later_change_reply_int63_v1",
+  "managedScaffoldPath": "supabase/repeatable/17102026_1525_weekly_source_later_change_reply_int63_v1.sql",
+  "managedScaffoldOriginalSha256": "ac4f6f31dd845a7da2e1d219c3365cd7b23bcb80d448cb563ebb55ae75252f83",
+  "managedRootSha256": "c6685e0dafd6e16d3a6c2e412aec99139fd3bb4f17131d71e86f7da1cdf9bcdc",
+  "completeFunctionSha256": "9357db1034e171b133c9a95dfbd056284b3c09e0ff9dc24999c761e9a799a0b6",
+  "completeFunctionBytes": 24394,
+  "sourceCurrentOwner": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/10_complete_later_change_decide.sqlinc",
+  "sourceCurrentOwnerUnchanged": true,
+  "completeBodyInverseEqual": true,
+  "outboundCasts": 7,
+  "internalCASArithmeticAndPublicationJSONChanged": false,
+  "storedHistoricalReplayReturnsChanged": false,
+  "oldRequestsRewritten": false,
+  "signature": "public.weekly_source_later_change_decide_atomic_v1(jsonb)",
+  "newSignatures": 0,
+  "newPrivileges": 0,
+  "literalACLStatements": [
+    "alter function public.weekly_source_later_change_decide_atomic_v1(jsonb) owner to postgres;",
+    "revoke all on function public.weekly_source_later_change_decide_atomic_v1(jsonb) from public,anon,authenticated,service_role;",
+    "grant execute on function public.weekly_source_later_change_decide_atomic_v1(jsonb) to service_role;"
+  ],
+  "postgrestReload": true,
+  "registry": {
+    "file": "docs/bpay-next/final-definer-closures.json",
+    "beforeSha256": "f357496129f0d1eab1f2a2115a8da788be9c2f4a42f50e4d41baa1c700fc3cc0",
+    "afterSha256": "4e3cf52c02d0d9bc48f679056ab83ee9108c10cc722f97228fbdf1bf129ae155",
+    "previousSelectedChain": {
+      "signature": "public.weekly_source_later_change_decide_atomic_v1(jsonb)",
+      "finalRoot": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health_v1.sql",
+      "finalPhysical": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/10_complete_later_change_decide.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/15092026_1534_weekly_source_protected_action_orchestration_v1.sql",
+        "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/10_complete_later_change_decide.sqlinc"
+      ],
+      "predecessors": [
+        "supabase/repeatable/15092026_1534_weekly_source_protected_action_orchestration_v1.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/17102026_0141_weekly_source_later_accept_health_v1.sql"
+      ],
+      "owner": "Health actual Later Accept Source contribution",
+      "healthLaterAcceptReview": "docs/healthroster-build/proposals/source-later-accept-current-successor-20261017/INTEGRATION.md"
+    },
+    "currentSelectedChain": {
+      "signature": "public.weekly_source_later_change_decide_atomic_v1(jsonb)",
+      "finalRoot": "supabase/repeatable/17102026_1525_weekly_source_later_change_reply_int63_v1.sql",
+      "finalPhysical": "supabase/repeatable/17102026_1525_weekly_source_later_change_reply_int63_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/15092026_1534_weekly_source_protected_action_orchestration_v1.sql",
+        "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/10_complete_later_change_decide.sqlinc",
+        "supabase/repeatable/17102026_1525_weekly_source_later_change_reply_int63_v1.sql"
+      ],
+      "predecessors": [
+        "supabase/repeatable/15092026_1534_weekly_source_protected_action_orchestration_v1.sql",
+        "supabase/repeatable/17102026_0141_weekly_source_later_accept_health_v1.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/17102026_1525_weekly_source_later_change_reply_int63_v1.sql"
+      ],
+      "owner": "Health actual Later Accept Source contribution",
+      "healthLaterAcceptReview": "docs/healthroster-build/proposals/source-later-accept-current-successor-20261017/INTEGRATION.md",
+      "healthLaterReplyInt63Review": "docs/healthroster-build/v6-owner-delivery-20261016/LATER_REPLY_INT63_ROOT_SOURCE_MOUNT_20261017.json"
+    },
+    "other1658ChainsByteEquivalent": true
+  },
+  "currentRelease": {
+    "file": "supabase/release/current-release.json",
+    "changed": false,
+    "sha256": "b9b045c6038c46238a8a47945bb201e336ffb8dc0afdee86f9524ece9d29cbe2",
+    "existingMandatoryLaterSecurityVerifierRetained": true
+  },
+  "verification": {
+    "rootReplayedAuthorVerifier": true,
+    "rootReplayedFullPostgres17SQLPLGrammar": true,
+    "rootReplayedActualWorkerTests": 18,
+    "native": "NOT_RUN",
+    "fullJoinedSourceGate": "REQUIRED",
+    "generatedContract": "RESEAL_REQUIRED"
+  },
+  "timingDecision": "Integrate reviewed source before the next genuine auth/source freeze, to avoid changing source pins during a short actual auth window. No TEST install or business execution occurred."
+}

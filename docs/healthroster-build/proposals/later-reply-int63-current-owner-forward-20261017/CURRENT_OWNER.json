@@ -1,0 +1,93 @@
+{
+  "sourceRootCommit": "2d5496c6bea7ce559ca1575e357b2147fd474090",
+  "target": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/10_complete_later_change_decide.sqlinc",
+  "signature": "public.weekly_source_later_change_decide_atomic_v1(jsonb)",
+  "registeredCurrentChain": {
+    "signature": "public.weekly_source_later_change_decide_atomic_v1(jsonb)",
+    "finalRoot": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health_v1.sql",
+    "finalPhysical": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/10_complete_later_change_decide.sqlinc",
+    "allowedPhysical": [
+      "supabase/repeatable/15092026_1534_weekly_source_protected_action_orchestration_v1.sql",
+      "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/10_complete_later_change_decide.sqlinc"
+    ],
+    "predecessors": [
+      "supabase/repeatable/15092026_1534_weekly_source_protected_action_orchestration_v1.sql"
+    ],
+    "finalClosures": [
+      "supabase/repeatable/17102026_0141_weekly_source_later_accept_health_v1.sql"
+    ],
+    "owner": "Health actual Later Accept Source contribution",
+    "healthLaterAcceptReview": "docs/healthroster-build/proposals/source-later-accept-current-successor-20261017/INTEGRATION.md"
+  },
+  "inputs": [
+    {
+      "path": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/10_complete_later_change_decide.sqlinc",
+      "reference": "reference/later.sqlinc",
+      "bytes": 24352,
+      "sha256": "46d1a546f9ec985e6eec27d032f52f04a6518e2ce7bdc15005621042c1bda7d1",
+      "savedIndexHeadHistoricalEqual": true
+    },
+    {
+      "path": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/05_prepare.sqlinc",
+      "reference": "reference/prepare.sqlinc",
+      "bytes": 12059,
+      "sha256": "ef34b837d4bc7d15b2a4e19e3d181d6cac610e07d571bc711295b0d8066ab96b",
+      "savedIndexHeadHistoricalEqual": true
+    },
+    {
+      "path": "broker/src/weekly-source/routes.js",
+      "reference": "reference/routes.js",
+      "bytes": 73121,
+      "sha256": "196fefff89b45583c46ddea1cae5d4d22ea4f02d2f5089899a95e39e2601d9fe",
+      "savedIndexHeadHistoricalEqual": true
+    },
+    {
+      "path": "broker/src/weekly-source/missing-accept.mjs",
+      "reference": "reference/missing-accept.mjs",
+      "bytes": 2377,
+      "sha256": "47860ad7622ec1181501835517c5753f6cf6dd6fd8c73e206d90f9e9e746625d",
+      "savedIndexHeadHistoricalEqual": true
+    },
+    {
+      "path": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/99_acl.sqlinc",
+      "reference": "reference/acl.sqlinc",
+      "bytes": 7204,
+      "sha256": "cadf699aecd2f1aa2af93f37c22cede7c3af55ddadf87e624570d501d519f247",
+      "savedIndexHeadHistoricalEqual": true
+    },
+    {
+      "path": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health_v1.sql",
+      "reference": "reference/root.sql",
+      "bytes": 3198,
+      "sha256": "92e2df484839fb1e3e5665ea3611b1cd322686852bf814197465f03bf3ca26b9",
+      "savedIndexHeadHistoricalEqual": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/source-later-accept-current-successor-20261017/INTEGRATION.md",
+      "reference": "reference/LATER_CONTRACT.md",
+      "bytes": 7048,
+      "sha256": "dc14cfc1ca970a43c5521ef06622978e95c4f4ae6339627ac485467b240b0599",
+      "savedIndexHeadHistoricalEqual": true
+    },
+    {
+      "path": "broker/src/weekly-source/kept-pay-command.mjs",
+      "reference": "reference/kept-pay-command.mjs",
+      "bytes": 4713,
+      "sha256": "0460915380ef38aeff9437164ae93562b924712af996d89c8d880456c4d8c273",
+      "savedIndexHeadHistoricalEqual": true,
+      "purpose": "Actual existing bounded request reader and its unchanged local import"
+    },
+    {
+      "path": "broker/src/weekly-source/push-timing-office.mjs",
+      "reference": "reference/push-timing-office.mjs",
+      "bytes": 8191,
+      "sha256": "afc586c62b4222a01361559b4d7ad2f8532651d8105cd1c3bba5e4bc58bc98aa",
+      "savedIndexHeadHistoricalEqual": true,
+      "purpose": "Actual existing bounded request reader and its unchanged local import"
+    }
+  ],
+  "registryReadOnly": true,
+  "metadataWrites": 0,
+  "newSignatures": 0,
+  "newPrivileges": 0
+}

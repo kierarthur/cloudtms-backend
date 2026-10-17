@@ -27674,20 +27674,23 @@
     },
     {
       "signature": "public.weekly_source_later_change_decide_atomic_v1(jsonb)",
-      "finalRoot": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health_v1.sql",
-      "finalPhysical": "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/10_complete_later_change_decide.sqlinc",
+      "finalRoot": "supabase/repeatable/17102026_1525_weekly_source_later_change_reply_int63_v1.sql",
+      "finalPhysical": "supabase/repeatable/17102026_1525_weekly_source_later_change_reply_int63_v1.sql",
       "allowedPhysical": [
         "supabase/repeatable/15092026_1534_weekly_source_protected_action_orchestration_v1.sql",
-        "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/10_complete_later_change_decide.sqlinc"
+        "supabase/repeatable/17102026_0141_weekly_source_later_accept_health/10_complete_later_change_decide.sqlinc",
+        "supabase/repeatable/17102026_1525_weekly_source_later_change_reply_int63_v1.sql"
       ],
       "predecessors": [
-        "supabase/repeatable/15092026_1534_weekly_source_protected_action_orchestration_v1.sql"
-      ],
-      "finalClosures": [
+        "supabase/repeatable/15092026_1534_weekly_source_protected_action_orchestration_v1.sql",
         "supabase/repeatable/17102026_0141_weekly_source_later_accept_health_v1.sql"
       ],
+      "finalClosures": [
+        "supabase/repeatable/17102026_1525_weekly_source_later_change_reply_int63_v1.sql"
+      ],
       "owner": "Health actual Later Accept Source contribution",
-      "healthLaterAcceptReview": "docs/healthroster-build/proposals/source-later-accept-current-successor-20261017/INTEGRATION.md"
+      "healthLaterAcceptReview": "docs/healthroster-build/proposals/source-later-accept-current-successor-20261017/INTEGRATION.md",
+      "healthLaterReplyInt63Review": "docs/healthroster-build/v6-owner-delivery-20261016/LATER_REPLY_INT63_ROOT_SOURCE_MOUNT_20261017.json"
     },
     {
       "signature": "private.weekly_source_missing_cancel_basis_v1(uuid,uuid,uuid)",

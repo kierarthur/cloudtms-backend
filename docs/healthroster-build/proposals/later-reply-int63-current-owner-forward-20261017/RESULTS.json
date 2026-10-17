@@ -1,0 +1,20 @@
+{
+  "sourceConstruction": "COMPLETE_BOUNDED_PROPOSAL",
+  "mounted": false,
+  "wholeOwnerInverse": "PASS",
+  "currentSavedIndexHeadHistoricalInputs": 9,
+  "completeSQLAndPLGrammar": "PASS_PG17_7",
+  "completeASTChange": "Seven outbound text casts only",
+  "mutationsRefused": 8,
+  "actualCompleteWorkerRouteTests": 18,
+  "workerTestsPassed": 18,
+  "rootMetadataChanges": 0,
+  "schemaObjectsAdded": 0,
+  "signaturesAdded": 0,
+  "privilegesAdded": 0,
+  "globalF23ReleaseGate": "NOT_RUN_FUTURE_MANAGED_INTEGRATION",
+  "native": "NOT_RUN",
+  "API": "NOT_RUN",
+  "Office": "UNCHANGED",
+  "BankSemanticBodyReads": 0
+}
