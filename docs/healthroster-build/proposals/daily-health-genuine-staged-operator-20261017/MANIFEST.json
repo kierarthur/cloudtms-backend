@@ -41,7 +41,7 @@
     {
       "file": "contract.mjs",
       "bytes": 7643,
-      "sha256": "92da72cf00390a629e1cf959db6f2cae30e617c217a7ceca3611b71ce4960d9c"
+      "sha256": "7a9ee854c214ccbc3b8851ceae32dd0bb7ceb5e90aa6f41f44f585d858b2f4db"
     },
     {
       "file": "freeze.mjs",
@@ -586,7 +586,7 @@
     {
       "file": "SOURCE_PINS.json",
       "bytes": 4362,
-      "sha256": "a1e4ff63b5919b7ee2f447dbb952a73eb99adee4c6343cb11ccf8044da910c31"
+      "sha256": "95cd9f9f54ff0f548bf49dba26b4f3304d304bea97cde4de31a74f7ba175946a"
     },
     {
       "file": "source-image.test.mjs",
