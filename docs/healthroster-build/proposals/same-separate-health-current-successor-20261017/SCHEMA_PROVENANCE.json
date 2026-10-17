@@ -1,0 +1,78 @@
+{
+  "checkpoint": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+  "currentCoupledConstraintSource": {
+    "path": "supabase/migrations/13102026_1430_weekly_source_invoice_money_origins.sql",
+    "sha256": "931765daf31387fd5e5de7c9a9f6944ab1bf1c030a6ea7a4b9f2c3f0cc79a40c"
+  },
+  "newColumns": [
+    {
+      "relation": "private.weekly_source_office_row_choices",
+      "column": "pay_effect"
+    },
+    {
+      "relation": "private.weekly_source_office_row_choices",
+      "column": "paid_overlap_target_work_event_id"
+    },
+    {
+      "relation": "private.weekly_source_office_row_choices",
+      "column": "paid_overlap_inputs_json"
+    },
+    {
+      "relation": "private.weekly_source_office_row_choices",
+      "column": "paid_overlap_inputs_sha256"
+    },
+    {
+      "relation": "public.weekly_source_row_resolutions",
+      "column": "pay_effect"
+    },
+    {
+      "relation": "public.weekly_source_row_resolutions",
+      "column": "paid_overlap_choice_id"
+    },
+    {
+      "relation": "public.weekly_source_final_snapshot_lines",
+      "column": "pay_effect"
+    },
+    {
+      "relation": "public.weekly_source_final_snapshot_lines",
+      "column": "paid_overlap_choice_id"
+    },
+    {
+      "relation": "public.weekly_source_billing_movements",
+      "column": "pay_effect"
+    },
+    {
+      "relation": "public.weekly_source_billing_movements",
+      "column": "invoice_only_snapshot_line_id"
+    },
+    {
+      "relation": "public.weekly_source_final_revisions",
+      "column": "paid_overlap_choice_census"
+    },
+    {
+      "relation": "public.weekly_source_state_transitions",
+      "column": "pay_basis_kind"
+    },
+    {
+      "relation": "public.weekly_source_state_transitions",
+      "column": "paid_match_source_rows"
+    }
+  ],
+  "originalSourcePages": [
+    {
+      "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+      "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/one-time/00_complete_paid_choice_fields.sqlinc",
+      "sha256": "f86d0e45fd15513229e95f443ba25c3e6aefc0e59f311337e353662c1689ed65"
+    },
+    {
+      "commit": "c4435202881de34dadba27f308e2c2a2737fd4a2",
+      "path": "docs/healthroster-build/proposals/paid-match-nhsp-correction-scope-prepared-construction-20261015/module/one-time/01_complete_snapshot_origin_constraints.sqlinc",
+      "sha256": "4a1ffa698e0277589e29a1fc028e80e5ed78cffd263f5f5779f3775a5c00afb6"
+    }
+  ],
+  "noNewRelations": true,
+  "oneTimeOnly": true,
+  "native": "NOT_RUN",
+  "catalogue": "NOT_RUN",
+  "rowsRewrittenByTask": 0
+}

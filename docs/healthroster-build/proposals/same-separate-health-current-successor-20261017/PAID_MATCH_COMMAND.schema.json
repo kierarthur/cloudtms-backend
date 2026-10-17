@@ -1,0 +1,420 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Exact paid Same/Separate RECHECK_SOURCE command, verified by validatePaidMatchCommand",
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "action": {
+          "const": "RECHECK_SOURCE"
+        },
+        "payload": {
+          "type": "object",
+          "properties": {
+            "request_id": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
+            },
+            "upload_id": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
+            },
+            "upload_row_id": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
+            },
+            "projection_publication_id": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
+            },
+            "expected_authority_scope_version": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]{0,18}$",
+              "description": "Canonical positive PostgreSQL bigint decimal <= 9223372036854775807. The shared decoder enforces the upper bound without Number conversion."
+            },
+            "expected_row_manifest_hash": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "candidate_id": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
+            },
+            "client_id": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
+            },
+            "contract_id": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
+            },
+            "match_reason": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000,
+              "description": "Trimmed, 1..1000 Unicode code points; shared decoder checks trim and code points."
+            },
+            "pay_effect": {
+              "const": "NONE"
+            },
+            "paid_overlap_target_work_event_id": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
+            },
+            "expected_paid_overlap_inputs_sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "work_event_id": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$",
+              "description": "Exactly equals paid_overlap_target_work_event_id; shared decoder checks equality."
+            }
+          },
+          "required": [
+            "request_id",
+            "upload_id",
+            "upload_row_id",
+            "projection_publication_id",
+            "expected_authority_scope_version",
+            "expected_row_manifest_hash",
+            "candidate_id",
+            "client_id",
+            "contract_id",
+            "match_reason",
+            "pay_effect",
+            "paid_overlap_target_work_event_id",
+            "expected_paid_overlap_inputs_sha256",
+            "work_event_id"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "action",
+        "payload"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "action": {
+          "const": "RECHECK_SOURCE"
+        },
+        "payload": {
+          "type": "object",
+          "properties": {
+            "request_id": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
+            },
+            "upload_id": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
+            },
+            "upload_row_id": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
+            },
+            "projection_publication_id": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
+            },
+            "expected_authority_scope_version": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]{0,18}$",
+              "description": "Canonical positive PostgreSQL bigint decimal <= 9223372036854775807. The shared decoder enforces the upper bound without Number conversion."
+            },
+            "expected_row_manifest_hash": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "candidate_id": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
+            },
+            "client_id": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
+            },
+            "contract_id": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
+            },
+            "match_reason": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000,
+              "description": "Trimmed, 1..1000 Unicode code points; shared decoder checks trim and code points."
+            },
+            "pay_effect": {
+              "const": "NORMAL"
+            },
+            "paid_overlap_target_work_event_id": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
+            },
+            "expected_paid_overlap_inputs_sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "separate_shift": {
+              "const": true
+            }
+          },
+          "required": [
+            "request_id",
+            "upload_id",
+            "upload_row_id",
+            "projection_publication_id",
+            "expected_authority_scope_version",
+            "expected_row_manifest_hash",
+            "candidate_id",
+            "client_id",
+            "contract_id",
+            "match_reason",
+            "pay_effect",
+            "paid_overlap_target_work_event_id",
+            "expected_paid_overlap_inputs_sha256",
+            "separate_shift"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "action",
+        "payload"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "action": {
+          "const": "RECHECK_SOURCE"
+        },
+        "payload": {
+          "type": "object",
+          "properties": {
+            "request_id": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
+            },
+            "upload_id": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
+            },
+            "upload_row_id": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
+            },
+            "projection_publication_id": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
+            },
+            "expected_authority_scope_version": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]{0,18}$",
+              "description": "Canonical positive PostgreSQL bigint decimal <= 9223372036854775807. The shared decoder enforces the upper bound without Number conversion."
+            },
+            "expected_row_manifest_hash": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "candidate_id": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
+            },
+            "client_id": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
+            },
+            "contract_id": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
+            },
+            "match_reason": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000,
+              "description": "Trimmed, 1..1000 Unicode code points; shared decoder checks trim and code points."
+            },
+            "pay_effect": {
+              "const": "NONE"
+            },
+            "paid_overlap_target_work_event_id": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
+            },
+            "expected_paid_overlap_inputs_sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "work_event_id": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$",
+              "description": "Exactly equals paid_overlap_target_work_event_id; shared decoder checks equality."
+            },
+            "correction_session_id": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
+            },
+            "expected_correction_session_version": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]{0,18}$",
+              "description": "Canonical positive PostgreSQL bigint decimal <= 9223372036854775807. The shared decoder enforces the upper bound without Number conversion."
+            },
+            "expected_comparison_manifest_hash": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "expected_issue_set_hash": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          },
+          "required": [
+            "request_id",
+            "upload_id",
+            "upload_row_id",
+            "projection_publication_id",
+            "expected_authority_scope_version",
+            "expected_row_manifest_hash",
+            "candidate_id",
+            "client_id",
+            "contract_id",
+            "match_reason",
+            "pay_effect",
+            "paid_overlap_target_work_event_id",
+            "expected_paid_overlap_inputs_sha256",
+            "work_event_id",
+            "correction_session_id",
+            "expected_correction_session_version",
+            "expected_comparison_manifest_hash",
+            "expected_issue_set_hash"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "action",
+        "payload"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "action": {
+          "const": "RECHECK_SOURCE"
+        },
+        "payload": {
+          "type": "object",
+          "properties": {
+            "request_id": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
+            },
+            "upload_id": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
+            },
+            "upload_row_id": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
+            },
+            "projection_publication_id": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
+            },
+            "expected_authority_scope_version": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]{0,18}$",
+              "description": "Canonical positive PostgreSQL bigint decimal <= 9223372036854775807. The shared decoder enforces the upper bound without Number conversion."
+            },
+            "expected_row_manifest_hash": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "candidate_id": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
+            },
+            "client_id": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
+            },
+            "contract_id": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
+            },
+            "match_reason": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000,
+              "description": "Trimmed, 1..1000 Unicode code points; shared decoder checks trim and code points."
+            },
+            "pay_effect": {
+              "const": "NORMAL"
+            },
+            "paid_overlap_target_work_event_id": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
+            },
+            "expected_paid_overlap_inputs_sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "separate_shift": {
+              "const": true
+            },
+            "correction_session_id": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
+            },
+            "expected_correction_session_version": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]{0,18}$",
+              "description": "Canonical positive PostgreSQL bigint decimal <= 9223372036854775807. The shared decoder enforces the upper bound without Number conversion."
+            },
+            "expected_comparison_manifest_hash": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "expected_issue_set_hash": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          },
+          "required": [
+            "request_id",
+            "upload_id",
+            "upload_row_id",
+            "projection_publication_id",
+            "expected_authority_scope_version",
+            "expected_row_manifest_hash",
+            "candidate_id",
+            "client_id",
+            "contract_id",
+            "match_reason",
+            "pay_effect",
+            "paid_overlap_target_work_event_id",
+            "expected_paid_overlap_inputs_sha256",
+            "separate_shift",
+            "correction_session_id",
+            "expected_correction_session_version",
+            "expected_comparison_manifest_hash",
+            "expected_issue_set_hash"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "action",
+        "payload"
+      ],
+      "additionalProperties": false
+    }
+  ]
+}

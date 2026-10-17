@@ -1,0 +1,42 @@
+{
+  "checkpoint": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+  "pins": [
+    {
+      "candidate": "broker/src/weekly-source/upload-publication-owner.mjs",
+      "sha256": "8fdbb7689053a0377350fbcdef93392443eb03fed0b109288d121b431e88531c"
+    },
+    {
+      "candidate": "broker/src/weekly-source/correct-final-source-orchestrator.mjs",
+      "sha256": "905e51fa2c36587650b6afea2246d6cd5039abda075531a5673e7acb9585a8a5"
+    },
+    {
+      "candidate": "broker/src/weekly-source/off-rule-native-proxy.mjs",
+      "sha256": "c46b57f1b923e57674a13a7d0b2d19a0745bd583257174aea0aecf86d0ac4a0c"
+    },
+    {
+      "candidate": "broker/src/weekly-source/same-separate-command.mjs",
+      "sha256": "b2a67e74a311f3ae43f1f25053a2f5754f68b91df7ac7671b7693187afedd20e"
+    },
+    {
+      "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "path": "tests/weekly-source/weekly-source-upload-publication-owner.test.mjs",
+      "sha256": "43dc140f964d0c23bbf8222e9e13f401745291c31dee1fcc0df22631630fd7a5"
+    },
+    {
+      "commit": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+      "path": "tests/weekly-source/weekly-source-correct-final-source-orchestrator.test.mjs",
+      "sha256": "1b78ef79b1ce0570857ab5bfe5d73882c588a1827fe04484ffddb3d73ab098f4"
+    }
+  ],
+  "counts": {
+    "tests": 40,
+    "pass": 40,
+    "fail": 0,
+    "skipped": 0
+  },
+  "status": 0,
+  "originalRouteOnlyTestExcluded": "Unchanged Office dispatcher test excluded from this candidate-only suite, so no Banking implementation module is imported. Root retains its actual current dispatcher proof.",
+  "fixtureMutations": "In-memory fake unit fixtures only",
+  "native": "NOT_RUN",
+  "dbConnections": 0
+}

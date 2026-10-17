@@ -1,0 +1,101 @@
+create or replace function private.weekly_source_nhsp_price_admission_v1(
+  p_row_resolution_id uuid,p_source_cycle_id uuid
+) returns jsonb language plpgsql stable security definer
+set search_path to 'public','private','pg_catalog','pg_temp' as $function$
+declare v_row record;v_upload public.weekly_source_uploads%rowtype;
+  v_economic public.weekly_source_row_economic_snapshots%rowtype;v_generation integer;
+  v_charge_check public.weekly_source_charge_checks%rowtype;
+  v_charge_acceptance public.weekly_source_charge_acceptances%rowtype;v_price_admission_result text;
+begin
+  select source_row.*,resolution.id as resolution_id,resolution.work_event_id,
+    resolution.candidate_id,resolution.client_id,resolution.contract_id,resolution.generation
+    into strict v_row from public.weekly_source_upload_rows source_row
+    join public.weekly_source_row_resolutions resolution on resolution.upload_row_id=source_row.id
+    where resolution.id=p_row_resolution_id;
+  select * into strict v_upload from public.weekly_source_uploads where id=v_row.upload_id;
+  if v_upload.source_cycle_id is distinct from p_source_cycle_id then
+    raise exception 'WEEKLY_SOURCE_NHSP_PRICE_SCOPE_UNBOUND' using errcode='55000';end if;
+  select * into strict v_economic from public.weekly_source_row_economic_snapshots where id=
+    private.weekly_source_finalisation_economic_assert_v1(v_row.resolution_id,p_source_cycle_id,'NHSP_WEEKLY');
+  v_generation:=v_row.generation;
+      select * into v_charge_check
+      from public.weekly_source_charge_checks charge_check
+      where charge_check.upload_row_id=v_row.id
+        and charge_check.row_resolution_id=v_row.resolution_id
+        and charge_check.generation=v_generation;
+      v_charge_acceptance.id:=null;
+      if found and v_charge_check.comparison_result in ('MISMATCH','ZERO_SOURCE_CHARGE') then
+        select * into v_charge_acceptance
+        from public.weekly_source_charge_acceptances acceptance
+        where acceptance.charge_check_id=v_charge_check.id
+          and acceptance.upload_row_id=v_row.id
+          and acceptance.row_resolution_id=v_row.resolution_id
+          and acceptance.source_upload_id=v_upload.id
+          and acceptance.contract_id=v_row.contract_id
+          and acceptance.acceptance_kind=case v_charge_check.comparison_result
+            when 'ZERO_SOURCE_CHARGE' then 'ACCEPTED_ZERO' else 'ACCEPTED_DISPARITY' end
+          and acceptance.source_upload_hash=v_upload.content_sha256
+          and acceptance.source_row_fingerprint=(select resolution.source_row_fingerprint
+            from public.weekly_source_row_resolutions resolution where resolution.id=v_row.resolution_id)
+          and acceptance.contract_and_rate_fingerprint=v_economic.contract_and_rate_fingerprint
+          and acceptance.effective_policy_fingerprint=v_economic.effective_policy_fingerprint
+          and acceptance.charge_calculation_fingerprint=v_economic.calculation_fingerprint
+          and acceptance.acceptance_policy_fingerprint=
+            private.weekly_source_charge_acceptance_policy_fingerprint_v1();
+      end if;
+      v_price_admission_result:=case v_charge_check.comparison_result
+        when 'ZERO_SOURCE_CHARGE' then 'ACCEPTED_ZERO'
+        when 'MISMATCH' then 'ACCEPTED_DISPARITY'
+        else v_charge_check.comparison_result end;
+      if not found or (select pg_catalog.count(*)
+          from public.weekly_source_charge_checks charge_check
+          where charge_check.upload_row_id=v_row.id
+            and charge_check.row_resolution_id=v_row.resolution_id
+            and charge_check.generation=v_generation)<>1
+         or v_charge_check.source_commission_pence is distinct from v_row.source_commission_pence
+         or v_charge_check.source_total_cost_pence is distinct from v_row.source_total_cost_pence
+         or v_charge_check.source_shift_charge_pence is distinct from v_row.source_shift_charge_pence
+         or v_charge_check.calculated_segment_charge_pence is distinct from v_economic.calculated_charge_pence
+         or v_charge_check.source_charge_difference_pence is distinct from
+              (v_row.source_shift_charge_pence-v_economic.calculated_charge_pence)
+         or v_charge_check.charge_calculation_fingerprint is distinct from
+              v_economic.calculation_fingerprint
+         or v_charge_check.comparison_profile_version<>'NHSP_TWO_COMPONENT_PENCE_V1'
+         or v_charge_check.comparison_result not in (
+              'EXACT','SOURCE_ROUNDING_EQUIVALENT','MISMATCH','ZERO_SOURCE_CHARGE'
+            )
+         or not (
+           (v_charge_check.comparison_result='EXACT'
+             and v_charge_check.source_charge_difference_pence=0)
+           or (v_charge_check.comparison_result='SOURCE_ROUNDING_EQUIVALENT'
+             and v_charge_check.row_sign_kind in ('POSITIVE','FULL_NEGATIVE')
+             and (v_charge_check.source_charge_difference_pence=1
+               or v_charge_check.source_charge_difference_pence=-1)
+             and ((v_charge_check.source_shift_charge_pence>0
+                   and v_charge_check.calculated_segment_charge_pence>0)
+               or (v_charge_check.source_shift_charge_pence<0
+                   and v_charge_check.calculated_segment_charge_pence<0)))
+           or (v_charge_check.comparison_result='MISMATCH'
+             and v_charge_acceptance.id is not null
+             and v_charge_acceptance.acceptance_kind='ACCEPTED_DISPARITY')
+           or (v_charge_check.comparison_result='ZERO_SOURCE_CHARGE'
+             and v_charge_check.source_commission_pence=0
+             and v_charge_check.source_total_cost_pence=0
+             and v_charge_check.source_shift_charge_pence=0
+             and v_charge_check.calculated_segment_charge_pence>0
+             and v_charge_acceptance.id is not null
+             and v_charge_acceptance.acceptance_kind='ACCEPTED_ZERO')
+         )
+         or v_charge_check.row_sign_kind is distinct from (case
+              when v_economic.row_sign=1 then 'POSITIVE' else 'FULL_NEGATIVE' end)
+         or v_charge_check.phase_severity='FINALISATION_BLOCKER'
+         or v_charge_check.blocker_code is not null then
+        raise exception 'WEEKLY_SOURCE_NHSP_PRICE_GATE_FAILED'
+          using errcode='55000',detail=v_row.source_row_ordinal::text;
+      end if;
+  return jsonb_build_object('schema_version','WEEKLY_SOURCE_NHSP_PRICE_ADMISSION_V1',
+    'upload_row_id',v_row.id,'row_resolution_id',v_row.resolution_id,'economic_snapshot_id',v_economic.id,
+    'charge_check',to_jsonb(v_charge_check),'charge_acceptance',to_jsonb(v_charge_acceptance),
+    'price_admission_result',v_price_admission_result);
+end;
+$function$;

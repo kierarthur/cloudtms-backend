@@ -1,0 +1,6 @@
+create or replace function private.weekly_source_nhsp_invoice_only_vector_v1(p_kind text,p_total_pence bigint)
+returns jsonb language sql immutable
+set search_path to 'pg_catalog','pg_temp' as $function$
+  select jsonb_set(private.weekly_source_invoice_only_vector_v1(p_kind,p_total_pence),
+    '{source_mode}',to_jsonb('NHSP_WEEKLY'::text),false);
+$function$;

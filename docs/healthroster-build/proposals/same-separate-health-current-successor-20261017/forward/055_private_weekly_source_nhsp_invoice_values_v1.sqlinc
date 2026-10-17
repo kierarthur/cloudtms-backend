@@ -1,0 +1,35 @@
+create or replace function private.weekly_source_nhsp_invoice_values_v1(
+  p_row_resolution_id uuid,p_source_cycle_id uuid
+) returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare r public.weekly_source_row_resolutions%rowtype;s public.weekly_source_upload_rows%rowtype;
+  u public.weekly_source_uploads%rowtype;e public.weekly_source_row_economic_snapshots%rowtype;
+  admission jsonb;vat jsonb;result jsonb;
+begin
+  select * into strict r from public.weekly_source_row_resolutions where id=p_row_resolution_id;
+  select * into strict s from public.weekly_source_upload_rows where id=r.upload_row_id;
+  select * into strict u from public.weekly_source_uploads where id=s.upload_id;
+  if u.source_cycle_id is distinct from p_source_cycle_id or u.report_scope_id is null
+    or not exists(select 1 from public.weekly_source_report_scopes scope
+      where scope.id=u.report_scope_id and scope.source_cycle_id=u.source_cycle_id
+        and scope.client_id=r.client_id and scope.self_bill_report_id is null)
+    or not exists(select 1 from public.weekly_source_format_profiles profile
+      where profile.id=u.source_format_profile_id and profile.profile_code='NHSP_FINAL_BACKING_V1')
+    or s.row_finalisation_state is distinct from 'SOURCE_WORKED' or s.source_money_parse_state is distinct from 'VALID'
+    or s.source_qualification_profile_version is distinct from 'NHSP_TWO_COMPONENT_PENCE_V1'
+    or s.source_shift_charge_pence is null or s.source_shift_charge_pence<0 then
+    raise exception 'WEEKLY_SOURCE_NHSP_INVOICE_VALUES_SCOPE_UNBOUND' using errcode='55000';end if;
+  admission:=private.weekly_source_nhsp_price_admission_v1(r.id,p_source_cycle_id);
+  select * into strict e from public.weekly_source_row_economic_snapshots where id=(admission->>'economic_snapshot_id')::uuid;
+  if e.row_sign<>1 then raise exception 'WEEKLY_SOURCE_NHSP_INVOICE_VALUES_SIGN_UNBOUND' using errcode='55000';end if;
+  vat:=private.weekly_source_native_line_vat_v1(s.source_shift_charge_pence,e.invoice_vat_chargeable,e.invoice_vat_rate_pct);
+  result:=jsonb_build_object('schema_version','WEEKLY_SOURCE_NHSP_NATIVE_INVOICE_VALUES_V1',
+    'row_resolution_id',r.id,'upload_row_id',s.id,'economic_snapshot_id',e.id,'source_cycle_id',p_source_cycle_id,
+    'source_commission_pence',s.source_commission_pence,'source_total_cost_pence',s.source_total_cost_pence,
+    'source_shift_charge_pence',s.source_shift_charge_pence,'calculated_comparison_charge_pence',e.calculated_charge_pence,
+    'native_price_admission',admission,'native_line_vat',vat,'paid_writer_permission',null);
+  return result||jsonb_build_object('inputs_sha256',encode(private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_SOURCE_NHSP_NATIVE_INVOICE_VALUES_V1',result),'hex'));
+end;
+$function$;

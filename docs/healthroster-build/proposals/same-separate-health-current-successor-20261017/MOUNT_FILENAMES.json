@@ -1,0 +1,4 @@
+{
+  "schema": "supabase/migrations/17102026_0231_weekly_source_paid_same_separate_10_footprint.sql",
+  "repeatable": "supabase/repeatable/17102026_0231_weekly_source_paid_same_separate_health_v1.sql"
+}

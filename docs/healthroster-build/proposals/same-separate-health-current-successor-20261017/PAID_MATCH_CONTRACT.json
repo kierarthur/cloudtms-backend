@@ -1,0 +1,125 @@
+{
+  "checkpoint": "ef64f43909db9811efaf1021d19f2fddc4bd44e6",
+  "sourceOnly": true,
+  "native": "NOT_RUN",
+  "sharedDecoder": {
+    "source": "payload/broker/src/weekly-source/same-separate-command.mjs",
+    "sha256": "b2a67e74a311f3ae43f1f25053a2f5754f68b91df7ac7671b7693187afedd20e",
+    "exports": [
+      "decodePaidMatchQuestion",
+      "validatePaidMatchCommand",
+      "parsePaidMatchCommand",
+      "isPaidMatchCommand",
+      "positivePaidCounter"
+    ],
+    "dependency": "broker/src/weekly-source/push-timing-office.mjs",
+    "closedQuestionKeys": 13,
+    "closedChoiceKeys": 7,
+    "ordinaryPayloadKeys": 14,
+    "correctionPayloadKeys": 18
+  },
+  "schemas": [
+    {
+      "path": "PAID_MATCH_QUESTION.schema.json",
+      "sha256": "a7ac8cbb4eeb999ba15f6dc9b0075ae29207c565fc7c958b1298f47a591466cc"
+    },
+    {
+      "path": "PAID_MATCH_COMMAND.schema.json",
+      "sha256": "edf6da8ad170b31feb636b59f2af852db20364879bc3cc21632852f7b0904a3c"
+    }
+  ],
+  "nativeQuestionProducer": {
+    "source": "forward/026_private_weekly_source_paid_match_question_v1.sqlinc",
+    "sha256": "f4c4e4bd4585951b38d0e0b720b181af5382ad40f07e166fc69203887395096f",
+    "signature": "private.weekly_source_paid_match_question_v1(uuid,uuid,uuid)",
+    "absentQuestion": null,
+    "blocker": "PAID_SHIFT_OVERLAP_CONFIRMATION_REQUIRED",
+    "readyState": "READY",
+    "unavailableState": "UNAVAILABLE",
+    "unavailableReasons": [
+      "WEEKLY_SOURCE_PAID_OVERLAP_SCOPE_UNAVAILABLE",
+      "WEEKLY_SOURCE_PAYMENT_AUTHORISER_REQUIRED",
+      "WEEKLY_SOURCE_PAID_OVERLAP_AUTOMATIC_REKEY",
+      "WEEKLY_SOURCE_PAID_OVERLAP_CONTRACT_NOT_ELIGIBLE",
+      "WEEKLY_SOURCE_PAID_MATCH_QUESTION_TOO_LARGE",
+      "WEEKLY_SOURCE_PAID_OVERLAP_PAID_AUTHORITY_UNAVAILABLE"
+    ]
+  },
+  "ordinaryConsumer": {
+    "source": "forward/037_public_weekly_source_office_workspace_v1.sqlinc",
+    "path": "Existing Work row action.payload.paid_match_question; same action.payload.recheck_payload supplies request/upload/row/publication/currentness fields.",
+    "matchingDisplayFields": [
+      "candidate",
+      "client",
+      "shift",
+      "system_hours"
+    ],
+    "scope": "Genuine current ordinary OPEN cycle or native NHSP report scope; no guessed invoice or paid values."
+  },
+  "correctionConsumer": {
+    "source": "forward/broker/src/weekly-source/correct-final-source-orchestrator.mjs",
+    "path": "paid_match_questions[]",
+    "rowKeys": [
+      "candidate",
+      "client",
+      "shift",
+      "system_hours",
+      "paid_match_question"
+    ],
+    "currentness": "Native owned READY/REVIEWED correction session, exact four correction scope fields and current replacement publication."
+  },
+  "permissions": {
+    "routeAction": "RECHECK_SOURCE",
+    "existingRouteAuthority": "Source administration; existing action check is retained.",
+    "nativeRead": [
+      "VIEW_PAY_WORK",
+      "APPROVE_PROTECTED_PAY",
+      "private.weekly_source_pay_actor_allowed_v1(actor)"
+    ],
+    "nativeWrite": [
+      "APPROVE_PROTECTED_PAY",
+      "private.weekly_source_pay_actor_allowed_v1(actor)"
+    ],
+    "actor": "Injected from authenticated route; actor_user_id is forbidden in browser payload.",
+    "unavailableCopy": "Consumer must use actual reason code and existing shared product copy; no inferred paid label or certificate."
+  },
+  "same": {
+    "pay_effect": "NONE",
+    "variantKey": "work_event_id",
+    "target": "Must equal selected genuine choice.work_event_id and paid_overlap_target_work_event_id.",
+    "allowed": "Selected choice.same_allowed must be true; native rederives contract identity and current paid authority."
+  },
+  "separate": {
+    "pay_effect": "NORMAL",
+    "variantKey": "separate_shift",
+    "variantValue": true,
+    "target": "paid_overlap_target_work_event_id is the genuine comparison target, not the new event identity."
+  },
+  "browserObligations": [
+    "Decode the current genuine question with the shared closed decoder. Do not select the first of multiple choices.",
+    "Retain the exact request UUID and payload for an uncertain transport result; server actor/current scope remain authoritative.",
+    "Revalidate current actor, row, upload, publication and native correction scope before applying a response.",
+    "Treat unavailable or stale native proof as unavailable; do not synthesize READY from historical paid labels.",
+    "Use supplied candidate/client/shift/system_hours display strings. Choices expose only genuine shift tuple, contract ID and same_allowed.",
+    "Keep latest genuine Keep ACK display independent of Same/Separate choice; current public Keep decoder remains unchanged."
+  ],
+  "scalarRules": {
+    "identities": "Non-null lower canonical PostgreSQL UUID strings, unrestricted version bits; nullable question identities only in UNAVAILABLE as declared.",
+    "versions": "Positive canonical decimal strings <= 9223372036854775807; never Number.",
+    "newChoiceIds": "Canonical positive decimal strings in native JSON/audit and C1 Worker consumers.",
+    "hashes": "64 lower hex characters.",
+    "calendar": "Actual date roundtrip, not regex only; no year 0000.",
+    "clock": "HH:MM, 00:00..23:59.",
+    "breakMinutes": "null or safe bounded nonnegative int <=2147483647; existing minute count, not a new bigint."
+  },
+  "implementationRemaining": [
+    "Actual Office Same/Separate dialog and browser interaction tests; Health work, not a Bank policy dependency.",
+    "Independent root mandatory ACL verifier exact 34 private literal additions.",
+    "Latest stable Daily-parent metadata-only successor before root integration."
+  ],
+  "genuineHeld": [
+    "Seven explicitly excluded Bank-owned joins in OWNER_SELECTION.json.",
+    "Four catalogue-dependent native bodies, native/API/race/contract/install proofs."
+  ],
+  "keepABI": "ef64 public Keep 27-field decoder and a34 immutable decisions/latest genuine ACK are unchanged."
+}

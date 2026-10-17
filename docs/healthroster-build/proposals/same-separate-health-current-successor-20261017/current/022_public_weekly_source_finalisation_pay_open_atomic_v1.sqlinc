@@ -1,0 +1,170 @@
+create or replace function public.weekly_source_finalisation_pay_open_atomic_v1(
+  p_request jsonb
+) returns jsonb
+language plpgsql volatile security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+declare
+  v_expected_keys text[]:=array['actor_user_id','final_revision_id','schema_version'];
+  v_actual_keys text[];
+  v_actor uuid;
+  v_revision_id uuid;
+  v_revision public.weekly_source_final_revisions%rowtype;
+  v_cycle public.weekly_source_cycles%rowtype;
+  v_group public.weekly_source_groups%rowtype;
+  v_run public.weekly_source_finalisation_pay_runs%rowtype;
+  v_contexts jsonb;
+  v_task_manifest_hash bytea;
+  v_run_hash bytea;
+  v_task_count integer;
+  v_context record;
+begin
+  if coalesce(
+       pg_catalog.current_setting('request.jwt.claim.role',true),
+       nullif(pg_catalog.current_setting('request.jwt.claims',true),'')::jsonb->>'role',''
+     )<>'service_role' then
+    raise exception 'WEEKLY_SOURCE_SERVICE_ROLE_REQUIRED' using errcode='42501';
+  end if;
+  if pg_catalog.jsonb_typeof(p_request)<>'object' then
+    raise exception 'WEEKLY_SOURCE_FINALISATION_PAY_OPEN_INVALID' using errcode='22023';
+  end if;
+  select pg_catalog.array_agg(key order by key) into v_actual_keys
+  from pg_catalog.jsonb_object_keys(p_request) key;
+  select pg_catalog.array_agg(key order by key) into v_expected_keys
+  from pg_catalog.unnest(v_expected_keys) key;
+  if v_actual_keys is distinct from v_expected_keys
+     or p_request->>'schema_version'<>'WEEKLY_SOURCE_FINALISATION_PAY_OPEN_V1' then
+    raise exception 'WEEKLY_SOURCE_FINALISATION_PAY_OPEN_CONTRACT_INVALID'
+      using errcode='22023';
+  end if;
+  begin
+    v_actor:=(p_request->>'actor_user_id')::uuid;
+    v_revision_id:=(p_request->>'final_revision_id')::uuid;
+  exception when invalid_text_representation then
+    raise exception 'WEEKLY_SOURCE_FINALISATION_PAY_OPEN_INVALID' using errcode='22023';
+  end;
+  perform 1 from public.tms_users actor
+  where actor.id=v_actor and coalesce(actor.is_active,false);
+  if v_actor is null or v_revision_id is null or not found then
+    raise exception 'WEEKLY_SOURCE_FINALISATION_PAY_ACTOR_INVALID' using errcode='42501';
+  end if;
+
+  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(
+    'WEEKLY_SOURCE_FINALISATION_PAY_RUN|'||v_revision_id::text,0
+  ));
+  select * into v_revision
+  from public.weekly_source_final_revisions revision
+  where revision.id=v_revision_id for share;
+  if not found or v_revision.state<>'CURRENT'
+     or v_revision.reason<>'INITIAL_FINALISATION' then
+    raise exception 'WEEKLY_SOURCE_FINALISATION_PAY_REVISION_INVALID'
+      using errcode='55000';
+  end if;
+  select * into strict v_cycle
+  from public.weekly_source_cycles cycle where cycle.id=v_revision.source_cycle_id;
+  select * into strict v_group
+  from public.weekly_source_groups source_group where source_group.id=v_cycle.source_group_id;
+  for v_context in
+    select distinct movement.actual_client_id as client_id
+    from public.weekly_source_billing_movements movement
+    where movement.source_profile_kind<>'SELF_BILL_REPORT' and movement.source_line_kind not in ('SELF_BILL_REPORT_LINE','INVOICE_VAT_ROUNDING','SOURCE_REBILL_LINE','SOURCE_INVOICE_CORRECTION')
+      and movement.final_revision_id=v_revision.id
+    order by movement.actual_client_id
+  loop
+    perform private.weekly_source_office_authority_v1(
+      v_actor,'FINALISE_WEEK',v_group.id,v_context.client_id,
+      v_cycle.finalisation_week_ending
+    );
+  end loop;
+
+  select * into v_run
+  from public.weekly_source_finalisation_pay_runs run_row
+  where run_row.final_revision_id=v_revision.id;
+  if found then
+    if v_run.requested_by_user_id is distinct from v_actor
+       or v_run.final_revision_manifest_hash is distinct from v_revision.manifest_hash then
+      raise exception 'WEEKLY_SOURCE_FINALISATION_PAY_RUN_IDENTITY_CHANGED'
+        using errcode='40001';
+    end if;
+    v_run:=private.weekly_source_finalisation_pay_run_refresh_v1(v_run.id);
+    return private.weekly_source_finalisation_pay_run_json_v1(v_run)
+      ||pg_catalog.jsonb_build_object('idempotent_replay',true);
+  end if;
+
+  select coalesce(pg_catalog.jsonb_agg(context_value order by root_timesheet_id),'[]'::jsonb)
+    into v_contexts
+  from (
+    select roots.root_timesheet_id,
+           private.weekly_source_finalisation_pay_context_v1(
+             v_revision.id,roots.root_timesheet_id
+           ) as context_value
+    from (
+      select distinct movement.invoice_timesheet_id as root_timesheet_id
+      from public.weekly_source_billing_movements movement
+      where movement.source_profile_kind<>'SELF_BILL_REPORT' and movement.source_line_kind not in ('SELF_BILL_REPORT_LINE','INVOICE_VAT_ROUNDING','SOURCE_REBILL_LINE','SOURCE_INVOICE_CORRECTION')
+      and movement.final_revision_id=v_revision.id
+        and movement.invoice_timesheet_id is not null
+    ) roots
+  ) prepared;
+  v_task_count:=pg_catalog.jsonb_array_length(v_contexts);
+  v_task_manifest_hash:=private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_SOURCE_FINALISATION_PAY_TASK_MANIFEST_V1',v_contexts
+  );
+  v_run_hash:=private.weekly_source_sha256_jsonb_v1(
+    'WEEKLY_SOURCE_FINALISATION_PAY_RUN_V1',
+    pg_catalog.jsonb_build_object(
+      'final_revision_id',v_revision.id,
+      'source_cycle_id',v_cycle.id,
+      'requested_by_user_id',v_actor,
+      'final_revision_manifest_hash',pg_catalog.encode(v_revision.manifest_hash,'hex'),
+      'task_manifest_hash',pg_catalog.encode(v_task_manifest_hash,'hex'),
+      'task_count',v_task_count
+    )
+  );
+  insert into public.weekly_source_finalisation_pay_runs(
+    final_revision_id,source_cycle_id,requested_by_user_id,orchestration_key,
+    final_revision_manifest_hash,task_manifest_hash,task_count,
+    terminal_task_count,action_required_task_count,state,run_hash,completed_at_utc
+  ) values (
+    v_revision.id,v_cycle.id,v_actor,'weekly-source-finalisation-pay:'||v_revision.id::text,
+    v_revision.manifest_hash,v_task_manifest_hash,v_task_count,0,0,
+    case when v_task_count=0 then 'COMPLETE' else 'READY' end,v_run_hash,
+    case when v_task_count=0 then pg_catalog.transaction_timestamp() else null end
+  ) returning * into v_run;
+  -- S9 / WB-016: every task carries the Timesheet FAMILY identity and the
+  -- version it was opened against, so a retry, recovery or delayed release
+  -- resolves through the family instead of trusting a stored physical id.  The
+  -- run-level uniqueness is now on the family, not on root_timesheet_id.
+  insert into public.weekly_source_finalisation_pay_tasks(
+    run_id,task_ordinal,client_manifest_id,root_timesheet_id,
+    root_family_booking_id,root_timesheet_version,
+    projection_idempotency_key,prepared_context_json,prepared_context_hash,state
+  )
+  select v_run.id,entry.ordinality::integer,
+         (entry.value->>'client_manifest_id')::uuid,
+         (entry.value->>'root_timesheet_id')::uuid,
+         root_timesheet.booking_id,
+         root_timesheet.version,
+         'weekly-source-finalisation-pay:'||v_revision.id::text||':'||
+           (entry.value->>'root_timesheet_id'),
+         entry.value-(array['prepared_context_hash']::text[]),
+         pg_catalog.decode(entry.value->>'prepared_context_hash','hex'),'READY'
+  from pg_catalog.jsonb_array_elements(v_contexts) with ordinality entry(value,ordinality)
+  join public.timesheets root_timesheet
+    on root_timesheet.timesheet_id=(entry.value->>'root_timesheet_id')::uuid;
+  -- The join above would silently drop a context whose root Timesheet is not
+  -- present, so the manifest count is asserted rather than assumed.
+  if (select pg_catalog.count(*)::integer
+      from public.weekly_source_finalisation_pay_tasks task
+      where task.run_id=v_run.id)<>v_task_count then
+    raise exception 'WEEKLY_SOURCE_FINALISATION_PAY_TASK_MANIFEST_CHANGED'
+      using errcode='55000';
+  end if;
+  return private.weekly_source_finalisation_pay_run_json_v1(v_run)
+    ||pg_catalog.jsonb_build_object('idempotent_replay',false);
+exception
+  when no_data_found or too_many_rows then
+    raise exception 'WEEKLY_SOURCE_FINALISATION_PAY_OPEN_SCOPE_INVALID'
+      using errcode='55000';
+end;
+$function$;

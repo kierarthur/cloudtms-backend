@@ -1,0 +1,31 @@
+-- Actual first footprint only. Existing data is retained with NORMAL defaults.
+-- No old paid-choice proposal or audit namespace is silently adopted.
+do $footprint$
+begin
+  if exists(select 1 from (values
+      ('private.weekly_source_office_row_choices','pay_effect'),
+      ('private.weekly_source_office_row_choices','paid_overlap_target_work_event_id'),
+      ('private.weekly_source_office_row_choices','paid_overlap_inputs_json'),
+      ('private.weekly_source_office_row_choices','paid_overlap_inputs_sha256'),
+      ('public.weekly_source_row_resolutions','pay_effect'),
+      ('public.weekly_source_row_resolutions','paid_overlap_choice_id'),
+      ('public.weekly_source_final_snapshot_lines','pay_effect'),
+      ('public.weekly_source_final_snapshot_lines','paid_overlap_choice_id'),
+      ('public.weekly_source_billing_movements','pay_effect'),
+      ('public.weekly_source_billing_movements','invoice_only_snapshot_line_id'),
+      ('public.weekly_source_final_revisions','paid_overlap_choice_census'),
+      ('public.weekly_source_state_transitions','pay_basis_kind'),
+      ('public.weekly_source_state_transitions','paid_match_source_rows')) expected(relation_name,column_name)
+    join pg_catalog.pg_attribute a on a.attrelid=expected.relation_name::regclass
+      and a.attname=expected.column_name and not a.attisdropped)
+    or exists(select 1 from public.audit_events where action='WEEKLY_SOURCE_PAID_SHIFT_MATCH_CONFIRMED')
+    or exists(select 1 from pg_catalog.pg_trigger where tgname in (
+      'weekly_source_paid_choice_revision_update_guard','weekly_source_paid_choice_revision_delete_guard',
+      'weekly_source_paid_choice_revision_truncate_guard') and not tgisinternal)
+    or pg_catalog.to_regclass('public.weekly_source_payable_snapshot_event_uq') is not null
+    or pg_catalog.to_regclass('public.weekly_source_invoice_only_snapshot_row_uq') is not null
+    or pg_catalog.to_regclass('public.weekly_source_invoice_only_snapshot_movement_uq') is not null then
+    raise exception 'WEEKLY_SOURCE_PAID_MATCH_RESERVED_FOOTPRINT_NOT_EMPTY' using errcode='55000';
+  end if;
+end;
+$footprint$;

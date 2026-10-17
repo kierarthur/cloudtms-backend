@@ -1,0 +1,170 @@
+create or replace function private.weekly_source_invoice_allocation_assert_v1(
+  p_invoice_id uuid
+) returns jsonb
+language plpgsql stable security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+declare
+  v_invoice public.invoices%rowtype;
+  v_line_count integer;
+  v_binding_count integer;
+  v_has_source_header boolean;
+begin
+  select * into v_invoice from public.invoices where id=p_invoice_id;
+  if not found then
+    raise exception 'WEEKLY_SOURCE_INVOICE_NOT_FOUND' using errcode='22023';
+  end if;
+  select pg_catalog.count(*)::integer into v_binding_count
+  from public.weekly_source_invoice_line_bindings binding
+  where binding.invoice_id=p_invoice_id and binding.state='CURRENT';
+  v_has_source_header:=coalesce(
+    v_invoice.header_snapshot_json#>>'{meta,source}'='WEEKLY_FINAL_SOURCE'
+    and v_invoice.header_snapshot_json#>>'{meta,self_bill}'='true',false
+  );
+  if v_binding_count=0 then
+    if not v_has_source_header then
+      return pg_catalog.jsonb_build_object(
+        'ok',true,'is_source_invoice',false,'invoice_id',p_invoice_id
+      );
+    end if;
+    select pg_catalog.count(*)::integer into v_line_count
+    from public.invoice_lines invoice_line where invoice_line.invoice_id=p_invoice_id;
+    if exists(select 1 from public.invoice_lines invoice_line where invoice_line.invoice_id=p_invoice_id
+      and private.weekly_source_invoice_adjustment_line_valid_v1(invoice_line.id,p_invoice_id) is distinct from true) then
+      raise exception 'WEEKLY_SOURCE_INVOICE_EXTRA_LINE' using errcode='55000';
+    end if;
+    if v_invoice.subtotal_ex_vat is distinct from (select round(coalesce(sum(total_charge_ex_vat),0),2) from public.invoice_lines where invoice_id=p_invoice_id)
+      or v_invoice.vat_amount is distinct from (select round(coalesce(sum(vat_amount),0),2) from public.invoice_lines where invoice_id=p_invoice_id)
+      or v_invoice.total_inc_vat is distinct from (select round(coalesce(sum(total_inc_vat),0),2) from public.invoice_lines where invoice_id=p_invoice_id) then
+      raise exception 'WEEKLY_SOURCE_INVOICE_TOTAL_MISMATCH' using errcode='55000';
+    end if;
+    return pg_catalog.jsonb_build_object(
+      'ok',true,'is_source_invoice',true,'invoice_id',p_invoice_id,
+      'line_count',v_line_count,'binding_count',0,'empty',v_line_count=0
+    );
+  end if;
+  if not v_has_source_header then
+    raise exception 'WEEKLY_SOURCE_INVOICE_HEADER_INVALID' using errcode='55000';
+  end if;
+  select pg_catalog.count(*)::integer into v_line_count
+  from public.invoice_lines invoice_line where invoice_line.invoice_id=p_invoice_id;
+
+  if exists(
+    select 1 from public.invoice_lines invoice_line
+    where invoice_line.invoice_id=p_invoice_id
+      and not exists(
+        select 1 from public.weekly_source_invoice_line_bindings binding
+        where binding.invoice_line_id=invoice_line.id
+          and binding.invoice_id=p_invoice_id and binding.state='CURRENT'
+      )
+      and private.weekly_source_invoice_adjustment_line_valid_v1(invoice_line.id,p_invoice_id) is distinct from true
+  ) then
+    raise exception 'WEEKLY_SOURCE_INVOICE_EXTRA_LINE' using errcode='55000';
+  end if;
+
+  perform private.weekly_source_invoice_receipt_projection_assert_v1(p_invoice_id);
+  if exists(
+    select 1
+    from public.weekly_source_invoice_line_bindings binding
+    join public.weekly_source_billing_movements movement
+      on movement.id=binding.billing_movement_id
+    join public.weekly_source_invoice_presentation_lines presentation
+      on presentation.id=binding.presentation_line_id
+    join public.invoice_lines invoice_line on invoice_line.id=binding.invoice_line_id
+    join public.weekly_source_invoice_placements placement
+      on placement.billing_movement_id=movement.id and placement.is_current
+    join public.weekly_source_manifest_movements manifest_movement
+      on manifest_movement.billing_movement_id=movement.id
+    join public.weekly_source_client_manifests manifest
+      on manifest.id=manifest_movement.client_manifest_id
+    where binding.invoice_id=p_invoice_id and binding.state='CURRENT'
+      and (
+        invoice_line.invoice_id is distinct from p_invoice_id
+        or placement.invoice_id is distinct from p_invoice_id
+        or placement.invoice_line_id is distinct from invoice_line.id
+        or placement.placement_state<>'PLACED'
+        or placement.original_automatic_cycle_id is distinct from coalesce(manifest.invoice_window_cycle_id,manifest.source_cycle_id)
+        or private.weekly_source_invoice_movement_window_id_v1(movement.id) is distinct from coalesce(manifest.invoice_window_cycle_id,manifest.source_cycle_id)
+        or binding.client_id is distinct from v_invoice.client_id
+        or movement.actual_client_id is distinct from v_invoice.client_id
+        or presentation.client_id is distinct from v_invoice.client_id
+        or manifest.client_id is distinct from v_invoice.client_id
+        or manifest_movement.movement_hash is distinct from movement.movement_economic_hash
+        or binding.manifest_hash is distinct from manifest.manifest_hash
+        or presentation.client_manifest_id is distinct from manifest.id
+        or presentation.final_revision_id is distinct from movement.final_revision_id
+        or presentation.original_finalisation_cycle_id is distinct from movement.finalisation_cycle_id
+        or invoice_line.timesheet_id is distinct from movement.invoice_timesheet_id
+        or invoice_line.total_pay_ex_vat is distinct from presentation.total_pay_ex_vat
+        or invoice_line.total_charge_ex_vat is distinct from presentation.total_charge_ex_vat
+        or invoice_line.vat_rate_pct is distinct from presentation.vat_rate_pct
+        or invoice_line.vat_amount is distinct from presentation.vat_amount
+        or invoice_line.total_inc_vat is distinct from presentation.total_inc_vat
+        or (presentation.invoice_hold_release_id is not null and (presentation.source_hash is distinct from
+          private.weekly_source_invoice_presentation_source_hash_v1((select array_agg(b.billing_movement_id order by b.billing_movement_id)
+            from public.weekly_source_invoice_line_bindings b where b.presentation_line_id=presentation.id and b.state='CURRENT'),presentation.invoice_hold_release_id)
+          or invoice_line.meta_json->'invoice_hold_release_authority' is distinct from private.weekly_source_invoice_presentation_release_authority_v1(
+            (select array_agg(b.billing_movement_id order by b.billing_movement_id) from public.weekly_source_invoice_line_bindings b
+              where b.presentation_line_id=presentation.id and b.state='CURRENT'),presentation.invoice_hold_release_id)))
+      )
+  ) then
+    raise exception 'WEEKLY_SOURCE_INVOICE_ALLOCATION_MISMATCH' using errcode='55000';
+  end if;
+
+  if exists(
+    select 1
+    from (
+      select binding.invoice_line_id,
+             pg_catalog.count(*)::integer as member_count,
+             pg_catalog.count(distinct movement.correction_unit_id) as correction_count,
+             pg_catalog.count(distinct movement.work_event_id) as event_count,
+             pg_catalog.count(distinct movement.final_revision_id) as revision_count,
+             pg_catalog.count(distinct movement.finalisation_cycle_id) as cycle_count,
+             pg_catalog.count(distinct movement.actual_client_id) as client_count,
+             pg_catalog.count(*) filter(where movement.source_profile_kind='NHSP_TRUST_BACKING_REPORT') as nhsp_count,
+             pg_catalog.array_agg(movement.movement_role order by movement.movement_role) as roles,
+             pg_catalog.min(presentation.correction_role) as correction_role
+      from public.weekly_source_invoice_line_bindings binding
+      join public.weekly_source_billing_movements movement
+        on movement.id=binding.billing_movement_id
+      join public.weekly_source_invoice_presentation_lines presentation
+        on presentation.id=binding.presentation_line_id
+      where binding.invoice_id=p_invoice_id and binding.state='CURRENT'
+      group by binding.invoice_line_id
+    ) grouped
+    where grouped.member_count not in (1,2)
+       or (grouped.member_count=2 and (
+         grouped.correction_count<>1 or grouped.event_count<>1
+         or grouped.revision_count<>1 or grouped.cycle_count<>1
+         or grouped.client_count<>1 or grouped.nhsp_count<>0
+         or grouped.correction_role is distinct from 'NET_DIFFERENCE'
+         or grouped.roles not in (
+           array['REPLACEMENT','REVERSAL']::text[],
+           array['EXPENSE_REPLACEMENT','EXPENSE_REVERSAL']::text[]
+         )
+       ))
+  ) then
+    raise exception 'WEEKLY_SOURCE_INVOICE_NET_CARDINALITY_INVALID' using errcode='55000';
+  end if;
+
+  if v_invoice.subtotal_ex_vat is distinct from (
+       select pg_catalog.round(coalesce(pg_catalog.sum(line.total_charge_ex_vat),0),2)
+       from public.invoice_lines line where line.invoice_id=p_invoice_id
+     )
+     or v_invoice.vat_amount is distinct from (
+       select pg_catalog.round(coalesce(pg_catalog.sum(line.vat_amount),0),2)
+       from public.invoice_lines line where line.invoice_id=p_invoice_id
+     )
+     or v_invoice.total_inc_vat is distinct from (
+       select pg_catalog.round(coalesce(pg_catalog.sum(line.total_inc_vat),0),2)
+       from public.invoice_lines line where line.invoice_id=p_invoice_id
+     ) then
+    raise exception 'WEEKLY_SOURCE_INVOICE_TOTAL_MISMATCH' using errcode='55000';
+  end if;
+
+  return pg_catalog.jsonb_build_object(
+    'ok',true,'is_source_invoice',true,'invoice_id',p_invoice_id,
+    'line_count',v_line_count,'binding_count',v_binding_count
+  );
+end;
+$function$;

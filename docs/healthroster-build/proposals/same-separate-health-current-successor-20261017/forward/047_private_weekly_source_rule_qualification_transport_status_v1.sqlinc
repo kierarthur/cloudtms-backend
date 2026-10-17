@@ -1,0 +1,42 @@
+create or replace function private.weekly_source_rule_qualification_transport_status_v1(p_request jsonb)
+returns jsonb language plpgsql stable security definer set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare req jsonb; parent_scope jsonb; cycle_id uuid; actor uuid; op text; purpose text; result jsonb; claim jsonb;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  if not private.weekly_source_qualification_closed_object_v1(p_request,array['actor_user_id','agency_id','environment','qualification_action','native_operation','native_request'])
+    or p_request->>'qualification_action' is distinct from 'OFF_RULE_TRANSPORT_STATUS' or p_request->>'environment' is distinct from 'TEST'
+    or jsonb_typeof(p_request->'native_request') is distinct from 'object' then
+    raise exception 'WEEKLY_SOURCE_OFF_RULE_TRANSPORT_INVALID' using errcode='22023'; end if;
+  actor:=(p_request->>'actor_user_id')::uuid;op:=p_request->>'native_operation';req:=p_request->'native_request';
+  if op in ('weekly_source_office_recheck_begin_v1','weekly_source_upload_context_v1','weekly_source_upload_stage_begin_atomic_v1','weekly_source_upload_stage_rows_atomic_v1',
+    'weekly_source_upload_seal_atomic_v1','weekly_source_projection_begin_atomic_v1','weekly_source_projection_rows_apply_atomic_v1',
+    'weekly_source_projection_publish_atomic_v1','weekly_source_import_prepare_atomic_v1','weekly_source_finalise_atomic_v1',
+    'weekly_source_finalisation_pay_open_atomic_v1','weekly_source_finalisation_pay_task_start_atomic_v1',
+    'weekly_source_ordinary_pay_projection_apply_atomic_v1','weekly_source_finalisation_pay_task_finish_atomic_v1') then purpose:='SOURCE_FIXTURE_SETUP';
+  elsif op in ('weekly_source_automatic_reconcile_atomic_v1','weekly_exceptional_pay_prepare_action_v1',
+    'weekly_exceptional_pay_action_context_v1','weekly_exceptional_pay_action_publication_status_v1','weekly_exceptional_pay_stage_c1_request_v1','weekly_source_missing_accept_context_v1','weekly_source_missing_accept_prepare_atomic_v1','weekly_source_later_change_decide_atomic_v1') then purpose:='AUTOMATIC_JOURNEY';
+  else raise exception 'WEEKLY_SOURCE_OFF_RULE_TRANSPORT_OPERATION_REFUSED' using errcode='42501'; end if;
+  if (req ? 'actor_user_id' and req->>'actor_user_id' is distinct from actor::text)
+    or (req ? 'p_actor_user_id' and req->>'p_actor_user_id' is distinct from actor::text) then
+    raise exception 'WEEKLY_SOURCE_OFF_RULE_TRANSPORT_ACTOR_REFUSED' using errcode='42501'; end if;
+  parent_scope:=private.weekly_source_off_rule_native_parent_scope_v1(req,actor,null);
+  if parent_scope->>'source_cycle_id' is null or (parent_scope->>'ambiguous')::boolean then
+    if (select count(distinct value) from jsonb_array_elements_text(parent_scope->'observed_cycle_ids') value)>1 then
+      raise exception 'WEEKLY_SOURCE_OFF_RULE_TRANSPORT_SCOPE_CHANGED' using errcode='40001'; end if;
+    for cycle_id in select distinct value::uuid from jsonb_array_elements_text(parent_scope->'observed_cycle_ids') value loop
+      claim:=private.weekly_source_rule_qualification_status_v1(jsonb_build_object('actor_user_id',actor,'agency_id',p_request->>'agency_id',
+        'environment','TEST','qualification_action','OFF_RULE_STATUS','source_cycle_id',cycle_id,'purpose',purpose));
+      if (claim->>'qualified_fixture')::boolean then
+        raise exception 'WEEKLY_SOURCE_OFF_RULE_TRANSPORT_SCOPE_CHANGED' using errcode='40001'; end if;
+    end loop;
+    -- Advisory discovery never admits OFF. In particular an ordinary
+    -- unstaged run has no OFF cycle and retains its actual native response.
+    return jsonb_build_object('contract','WEEKLY_SOURCE_OFF_RULE_TEST_ADMISSION_V1','qualified_fixture',false,'operational_ready',false);
+  end if;
+  cycle_id:=(parent_scope->>'source_cycle_id')::uuid;
+  result:=private.weekly_source_rule_qualification_status_v1(jsonb_build_object('actor_user_id',actor,'agency_id',p_request->>'agency_id',
+    'environment','TEST','qualification_action','OFF_RULE_STATUS','source_cycle_id',cycle_id,'purpose',purpose));
+  return result;
+end;
+$function$;
