@@ -1,0 +1,381 @@
+{
+  "commit": "8c05acdd766eb909db7f73f5cfbfa08b5112b7f3",
+  "prefix": "docs/healthroster-build/proposals/daily-health-actor-r2-forward-20261017/",
+  "manifestSha256": "ac3034ef90e2ea5e41b909e9a6c9f3a8c9987af98fb3312bc85fb65bd56ee332",
+  "files": [
+    {
+      "file": "FORWARD_REVERSE.json",
+      "bytes": 609493,
+      "sha256": "693bf5b3a41d91f9e01f7d9a50927a8ea9c244675416931866b8b77419344963"
+    },
+    {
+      "file": "FORWARD_TEST_RESULTS.json",
+      "bytes": 588,
+      "sha256": "8b0be72693854321b9e5c2b3675d709209a9d45e7feb9a6e7a0eab1c644fa475"
+    },
+    {
+      "file": "PARENT.json",
+      "bytes": 1852,
+      "sha256": "91f86dd3516123a5ae2eaa9f177543d6501b04032e2c08772645a16579101a3d"
+    },
+    {
+      "file": "README.md",
+      "bytes": 3761,
+      "sha256": "92e959524d86e0ef1ffbe89bca99edc013cc3be0bff06a2f5172f6cc2f499f4d"
+    },
+    {
+      "file": "edit-adapter.mjs",
+      "bytes": 6642,
+      "sha256": "4ca1bfd19be70bd522c497d077424e290405ba00fd69eb248885c04ee86e0b4e"
+    },
+    {
+      "file": "evidence/DAILY_ACTOR_NATIVE_R1_HOLD_20261017.json",
+      "bytes": 3840,
+      "sha256": "d30d75d5c58127c15a13243bbfec1142c861576515b0adf77b6681ca6ae2b834"
+    },
+    {
+      "file": "evidence/DAILY_ACTOR_NATIVE_R1_UNCHANGED_RESULT_20261017.json",
+      "bytes": 6467,
+      "sha256": "c93bd3903732059679a62c289d3717f13188230ccbee7dbfa6bf0dac0b5fb76e"
+    },
+    {
+      "file": "evidence/DAILY_ACTOR_R1_READONLY_DEPENDENCY_DIAG_20261017.json",
+      "bytes": 3891,
+      "sha256": "1a140b79364a0d873b03143f9575f64a82dcbe73a2f42b9330b98d2ba1598486"
+    },
+    {
+      "file": "forward.test.mjs",
+      "bytes": 3579,
+      "sha256": "2c0759f0affe6607f5062a760883c9e117f8fc01c33d5add90c30e3f0e3cae39"
+    },
+    {
+      "file": "freeze.mjs",
+      "bytes": 4738,
+      "sha256": "172ada7968ceaf2b398d5e15884f0889619adcfb5391201af2621b6b6e30859d"
+    },
+    {
+      "file": "payload/docs/healthroster-build/proposals/daily-health-actor-native-proof-20261017/ADAPTER_DIFF.patch",
+      "bytes": 115180,
+      "sha256": "25d2c51bbb7c1b760297f2cbde61bbe12cab1a3dc14bf0d87c56c695af1f9805"
+    },
+    {
+      "file": "payload/docs/healthroster-build/proposals/daily-health-actor-native-proof-20261017/COMPOSER_DEPENDENCIES.json",
+      "bytes": 15533,
+      "sha256": "bd2c0740b86168a2089a5db4277e99d0b53e0034e0c1251e2f956cff7d617b4d"
+    },
+    {
+      "file": "payload/docs/healthroster-build/proposals/daily-health-actor-native-proof-20261017/COMPOSER_DEPENDENCIES.md",
+      "bytes": 5325,
+      "sha256": "f723453e08d73553f8f960bc28e030f07e7ebfa4a30639ab735e9835b32cc3c8"
+    },
+    {
+      "file": "payload/docs/healthroster-build/proposals/daily-health-actor-native-proof-20261017/GRAMMAR_RESULTS.json",
+      "bytes": 1313,
+      "sha256": "6dcb075dd5fe667e222fb9d81bbee53183af47e7c437224eb2cc933a025f8739"
+    },
+    {
+      "file": "payload/docs/healthroster-build/proposals/daily-health-actor-native-proof-20261017/MANIFEST.json",
+      "bytes": 6814,
+      "sha256": "d5965f838e252c11c079af2493acb4e05025d4931a7d3006001dbf20d9ad1fb4"
+    },
+    {
+      "file": "payload/docs/healthroster-build/proposals/daily-health-actor-native-proof-20261017/NATIVE_DEPENDENCY_DIAG_R1.json",
+      "bytes": 3891,
+      "sha256": "1a140b79364a0d873b03143f9575f64a82dcbe73a2f42b9330b98d2ba1598486"
+    },
+    {
+      "file": "payload/docs/healthroster-build/proposals/daily-health-actor-native-proof-20261017/OFFLINE_INPUTS.json",
+      "bytes": 97072,
+      "sha256": "a8b3d343fabac28f53677b5b695256b6ab9c48017f255bf5a47e552367f56b9f"
+    },
+    {
+      "file": "payload/docs/healthroster-build/proposals/daily-health-actor-native-proof-20261017/OFFLINE_PROGRAMME.json",
+      "bytes": 20811,
+      "sha256": "130c47539a6fb2d1ab2b43c8230f8ed292cb5c49639cce778cad4a4792f8d6dc"
+    },
+    {
+      "file": "payload/docs/healthroster-build/proposals/daily-health-actor-native-proof-20261017/PROGRAMME.json",
+      "bytes": 740,
+      "sha256": "d8458edcfa2bd7f8a229075de181f9eba87f7c3e5109f54bfa27c77c665646c1"
+    },
+    {
+      "file": "payload/docs/healthroster-build/proposals/daily-health-actor-native-proof-20261017/README.md",
+      "bytes": 11072,
+      "sha256": "9ee7b359c24e54e5bda22035096b628d7970f285a2e57ea1a7eb877306b5b7d9"
+    },
+    {
+      "file": "payload/docs/healthroster-build/proposals/daily-health-actor-native-proof-20261017/REVIEW.json",
+      "bytes": 3637,
+      "sha256": "153f7cbbd7d5f714ae6a2f925254e3d69f7fd242efa349b65dbb9d7fe0547726"
+    },
+    {
+      "file": "payload/docs/healthroster-build/proposals/daily-health-actor-native-proof-20261017/ROOT_SOURCE_FORWARD.json",
+      "bytes": 10951,
+      "sha256": "b669d44309c79d81302dae848de0bc115d8c4afd20fb58a914c7a1b704af9947"
+    },
+    {
+      "file": "payload/docs/healthroster-build/proposals/daily-health-actor-native-proof-20261017/SETUP_ENTRY.md",
+      "bytes": 7564,
+      "sha256": "9346db720135b2f928d890d619f718a7f549c30eb24b01e031f8a7317fbc26c2"
+    },
+    {
+      "file": "payload/docs/healthroster-build/proposals/daily-health-actor-native-proof-20261017/SOURCE_MANIFEST.json",
+      "bytes": 1498,
+      "sha256": "01e06c87f94bf77e8a3bf4117133053c3d5323c6822501b1cd52a538259fa6b7"
+    },
+    {
+      "file": "payload/docs/healthroster-build/proposals/daily-health-actor-native-proof-20261017/SOURCE_PINS.json",
+      "bytes": 20797,
+      "sha256": "21144bb7647c4ff3d764ae09d23366c6bf21f637392c386481f06b1f1611fb7d"
+    },
+    {
+      "file": "payload/docs/healthroster-build/proposals/daily-health-actor-native-proof-20261017/SOURCE_TRANSFERS.json",
+      "bytes": 4852,
+      "sha256": "fa9aa976a8dc9e33ee27037c27029ddae407643408e4e82d03ac34e47e65638b"
+    },
+    {
+      "file": "payload/docs/healthroster-build/proposals/daily-health-actor-native-proof-20261017/TEST_RESULTS.json",
+      "bytes": 11670,
+      "sha256": "0d5dfe2fdb9c18e24368f21222b5cb46761fd161f05f9b1831ae83beaaecfc5a"
+    },
+    {
+      "file": "payload/docs/healthroster-build/proposals/daily-health-actor-native-proof-20261017/build-program.mjs",
+      "bytes": 16157,
+      "sha256": "cbb099f9e238252933204d73da78d792d1afd140aa86fb2d2feb22203e828cae"
+    },
+    {
+      "file": "payload/docs/healthroster-build/proposals/daily-health-actor-native-proof-20261017/control.mjs",
+      "bytes": 3227,
+      "sha256": "1d7fa008cd0945eba92b301d55fcc96be17fff7ffa115f55120b418be5c99ab8"
+    },
+    {
+      "file": "payload/docs/healthroster-build/proposals/daily-health-actor-native-proof-20261017/fixed-metadata-reader.mjs",
+      "bytes": 12484,
+      "sha256": "8713d13168b49d046f8d85b91352143ccfe283cc04682702366074dc30eaad34"
+    },
+    {
+      "file": "payload/docs/healthroster-build/proposals/daily-health-actor-native-proof-20261017/freeze-source.mjs",
+      "bytes": 4947,
+      "sha256": "4de1cede19b234d3bb0ec620aa3a29f367f3d470a468f10652fe7dcadfaa0da5"
+    },
+    {
+      "file": "payload/docs/healthroster-build/proposals/daily-health-actor-native-proof-20261017/grammar.py",
+      "bytes": 1923,
+      "sha256": "67abbac3a52cbb52ca63de31bc913327b5a16eb016f0fce656b43ce0e2d71738"
+    },
+    {
+      "file": "payload/docs/healthroster-build/proposals/daily-health-actor-native-proof-20261017/hold-actor.mjs",
+      "bytes": 8537,
+      "sha256": "be3f798a7521bdfc7a36fd370595a513807364f40b82de81def0c23aa504d4a2"
+    },
+    {
+      "file": "payload/docs/healthroster-build/proposals/daily-health-actor-native-proof-20261017/input-builder.mjs",
+      "bytes": 7397,
+      "sha256": "43bd23352aa8f8b25b38f58a4e9c9fdb563f75ab000b13653976e57dfe426470"
+    },
+    {
+      "file": "payload/docs/healthroster-build/proposals/daily-health-actor-native-proof-20261017/prepare-offline.mjs",
+      "bytes": 1729,
+      "sha256": "7d8672557b9f0e1eac9bfd3289c8fbbff0ffc580edb2090de29abb4bc1e88d54"
+    },
+    {
+      "file": "payload/docs/healthroster-build/proposals/daily-health-actor-native-proof-20261017/programme-test.mjs",
+      "bytes": 5571,
+      "sha256": "a55207bbe8ce9c85471e8c7410d5983e1fdf53e2bd9f930714f9d50245b94134"
+    },
+    {
+      "file": "payload/docs/healthroster-build/proposals/daily-health-actor-native-proof-20261017/reference/pure/control.mjs",
+      "bytes": 3225,
+      "sha256": "7d12027e918efa6d1d452e8c2de644bd35e974fb01f081f4adb81dfe83f94da9"
+    },
+    {
+      "file": "payload/docs/healthroster-build/proposals/daily-health-actor-native-proof-20261017/reference/pure/fixed-metadata-reader.mjs",
+      "bytes": 12270,
+      "sha256": "ed641533595b6a04b82f027183b82d2fc9b9a03c674bb2db6c294f52ff4f4173"
+    },
+    {
+      "file": "payload/docs/healthroster-build/proposals/daily-health-actor-native-proof-20261017/reference/pure/grammar.py",
+      "bytes": 1824,
+      "sha256": "3a4cca3471032f7c2158ae93609037d6dcc8508832fec7c1be24038314d825e2"
+    },
+    {
+      "file": "payload/docs/healthroster-build/proposals/daily-health-actor-native-proof-20261017/reference/pure/hold-pure.mjs",
+      "bytes": 8328,
+      "sha256": "3a1d5346f32669f76938386bb2260372109673dc1c654de15a78e6439b1dda5f"
+    },
+    {
+      "file": "payload/docs/healthroster-build/proposals/daily-health-actor-native-proof-20261017/reference/pure/input-builder.mjs",
+      "bytes": 6914,
+      "sha256": "930ccc5a393a499b0f8a7ee9c752178b80ee35acd7c83df9bcc333b70475c47a"
+    },
+    {
+      "file": "payload/docs/healthroster-build/proposals/daily-health-actor-native-proof-20261017/reference/pure/prepare-offline.mjs",
+      "bytes": 1694,
+      "sha256": "15157d3ca1760cdc788fcbd86413d77914e3bd5b83f640a350f13caa4b18336c"
+    },
+    {
+      "file": "payload/docs/healthroster-build/proposals/daily-health-actor-native-proof-20261017/reference/pure/result-validator.mjs",
+      "bytes": 11297,
+      "sha256": "a95635e396281a0d2d51c160097c9a174eb5d98d25ae35dcd8df846f6d3d13a0"
+    },
+    {
+      "file": "payload/docs/healthroster-build/proposals/daily-health-actor-native-proof-20261017/reference/pure/source.mjs",
+      "bytes": 6267,
+      "sha256": "26884004baae754df196c8efd34fd19f3234ec82909f184362a34c7a31d84e13"
+    },
+    {
+      "file": "payload/docs/healthroster-build/proposals/daily-health-actor-native-proof-20261017/reference/pure/timing.mjs",
+      "bytes": 1308,
+      "sha256": "db5a330bd11c4f1d1c5c23d68b1ec297f5503d21a86be0863f633f997f51531c"
+    },
+    {
+      "file": "payload/docs/healthroster-build/proposals/daily-health-actor-native-proof-20261017/reference/root/off-rule-native-proxy.after.mjs",
+      "bytes": 3851,
+      "sha256": "c46b57f1b923e57674a13a7d0b2d19a0745bd583257174aea0aecf86d0ac4a0c"
+    },
+    {
+      "file": "payload/docs/healthroster-build/proposals/daily-health-actor-native-proof-20261017/reference/root/off-rule-native-proxy.before.mjs",
+      "bytes": 3685,
+      "sha256": "4606dc7e262d1870c548f7382a259ffb48a0d06729fa4b8adbcf184495b3cdef"
+    },
+    {
+      "file": "payload/docs/healthroster-build/proposals/daily-health-actor-native-proof-20261017/result-validator.mjs",
+      "bytes": 12734,
+      "sha256": "f767ea0db172c3a310b463a5d7449a18c6f51430af4043bb23b85d8447d2b3ad"
+    },
+    {
+      "file": "payload/docs/healthroster-build/proposals/daily-health-actor-native-proof-20261017/seal.mjs",
+      "bytes": 3330,
+      "sha256": "917b2070f3e8417386cc9822e3846193b1116295543eae6089a6ea4901f18ddd"
+    },
+    {
+      "file": "payload/docs/healthroster-build/proposals/daily-health-actor-native-proof-20261017/source.mjs",
+      "bytes": 6912,
+      "sha256": "36237090e24f43b92e1f4cb8364c6c5f39200685cf35afd6300c47f7232986a0"
+    },
+    {
+      "file": "payload/docs/healthroster-build/proposals/daily-health-actor-native-proof-20261017/test.mjs",
+      "bytes": 13656,
+      "sha256": "11921bdeb74d2e1ad5295b61298762574f4f0bd57a23a9a54eecaa6f6161ae18"
+    },
+    {
+      "file": "payload/docs/healthroster-build/proposals/daily-health-actor-native-proof-20261017/timing.mjs",
+      "bytes": 1313,
+      "sha256": "0cc645a9c17fc5340b04adfc7ad79b6f134d655f3d1a959dc6baa526b44b19c9"
+    },
+    {
+      "file": "prepare.mjs",
+      "bytes": 3723,
+      "sha256": "15c7dd01a1e8c491cea344095e1ab90cf7d317be2e798db9afd13903f95a0c0d"
+    },
+    {
+      "file": "reference/r1/ADAPTER_DIFF.patch",
+      "bytes": 111894,
+      "sha256": "225a2cc28f296e1b6582969bfdc475e0fb00ab83308fc9d40ae7056abce36a7e"
+    },
+    {
+      "file": "reference/r1/COMPOSER_DEPENDENCIES.json",
+      "bytes": 15533,
+      "sha256": "9c1bee4642508691e7f88f5cb2aa01be6bb06f0ce5963e961d546c6e04225d3f"
+    },
+    {
+      "file": "reference/r1/MANIFEST.json",
+      "bytes": 6649,
+      "sha256": "85e037e51a365f146406cd98b5630f494163e37345ac6de2d452d23d5a9ef5d9"
+    },
+    {
+      "file": "reference/r1/OFFLINE_INPUTS.json",
+      "bytes": 98174,
+      "sha256": "fcbe68cf8c507e84eedfd40cc69f9f52c33676f5c3cce1f2ea42e760785a5de1"
+    },
+    {
+      "file": "reference/r1/OFFLINE_PROGRAMME.json",
+      "bytes": 21322,
+      "sha256": "b59e9592d99e3b0b7cb5d82da9d4ab95dacd14a786b937c8bc5891c9d527a1e4"
+    },
+    {
+      "file": "reference/r1/PROGRAMME.json",
+      "bytes": 700,
+      "sha256": "1668a2747fd460891f5ce17da42e51db5217b7ec739a5ab03739bee923069717"
+    },
+    {
+      "file": "reference/r1/README.md",
+      "bytes": 10736,
+      "sha256": "a4ccef5049c6fe937935e11cfb8ce5c2607e436f4176b608cecd18a217785deb"
+    },
+    {
+      "file": "reference/r1/REVIEW.json",
+      "bytes": 3533,
+      "sha256": "f1e24088bbd529e2a6deb0aadd30c63706583e0aa3a59ebbb571da7adcb615b6"
+    },
+    {
+      "file": "reference/r1/ROOT_SOURCE_FORWARD.json",
+      "bytes": 10763,
+      "sha256": "e14b9b950c1f49014c60ac3ed8687e1eb8d00a64cb624676ef57b4d198815a04"
+    },
+    {
+      "file": "reference/r1/SETUP_ENTRY.md",
+      "bytes": 6977,
+      "sha256": "9604ad0a836eccea6d5ccb80b7244e9ed88c91114e09d031611c37c3729fae37"
+    },
+    {
+      "file": "reference/r1/SOURCE_MANIFEST.json",
+      "bytes": 1354,
+      "sha256": "47f505cc43ae99b25d0e7f12c1db76e75b0ea2e60da5b547424c86720f6b1441"
+    },
+    {
+      "file": "reference/r1/SOURCE_PINS.json",
+      "bytes": 19901,
+      "sha256": "f0601a9308651e40c3490d298d402258588023562ffcdd6777534b4bb2205ac3"
+    },
+    {
+      "file": "reference/r1/SOURCE_TRANSFERS.json",
+      "bytes": 4852,
+      "sha256": "a2b131353013c1d0e98d3f60448d302edbb359c7ab603a9ef0a8191a09b09c29"
+    },
+    {
+      "file": "reference/r1/TEST_RESULTS.json",
+      "bytes": 11366,
+      "sha256": "3c798c35b255403fd9a993cc8f907f16b08133f33d1319245782117233e039c8"
+    },
+    {
+      "file": "reference/r1/build-program.mjs",
+      "bytes": 14587,
+      "sha256": "643b6fc1010c588358982644251da48b419b72bb711a89f6e19e25de20c2b141"
+    },
+    {
+      "file": "reference/r1/freeze-source.mjs",
+      "bytes": 4737,
+      "sha256": "72ea57e4a45c5822c7a909063aeb147fa2ad928a42c78517f1af60e554f51b2f"
+    },
+    {
+      "file": "reference/r1/programme-test.mjs",
+      "bytes": 5597,
+      "sha256": "65b71b4f8a2fde11ad4fb905fe1412a3dd64ec20a62a74f0db91f218c180ffb9"
+    },
+    {
+      "file": "reference/r1/result-validator.mjs",
+      "bytes": 12625,
+      "sha256": "dcf8321c0a30c686381a5cc098a7ce61378d2bc96ba14df290782b934a8304cc"
+    },
+    {
+      "file": "reference/r1/source.mjs",
+      "bytes": 6831,
+      "sha256": "93a228812d25b13c70b80487518a04c1355e2235e318bff0bda1f74cc063b50a"
+    },
+    {
+      "file": "reference/r1/test.mjs",
+      "bytes": 13386,
+      "sha256": "7874b6db73fb433cd48de4cd84f77271b853053488eaab7995b3347e7d2fe3c7"
+    },
+    {
+      "file": "MANIFEST.json",
+      "bytes": 15450,
+      "sha256": "ac3034ef90e2ea5e41b909e9a6c9f3a8c9987af98fb3312bc85fb65bd56ee332"
+    }
+  ],
+  "dbConnections": 0,
+  "rootWrites": 0,
+  "sourceOnly": true,
+  "native": "NOT_RUN"
+}

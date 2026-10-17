@@ -1,0 +1,61 @@
+{
+  "groups": [
+    {
+      "name": "actual-revised-actor-and-programme",
+      "tests": 17,
+      "passed": 17,
+      "failed": 0,
+      "pins": [
+        {
+          "file": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-v2-money-build-13102026\\docs\\healthroster-build\\proposals\\daily-health-actor-r2-independent-peer-20261017\\reference\\r2\\payload\\docs\\healthroster-build\\proposals\\daily-health-actor-native-proof-20261017\\test.mjs",
+          "sha256": "11921bdeb74d2e1ad5295b61298762574f4f0bd57a23a9a54eecaa6f6161ae18"
+        },
+        {
+          "file": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-v2-money-build-13102026\\docs\\healthroster-build\\proposals\\daily-health-actor-r2-independent-peer-20261017\\reference\\r2\\payload\\docs\\healthroster-build\\proposals\\daily-health-actor-native-proof-20261017\\programme-test.mjs",
+          "sha256": "a55207bbe8ce9c85471e8c7410d5983e1fdf53e2bd9f930714f9d50245b94134"
+        }
+      ]
+    },
+    {
+      "name": "five-raw-source-negatives",
+      "tests": 5,
+      "passed": 5,
+      "failed": 0,
+      "pins": [
+        {
+          "file": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-v2-money-build-13102026\\docs\\healthroster-build\\proposals\\daily-health-actor-r2-independent-peer-20261017\\reference\\r2\\forward.test.mjs",
+          "sha256": "2c0759f0affe6607f5062a760883c9e117f8fc01c33d5add90c30e3f0e3cae39"
+        }
+      ]
+    },
+    {
+      "name": "original-restoration-and-turn",
+      "tests": 76,
+      "passed": 76,
+      "failed": 0,
+      "pins": [
+        {
+          "file": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\tests\\healthroster-turn-control.test.mjs",
+          "sha256": "794d6c0d0f7dfbc0f83c06c44f32171b7fcd446b6ad00f08a197815309fe01af"
+        },
+        {
+          "file": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\tests\\healthroster-rehearsal-turn.test.mjs",
+          "sha256": "bb065d939561693588f5e68096a41295979f3650cc81dc880450f8004c858fb7"
+        },
+        {
+          "file": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\tests\\healthroster-live-test-restoration.test.mjs",
+          "sha256": "701dd1d9b0bba0b18c451446089268a48eb722f3455c0718bc26b12912a356bc"
+        },
+        {
+          "file": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\tests\\healthroster-install1-full-rehearsal.test.mjs",
+          "sha256": "96ef1cb24b109db7e1d3b2f517ac70a0ff3ee02e820a51ae470eb8b73efad371"
+        }
+      ]
+    }
+  ],
+  "passed": 98,
+  "failed": 0,
+  "rootWrites": 0,
+  "dbConnections": 0,
+  "native": "NOT_RUN"
+}

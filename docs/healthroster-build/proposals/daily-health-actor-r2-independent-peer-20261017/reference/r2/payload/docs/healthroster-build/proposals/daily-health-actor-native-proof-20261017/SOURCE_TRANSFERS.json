@@ -1,0 +1,93 @@
+{
+  "version": "DAILY_ACTOR_FULL_PARENT_TRANSFERS_V1",
+  "parentCommit": "b5809c06b2e6c6e8ad4c671a8bbee647cac44729",
+  "files": [
+    {
+      "file": "source.mjs",
+      "parentCommit": "b5809c06b2e6c6e8ad4c671a8bbee647cac44729",
+      "parentPath": "docs/healthroster-build/proposals/daily-health-pure-rollback-adapter-20261017/source.mjs",
+      "completeParent": "reference/pure/source.mjs",
+      "inputSha256": "26884004baae754df196c8efd34fd19f3234ec82909f184362a34c7a31d84e13",
+      "outputSha256": "36237090e24f43b92e1f4cb8364c6c5f39200685cf35afd6300c47f7232986a0",
+      "fullLiteralReverse": true
+    },
+    {
+      "file": "input-builder.mjs",
+      "parentCommit": "b5809c06b2e6c6e8ad4c671a8bbee647cac44729",
+      "parentPath": "docs/healthroster-build/proposals/daily-health-pure-rollback-adapter-20261017/input-builder.mjs",
+      "completeParent": "reference/pure/input-builder.mjs",
+      "inputSha256": "930ccc5a393a499b0f8a7ee9c752178b80ee35acd7c83df9bcc333b70475c47a",
+      "outputSha256": "43bd23352aa8f8b25b38f58a4e9c9fdb563f75ab000b13653976e57dfe426470",
+      "fullLiteralReverse": true
+    },
+    {
+      "file": "fixed-metadata-reader.mjs",
+      "parentCommit": "b5809c06b2e6c6e8ad4c671a8bbee647cac44729",
+      "parentPath": "docs/healthroster-build/proposals/daily-health-pure-rollback-adapter-20261017/fixed-metadata-reader.mjs",
+      "completeParent": "reference/pure/fixed-metadata-reader.mjs",
+      "inputSha256": "ed641533595b6a04b82f027183b82d2fc9b9a03c674bb2db6c294f52ff4f4173",
+      "outputSha256": "8713d13168b49d046f8d85b91352143ccfe283cc04682702366074dc30eaad34",
+      "fullLiteralReverse": true
+    },
+    {
+      "file": "control.mjs",
+      "parentCommit": "b5809c06b2e6c6e8ad4c671a8bbee647cac44729",
+      "parentPath": "docs/healthroster-build/proposals/daily-health-pure-rollback-adapter-20261017/control.mjs",
+      "completeParent": "reference/pure/control.mjs",
+      "inputSha256": "7d12027e918efa6d1d452e8c2de644bd35e974fb01f081f4adb81dfe83f94da9",
+      "outputSha256": "1d7fa008cd0945eba92b301d55fcc96be17fff7ffa115f55120b418be5c99ab8",
+      "fullLiteralReverse": true
+    },
+    {
+      "file": "timing.mjs",
+      "parentCommit": "b5809c06b2e6c6e8ad4c671a8bbee647cac44729",
+      "parentPath": "docs/healthroster-build/proposals/daily-health-pure-rollback-adapter-20261017/timing.mjs",
+      "completeParent": "reference/pure/timing.mjs",
+      "inputSha256": "db5a330bd11c4f1d1c5c23d68b1ec297f5503d21a86be0863f633f997f51531c",
+      "outputSha256": "0cc645a9c17fc5340b04adfc7ad79b6f134d655f3d1a959dc6baa526b44b19c9",
+      "fullLiteralReverse": true
+    },
+    {
+      "file": "result-validator.mjs",
+      "parentCommit": "b5809c06b2e6c6e8ad4c671a8bbee647cac44729",
+      "parentPath": "docs/healthroster-build/proposals/daily-health-pure-rollback-adapter-20261017/result-validator.mjs",
+      "completeParent": "reference/pure/result-validator.mjs",
+      "inputSha256": "a95635e396281a0d2d51c160097c9a174eb5d98d25ae35dcd8df846f6d3d13a0",
+      "outputSha256": "f767ea0db172c3a310b463a5d7449a18c6f51430af4043bb23b85d8447d2b3ad",
+      "fullLiteralReverse": true
+    },
+    {
+      "file": "hold-actor.mjs",
+      "parentCommit": "b5809c06b2e6c6e8ad4c671a8bbee647cac44729",
+      "parentPath": "docs/healthroster-build/proposals/daily-health-pure-rollback-adapter-20261017/hold-pure.mjs",
+      "completeParent": "reference/pure/hold-pure.mjs",
+      "inputSha256": "3a1d5346f32669f76938386bb2260372109673dc1c654de15a78e6439b1dda5f",
+      "outputSha256": "be3f798a7521bdfc7a36fd370595a513807364f40b82de81def0c23aa504d4a2",
+      "fullLiteralReverse": true
+    },
+    {
+      "file": "prepare-offline.mjs",
+      "parentCommit": "b5809c06b2e6c6e8ad4c671a8bbee647cac44729",
+      "parentPath": "docs/healthroster-build/proposals/daily-health-pure-rollback-adapter-20261017/prepare-offline.mjs",
+      "completeParent": "reference/pure/prepare-offline.mjs",
+      "inputSha256": "15157d3ca1760cdc788fcbd86413d77914e3bd5b83f640a350f13caa4b18336c",
+      "outputSha256": "7d8672557b9f0e1eac9bfd3289c8fbbff0ffc580edb2090de29abb4bc1e88d54",
+      "fullLiteralReverse": true
+    },
+    {
+      "file": "grammar.py",
+      "parentCommit": "b5809c06b2e6c6e8ad4c671a8bbee647cac44729",
+      "parentPath": "docs/healthroster-build/proposals/daily-health-pure-rollback-adapter-20261017/grammar.py",
+      "completeParent": "reference/pure/grammar.py",
+      "inputSha256": "3a4cca3471032f7c2158ae93609037d6dcc8508832fec7c1be24038314d825e2",
+      "outputSha256": "67abbac3a52cbb52ca63de31bc913327b5a16eb016f0fce656b43ce0e2d71738",
+      "fullLiteralReverse": true
+    }
+  ],
+  "unchangedOriginalWeakMap": true,
+  "fullCanonicalCatalogueLedgerPreserved": true,
+  "completeUsersAndBothBackgroundRelations": true,
+  "budgetsChanged": false,
+  "originalPureHistoryRetained": true,
+  "native": "NOT_RUN"
+}

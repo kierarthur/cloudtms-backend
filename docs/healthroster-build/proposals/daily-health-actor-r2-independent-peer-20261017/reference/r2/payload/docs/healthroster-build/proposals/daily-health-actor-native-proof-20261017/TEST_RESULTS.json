@@ -1,0 +1,172 @@
+{
+  "version": "DAILY_ACTOR_R2_OFFLINE_BOUNDARY_TESTS_V1",
+  "rootCommit": "e9b7d0992d8f4c14b1da2eedb9050c0b9c7083c6",
+  "groups": [
+    {
+      "name": "ACTOR_R2_SOURCE_AND_SYNTHETIC_BOUNDARY",
+      "command": [
+        "node",
+        "--test",
+        "--test-reporter=tap",
+        "docs/healthroster-build/proposals/daily-health-actor-r2-forward-20261017/payload/docs/healthroster-build/proposals/daily-health-actor-native-proof-20261017/test.mjs",
+        "docs/healthroster-build/proposals/daily-health-actor-r2-forward-20261017/payload/docs/healthroster-build/proposals/daily-health-actor-native-proof-20261017/programme-test.mjs"
+      ],
+      "counts": {
+        "tests": 17,
+        "pass": 17,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0
+      },
+      "sourceFiles": [
+        {
+          "file": "docs/healthroster-build/proposals/daily-health-actor-r2-forward-20261017/payload/docs/healthroster-build/proposals/daily-health-actor-native-proof-20261017/test.mjs",
+          "sha256": "11921bdeb74d2e1ad5295b61298762574f4f0bd57a23a9a54eecaa6f6161ae18"
+        },
+        {
+          "file": "docs/healthroster-build/proposals/daily-health-actor-r2-forward-20261017/payload/docs/healthroster-build/proposals/daily-health-actor-native-proof-20261017/programme-test.mjs",
+          "sha256": "a55207bbe8ce9c85471e8c7410d5983e1fdf53e2bd9f930714f9d50245b94134"
+        }
+      ],
+      "tests": [
+        "source programme equals frozen hash/counts and only one complete genuine actor definition",
+        "caller cannot add SQL, fixture identity or root path to the finite programme",
+        "native row store, genuine WP-PP, touch trigger and full owner/RLS boundaries are required before insertion",
+        "private effective ACL uses genuine catalogue checks without unsupported SET ROLE",
+        "golden invariant remains native and all state transitions affect only fixture001",
+        "actor result retains explicit unsupported-path holds and zero financial/queue effects",
+        "exact complete one-helper actor programme, six native users and closed store boundary",
+        "namespace and physical input are closed, no arbitrary SQL or user fixture selection",
+        "entire existing actor body copied byte-for-byte in gate canonical form",
+        "20-statement finite B includes native observations, real marker and four fresh checks",
+        "closed response admits genuine pooled MCP PID shape and actual asserted counts only",
+        "strict SELECT counts and closed per-index command/null ABI refuse invented success",
+        "whole original canonical SQL includes complete users plus both backgrounds and genuine third C-after proof",
+        "distinct C-after remains mandatory; missing users scope and reused C-after refuse",
+        "original WeakMap qualification succeeds only for its exact bound synthetic snapshots",
+        "bounded capture, protocol and deadlines retain original limits and reject raw-map output",
+        "holder rejects authorization before connecting and wrong root independent of mount location"
+      ],
+      "native": "NOT_RUN"
+    },
+    {
+      "name": "ORIGINAL_UNCHANGED_RESTORATION_TURN_SOURCE_TESTS",
+      "command": [
+        "node",
+        "--test",
+        "--test-reporter=tap",
+        "tests/healthroster-turn-control.test.mjs",
+        "tests/healthroster-rehearsal-turn.test.mjs",
+        "tests/healthroster-live-test-restoration.test.mjs",
+        "tests/healthroster-install1-full-rehearsal.test.mjs"
+      ],
+      "counts": {
+        "tests": 76,
+        "pass": 76,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0
+      },
+      "sourceFiles": [
+        {
+          "file": "tests/healthroster-turn-control.test.mjs",
+          "sha256": "794d6c0d0f7dfbc0f83c06c44f32171b7fcd446b6ad00f08a197815309fe01af"
+        },
+        {
+          "file": "tests/healthroster-rehearsal-turn.test.mjs",
+          "sha256": "bb065d939561693588f5e68096a41295979f3650cc81dc880450f8004c858fb7"
+        },
+        {
+          "file": "tests/healthroster-live-test-restoration.test.mjs",
+          "sha256": "701dd1d9b0bba0b18c451446089268a48eb722f3455c0718bc26b12912a356bc"
+        },
+        {
+          "file": "tests/healthroster-install1-full-rehearsal.test.mjs",
+          "sha256": "96ef1cb24b109db7e1d3b2f517ac70a0ff3ee02e820a51ae470eb8b73efad371"
+        }
+      ],
+      "tests": [
+        "fresh gate refuses missing authority, wrong environment/module, concurrent release, dirty/unpushed or stale source",
+        "fresh restoration requires all four identical fingerprints and the exact absent marker",
+        "source lexer distinguishes a quoted catalogue identity and INSERT column list from an executed queue call",
+        "dynamic SQL literal edges survive masking, while catalogue literals alone confer no executed call",
+        "every client fixture switch is cleared before and after its full native verifier savepoint",
+        "one outer REPEATABLE READ cannot absorb an incompatible native SERIALIZABLE requirement",
+        "fresh activity exclusion has only own query PID and proved same-database turn PID",
+        "snapshot compiles exact repository exporter and fresh relation names without retaining business payloads",
+        "historical Install1 verifier approval cannot authorise a changed Install2 census",
+        "one supplied retained turn spans before/full/explicit rollback/fresh and canonical root publication callback",
+        "live observation admits active background sessions before SQL but requires genuine restoration before publication",
+        "before activity without complete observation and malformed activity counts fail before SQL",
+        "SQL errors or missing explicit rollback always get fresh proof and hold publication",
+        "interrupted or incomplete execution and collected SQL errors never receive an intermediate SQL-pass receipt",
+        "restoration mismatch and lost turn prevent publication, with no duplicate dispatch on protected failure",
+        "root psql adapter sends synthetic credentials only through environment and returns closed complete diagnostics",
+        "root psql adapter refuses missing unit end markers and unmapped database diagnostics",
+        "psql client errors are mapped and held even when all unit and rollback markers are present",
+        "in-session contract strips only the exact checked marker while every security/catalogue section remains sealed",
+        "closed exception codes are derived only from hash-bound literal source messages",
+        "expected contract digest is derived by read-only PostgreSQL jsonb conversion of the exact source contract",
+        "F5 remains mandatory post-VERIFIED and cannot be turned into a passed preinstall or safety exclusion",
+        "unchanged full tables and exact fresh parent abort/fixture absence qualify",
+        "native other-transaction claim and retry qualify without replacing original fingerprints",
+        "claim labels without native request/terminal proof fail",
+        "other changed relation and omitted or duplicate relation cannot be attributed",
+        "incomplete or independently wrong two-table row map fails",
+        "old receipt mutation/deletion and new finance identity fail",
+        "outbox stable-field change, nonincreasing attempts and impossible retry time fail",
+        "own, aborted, unknown or before-visible writer XID fails",
+        "genuinely active before-snapshot writer is distinguished from later native time",
+        "dynamic exception fixture identity must be absent and cannot be attributed as background",
+        "exact observer order, all units, epoch and parent PID/XID bind",
+        "fixture readback is read-only, identity-scoped and handles empty native footprint",
+        "observer resets roles before read and does not add mutation/transaction control",
+        "snapshot binds complete raw-row and stable-field hashes and native receipt semantics",
+        "writer census explicitly converts the actual text-valued contract exporter before JSON traversal",
+        "actual renderer retains native body exactly and captures after role reset before rollback",
+        "only actual qualification for these exact before/after snapshots admits a delta",
+        "changed proof fields and mutated before maps cannot reuse a legitimate qualification",
+        "both actual full snapshot epochs and Xip ranges must be proved",
+        "retry timing derives the exact capped fail formula as well as five-minute dequeue",
+        "actual final publication gate rejects forged, copied and stale qualifications and retains its independent guards",
+        "SEND7 two-int32 key checks its own namespace and refuses a one-int64 lookalike",
+        "busy turn runs no identity, fingerprint or trial and closes only its own connection",
+        "separate turn survives before, trial, rollback and fresh after, then unlocks and closes",
+        "trial failure still unlocks and closes before propagating its error",
+        "a successful trial cannot return proved when explicit unlock reports false",
+        "wrong physical or release identity refuses work and releases acquired turn",
+        "active protected release opens no database connection",
+        "persisted busy cooldown refuses an early retry before release check or connection",
+        "exact five-minute boundary permits a fresh protected check and non-waiting lock attempt",
+        "actual PID and database OID are exposed as the only activity exemption",
+        "loss while callback is active signals work immediately and cannot produce clean receipt",
+        "ownership drift in exact pg_locks probe refuses all later work",
+        "source failure remains primary when explicit unlock also fails",
+        "connection loss at before-fingerprint stops later phases and cannot return proved",
+        "connection loss at full-rehearsal stops later phases and cannot return proved",
+        "connection loss at rollback stops later phases and cannot return proved",
+        "connection loss at fresh-proof stops later phases and cannot return proved",
+        "connection loss at protected-wait stops later phases and cannot return proved",
+        "connection loss at runtime stops later phases and cannot return proved",
+        "connection loss at office stops later phases and cannot return proved",
+        "periodic monitor signals an active callback when actual lock ownership disappears",
+        "failed loss logging stays contained and preserves the primary loss while own cleanup completes",
+        "failed initial journal prevents callback and still unlocks and closes only its own turn",
+        "live capability-bound local control carries exact identity and loss while child work is active",
+        "incorrect capability cannot provide a trusted historical turn identity",
+        "only the exact spawned local rehearsal child is cancelled on loss",
+        "loss before child starts opens no child",
+        "healthy long child has no harness deadline and checks ownership after completion",
+        "activity guard rejects fabricated identity and never masks another application name or PID",
+        "broken owned SQL stdin rejects even if that exact child subsequently exits zero",
+        "throwing stdout observer rejects after closing only its own rollback child",
+        "throwing stderr observer rejects after closing only its own rollback child",
+        "a failed release observer preserves an already dispatched durable child until it completes"
+      ],
+      "native": "NOT_RUN"
+    }
+  ],
+  "total": 93,
+  "dbConnections": 0,
+  "native": "NOT_RUN"
+}

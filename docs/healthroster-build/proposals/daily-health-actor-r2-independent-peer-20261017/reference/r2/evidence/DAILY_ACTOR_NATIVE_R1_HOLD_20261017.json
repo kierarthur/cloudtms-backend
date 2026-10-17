@@ -1,0 +1,91 @@
+{
+  "version": "DAILY_ACTOR_NATIVE_R1_HOLD_V1",
+  "sourceCommit": "e9b7d0992d8f4c14b1da2eedb9050c0b9c7083c6",
+  "status": "HOLD_PREFLIGHT_BEFORE_HELPER_OR_USER_FIXTURES",
+  "failure": {
+    "message": "DAILY_ACTOR_NATIVE_WPPP_OR_TOUCH_SOURCE_CHANGED",
+    "code": "55000",
+    "where": "PL/pgSQL function inline_code_block line 9 at RAISE",
+    "routine": "exec_stmt_raise"
+  },
+  "failedStatement": 11,
+  "helperCreateStatementWouldHaveBeen": 12,
+  "programmeUserInsertReached": false,
+  "sqlSha256": "4a29beeb366a18652906bbb8b74acac016d420dffdf7162bf183c014e370239e",
+  "programmeSha256": "69789fd5fef651a39d04d4ef2a9c2d3666be04f551d51f38b833e3a420d9eb3e",
+  "programmeBytes": 19993,
+  "accepted": false,
+  "rolledBack": true,
+  "freshConnected": true,
+  "physicalDatabase": "cloudtms_test_clone",
+  "markerAbsent": true,
+  "LEGACY": "1",
+  "userFixtureRowsRemaining": 0,
+  "fullCanonicalAfter": "NOT_RUN_NOT_QUALIFIED",
+  "rootTiming": {
+    "version": "ROOT_OBSERVED_MCP_CALL_TIMING_V1",
+    "route": "mcp__cloudtms_miget_operations_kier_codex__miget_db_transaction_rollback",
+    "sqlSha256": "4a29beeb366a18652906bbb8b74acac016d420dffdf7162bf183c014e370239e",
+    "callStartedAt": "2026-10-17T06:42:03.450Z",
+    "callReturnedAt": "2026-10-17T06:42:04.297Z",
+    "rootObservedCallMilliseconds": 847,
+    "authority": "ACTUAL_ROOT_ORCHESTRATION_CLOCK_OBSERVATIONS_NOT_SERVER_OR_TRANSPORT_LATENCY"
+  },
+  "nativeClockFrames": [
+    {
+      "phase": "B_GUARD_BEFORE",
+      "readOnly": false,
+      "holderPid": 261357,
+      "backendPid": 261389,
+      "observedAt": "2026-10-17T06:42:04.639365+00:00",
+      "databaseOid": 324139,
+      "holderGranted": true,
+      "physicalDatabase": "cloudtms_test_clone",
+      "statementStartedAt": "2026-10-17T06:42:04.63381+00:00",
+      "transactionStartedAt": "2026-10-17T06:42:04.467025+00:00"
+    },
+    {
+      "phase": "B_GUARD_AFTER",
+      "readOnly": false,
+      "holderPid": 261357,
+      "backendPid": 261389,
+      "observedAt": "2026-10-17T06:42:04.679841+00:00",
+      "databaseOid": 324139,
+      "holderGranted": true,
+      "physicalDatabase": "cloudtms_test_clone",
+      "statementStartedAt": "2026-10-17T06:42:04.679079+00:00",
+      "transactionStartedAt": "2026-10-17T06:42:04.467025+00:00"
+    }
+  ],
+  "sharedTurnClose": {
+    "chat": "HealthRoster",
+    "task": "DAILY_HEALTH_EXACT_ACTOR_NATIVE_PROOF",
+    "status": "RELEASED",
+    "takenAt": "2026-10-17T06:41:32.204Z",
+    "releasedAt": "2026-10-17T06:42:06.443Z",
+    "explicitUnlockConfirmed": true,
+    "connectionClosed": true,
+    "proved": false,
+    "key": [
+      20261013,
+      1
+    ]
+  },
+  "diagnosis": {
+    "receipt": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_ACTOR_R1_READONLY_DEPENDENCY_DIAG_20261017.json",
+    "WP": "RAW_MATCHES_736FA",
+    "touchActualRawSha256": "d5d7808078fd3fa302415a450a4e8255e6a2519f0a5f29b89416583637499b63",
+    "touchCompleteLfSha256": "f6ea6fb5bdd1a6db720dd669ebd8da61f86651674a74ce7df23cdd4e630eefe6",
+    "cause": "Exact native function has LF header and CRLF body; sealed expected hash is complete LF form; no other source difference."
+  },
+  "additionalSourceCorrectionRequired": "AGENTS prohibits relying on generated Miget owner SET ROLE service_role. Report effective ACL evidence separately from direct runtime/API role proof.",
+  "unchangedNativeResult": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_ACTOR_NATIVE_R1_UNCHANGED_RESULT_20261017.json",
+  "unchangedNativeResultSha256": "c93bd3903732059679a62c289d3717f13188230ccbee7dbfa6bf0dac0b5fb76e",
+  "retainedTemporaryFolder": ".codex-tmp/daily-health-actor-native-20261017-r1/",
+  "completePrivateMapsPersisted": false,
+  "deletionAttempted": false,
+  "nativeActorQualification": "NOT_PASSED",
+  "fullRehearsal": "NOT_RUN",
+  "install2": "NOT_INSTALLED",
+  "jobsPaused": false
+}

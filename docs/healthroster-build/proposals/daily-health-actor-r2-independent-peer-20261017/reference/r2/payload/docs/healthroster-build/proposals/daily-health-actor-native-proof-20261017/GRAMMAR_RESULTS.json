@@ -1,0 +1,54 @@
+{
+  "parser": "v7.20",
+  "postgresqlGrammar": [
+    17,
+    7
+  ],
+  "examples": [
+    {
+      "example": "ORIGINAL_PROGRAMME",
+      "statements": 7,
+      "parsedPlpgsqlBodies": 4,
+      "definitions": 1,
+      "grammar": "PASS",
+      "nativeBodyCompilation": "NOT_PROVED"
+    },
+    {
+      "example": "SYNTHETIC_B",
+      "statements": 20,
+      "parsedPlpgsqlBodies": 5,
+      "definitions": 1,
+      "grammar": "PASS",
+      "nativeBodyCompilation": "NOT_PROVED"
+    },
+    {
+      "example": "SYNTHETIC_MCP_VERIFICATION",
+      "statements": 4,
+      "parsedPlpgsqlBodies": 0,
+      "definitions": 0,
+      "grammar": "PASS",
+      "nativeBodyCompilation": "NOT_PROVED"
+    },
+    {
+      "example": "SYNTHETIC_C_BEFORE",
+      "statements": 6,
+      "parsedPlpgsqlBodies": 1,
+      "definitions": 0,
+      "grammar": "PASS",
+      "nativeBodyCompilation": "NOT_PROVED"
+    },
+    {
+      "example": "SYNTHETIC_C_AFTER",
+      "statements": 7,
+      "parsedPlpgsqlBodies": 1,
+      "definitions": 0,
+      "grammar": "PASS",
+      "nativeBodyCompilation": "NOT_PROVED"
+    }
+  ],
+  "noBankSubstitutions": true,
+  "programme": "GENUINE_NATIVE_ACTOR_FIXTURES_ONLY",
+  "nativeBodyCompilation": "NOT_PROVED",
+  "native": "NOT_RUN",
+  "dbConnections": 0
+}

@@ -1,0 +1,6 @@
+{
+  "source": "b4cb19f04be68f67b8aad81692c26e96f7b6f0ed:AGENTS.md",
+  "sha256": "ae1357fb0372932d1ae05cc15c7b02662c71d5e96f00cecb185fccc3f2be29e9",
+  "line": 66,
+  "instruction": "Miget/provider-owner ACL baselines can leave a public `SECURITY INVOKER` RPC executable by `service_role` while stripping EXECUTE from a nested private helper. The normal scheduler then fires successfully but the RPC fails before leasing a row. Every NEW/UPGRADE release must run role-specific private-helper verifiers after final repeatables; the email outbox requires `24082026_1721_miget_private_helper_service_acl_verification.sql`. Miget's generated owner cannot `SET ROLE service_role`, so release verification must use effective privilege catalog checks and runtime PostgREST/cron proof. Do not broaden the repair to `anon` or `authenticated`."
+}
