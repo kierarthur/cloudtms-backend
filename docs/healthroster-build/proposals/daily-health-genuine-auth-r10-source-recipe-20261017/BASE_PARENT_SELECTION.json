@@ -1,0 +1,15 @@
+{
+  "version": "R10_FINAL_REVIEWED_PUBLIC_PARENT_SELECTION_V1",
+  "reportCommit": "62226fa587bf5ad977043d6abd9d103002212b65",
+  "rootCommit": "267f4e2c5fe30b02cbe69ca143f17d50dd89e960",
+  "sourcePreflightOffline": {
+    "status": "OFFLINE_ACTUAL_PUBLIC_SOURCE_ONLY",
+    "operatorCommit": "62226fa587bf5ad977043d6abd9d103002212b65",
+    "rootCommit": "267f4e2c5fe30b02cbe69ca143f17d50dd89e960",
+    "syntheticPrivateMetadataChecks": 3,
+    "privateAccess": 0,
+    "liveAdmission": false
+  },
+  "actualR10Receipt": "NOT_PROVIDED",
+  "privateTargetAccess": "NONE"
+}

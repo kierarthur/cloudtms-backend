@@ -1,0 +1,28 @@
+{
+  "version": "R10_EXACT_NINE_RUNTIME_IMAGES_V1",
+  "runtimeBaseNotYetSealed": true,
+  "images": {
+    "operator": [
+      "contract.mjs",
+      "SOURCE_PINS.json",
+      "MANIFEST.json"
+    ],
+    "holder": [
+      "EXTERNAL_SOURCE_PINS.json",
+      "MANIFEST.json"
+    ],
+    "coordinator": [
+      "SOURCE_PINS.json",
+      "MANIFEST.json"
+    ],
+    "continuation": [
+      "SOURCE_PINS.json",
+      "MANIFEST.json"
+    ]
+  },
+  "rootProposalFolder": "docs/healthroster-build/proposals/daily-health-genuine-auth-r10-source-recipe-20261017",
+  "requiredPublicReceipt": "docs/healthroster-build/v6-owner-delivery-20261016/TEST_AUTH_REFRESH_R10_SUCCESS_20261017.json",
+  "requiredReceiptVersion": "TEST_AUTH_REFRESH_R10_ACTUAL_SUCCESS_V1",
+  "requiredActualPathSource": "Only the actual returned closed launcher and its genuine committed public success receipt",
+  "currentR9AndOldS0Prefix": "IMMUTABLE_NOT_RELABELLED"
+}

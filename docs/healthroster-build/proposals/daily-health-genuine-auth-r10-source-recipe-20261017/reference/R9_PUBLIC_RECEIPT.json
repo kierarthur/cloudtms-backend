@@ -1,0 +1,44 @@
+{
+  "version": "TEST_AUTH_REFRESH_R9_ACTUAL_SUCCESS_V1",
+  "executionRootCommit": "0184485ddc54780a524bb8e8bdeea82843885e1c",
+  "executableReportCommit": "fa2f3a595c87acf00bd8395133190271b46b0005",
+  "authorSource": "462c196c503c39731fe331f4b6899f3e72b35b9c",
+  "actualClosedResult": {
+    "version": "TEST_AUTH_REFRESH_PRIVATE_RESULT_V3",
+    "status": "AUTH_REFRESHED",
+    "code": "AUTH_REFRESHED",
+    "browserClosed": true,
+    "loginRequests": 1,
+    "refreshRequests": 0,
+    "blockedReadRequests": 6,
+    "forbiddenWriteRequests": 0,
+    "refusedRequests": 0,
+    "suppressedStartupRequests": 1,
+    "diagnostic": {
+      "phase": "EXPLICIT_ADMISSION_RETURNED",
+      "admission": {
+        "meStatus": 200,
+        "actorUuid": true,
+        "admin": true,
+        "workspaceStatus": 200,
+        "contract": true,
+        "queries": true
+      },
+      "blockedWriteLabel": "NONE",
+      "blockedWriteMethod": "NONE"
+    }
+  },
+  "privateStatePath": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/.codex-tmp/test-auth-refresh-20261017-aaf115570abdb329f814d32bb0fcf5a7/storage-state.json",
+  "privateContentsReadOrHashedByParent": false,
+  "sharedFrontendStateUntouched": true,
+  "browserAndChildClosed": true,
+  "processExitCode": 0,
+  "nativeIntervalActive": false,
+  "startupPingForwarded": false,
+  "startupResponseFabricated": false,
+  "businessFixturesCreated": false,
+  "qualification": "ME_ADMIN_AND_QUERY_WORKSPACE_ONLY_NOT_NATIVE_WPPP_OR_BUSINESS_CURRENTNESS",
+  "retention": "Protected owned state and scratch retained; parent reads only approved safe closed RESULT, never state/hash/copy. Earlier holds and states remain.",
+  "install2": "NOT_INSTALLED",
+  "finalPartBCritics": "NOT_RUN"
+}

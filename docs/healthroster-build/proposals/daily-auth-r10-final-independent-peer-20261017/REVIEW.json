@@ -1,0 +1,26 @@
+{
+  "version": "R10_FINAL_RECIPE_INDEPENDENT_SOURCE_REVIEW_V1",
+  "verdict": "ACCEPT_BOUNDED_SOURCE_RECIPE",
+  "runtimeFindings": [],
+  "sourceManifestSha256": "be86f4a8ec2fa12526c8937cf523e8d23bf8157024a412e4fc0b57fa172f6ed3",
+  "actualSourceFiles": 36,
+  "actualCompleteCapturedParents": 23,
+  "parentsSavedIndexHeadHistoricalEquality": "PASS",
+  "reportParent": "62226fa587bf5ad977043d6abd9d103002212b65",
+  "rootAtFinalization": "267f4e2c5fe30b02cbe69ca143f17d50dd89e960",
+  "authorTests": 20,
+  "independentTests": 6,
+  "sourceVerifier": "PASS",
+  "priorRecipeMaterializerValidatorRawInverses": "PASS",
+  "ownerAdaptation": "Own proposal images are bound in I2; runtime targets remain Report.",
+  "actualRuntimeCommitAuthority": "Nine images/four real commits; saved/index/current/historical, ancestry and endHEAD checks retained.",
+  "documentationQualifications": [
+    "Handoff count37 differs from actual35 manifest entries plus manifest=36; all actual entries verified.",
+    "README opening and runtimeBaseNotYetSealed retain draft wording; actual BASE_PARENT_SELECTION is bound62226/267f. No future receipt is supplied."
+  ],
+  "finalizeExecutedByPeer": false,
+  "materializeExecutedByPeer": false,
+  "currentPublicPreflightExecutedByPeer": false,
+  "authPrivateTargetNativeBrowserApi": "NOT_RUN",
+  "reportHeadRuntimeEdits": false
+}
