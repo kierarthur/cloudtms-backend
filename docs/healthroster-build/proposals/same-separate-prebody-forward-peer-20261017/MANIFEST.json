@@ -1,0 +1,81 @@
+{
+  "version": "SAME_SEPARATE_PREBODY_FORWARD_PEER_FREEZE_V1",
+  "sourceCheckpoint": "4c74f5fe8aed042945eb663b6a0baa0d7cac3644",
+  "root": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026",
+  "sourceOnly": true,
+  "native": "NOT_RUN",
+  "checks": 9,
+  "focusedRootTests": 24,
+  "files": [
+    {
+      "file": "README.md",
+      "bytes": 2643,
+      "sha256": "02d2303dc3effb2722640fab58cbbbaee81b05434720d4fc015fa0b91333ab93"
+    },
+    {
+      "file": "review.mjs",
+      "bytes": 8236,
+      "sha256": "43846a9b520058375d3bb7f3ec79c839f7068f59e65eb1c4c4aa4d48e8e04882"
+    },
+    {
+      "file": "freeze.mjs",
+      "bytes": 2750,
+      "sha256": "a249fd7893aa4444313b8d67766c516fcf4936c28ef7f4a19c6ea85f959782ad"
+    },
+    {
+      "file": "REVIEW_RESULTS.json",
+      "bytes": 3223,
+      "sha256": "eb749af0794620ee9ad4a8da86135c62379b3d072a9f1dcaaf6c6af97ddeace3"
+    },
+    {
+      "file": "evidence/docs/healthroster-build/v6-owner-delivery-20261016/SAME_SEPARATE_PREBODY_DEPENDENCY_FORWARD_20261017.json",
+      "bytes": 3045,
+      "sha256": "6a349f504746da2545af40e7b83144c3e4b8312606761489cb6e396098cde4d9"
+    },
+    {
+      "file": "evidence/docs/healthroster-build/v6-owner-delivery-20261016/SAME_SEPARATE_F23_PREBODY_BINDING_FORWARD_20261017.json",
+      "bytes": 1633,
+      "sha256": "3775098243086e0ea97fba64927592e03092d80e9ec5c79a3afbde10205fa8cf"
+    },
+    {
+      "file": "evidence/docs/healthroster-build/v6-owner-delivery-20261016/SAME_SEPARATE_VERIFIER_TEST_PARENT_FORWARD_20261017.json",
+      "bytes": 985,
+      "sha256": "ed225c1d043c90882df9eb88d260b8321cab0e562e23cb6550459bc7b100a6b6"
+    },
+    {
+      "file": "evidence/successor/scripts/healthroster-prebody-dynamic-review.mjs",
+      "bytes": 10139,
+      "sha256": "3504d0e858e1fdefe95edae2c86f14324944a96e1f27dc1a5caf097266898eef"
+    },
+    {
+      "file": "evidence/parent/scripts/healthroster-prebody-dynamic-review.mjs",
+      "bytes": 8782,
+      "sha256": "079ea08052ad96600ee0f9bdfee70dbeccaa8d85acb8eaf51483a1be5e5f99c1"
+    },
+    {
+      "file": "evidence/successor/scripts/healthroster-same-separate-type-review.mjs",
+      "bytes": 14107,
+      "sha256": "897df1661b265921f960c107f5189470475866ad8311aec358b15f8841391259"
+    },
+    {
+      "file": "evidence/parent/scripts/healthroster-same-separate-type-review.mjs",
+      "bytes": 13314,
+      "sha256": "7234379079c1bdf1d09653682a2ea82ceb8a669c08266a0834a0d1a4c63a702f"
+    },
+    {
+      "file": "evidence/successor/tests/healthroster-kept-entry-verifier.test.mjs",
+      "bytes": 4361,
+      "sha256": "785601b4cb3daa4f962adcdf324a2fa860fefb0bfb3d00993b9380d0b4ba535e"
+    },
+    {
+      "file": "evidence/parent/tests/healthroster-kept-entry-verifier.test.mjs",
+      "bytes": 4007,
+      "sha256": "cd4673b310232efd457ee771a674b6d28ec33ed268861ed996076001520ffd5a"
+    },
+    {
+      "file": "evidence/tests/healthroster-prebody-same-separate-dependency.test.mjs",
+      "bytes": 2524,
+      "sha256": "07bbf5874967ebcd4480bd1cf50997a94f8e5eb31c484782b9b01d60eb7dd6a3"
+    }
+  ]
+}
