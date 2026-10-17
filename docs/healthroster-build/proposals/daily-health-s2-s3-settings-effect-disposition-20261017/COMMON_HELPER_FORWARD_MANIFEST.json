@@ -1,0 +1,12 @@
+{
+  "version": "S2_S3_COMMON_HELPER_NOTE_FORWARD_V1",
+  "parentCommit": "a72d3387a3489d0f483da2d6066218aee70b971d",
+  "preservedParentManifestSha256": "df606dc03d4e1dfcfdc5d2bad8833725465cdb5cbfe2487c3df83dfeb3fb9670",
+  "files": [
+    {
+      "file": "COMMON_HELPER_NOTE.md",
+      "bytes": 794,
+      "sha256": "5bede4e992cfbc12a552984ed7a6a93220d61dce1d8ea35276922d3952c6065f"
+    }
+  ]
+}
