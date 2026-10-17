@@ -1227,6 +1227,8 @@ SEND_7 turn: {"chat":"HealthRoster","task":"CONTACT_QT_POSITIVE_CONTACT_CONSTRUC
 
 17 October: Hash-fence sourceac54b06 is committed/pushed/fresh remote-equal. All59 tests now pass against the actual committed mounted modules; exact adapter/manifested entry and both current case source admissions PASS. The earlier precommit guard refusal is resolved by the required real commit, with no weakened admission. Next one fixed PREFIX/non-ANALYZE PLAN on this code. Native constructors/QT/full snapshot/restoration remain unrun. Separate S0 staged coordinator8c4 is correctly held by independent review for a reproduced deferred owned-PID liveness check window; a finite source correction is in progress before any browser/native execution. No owner answer pending.
 
+17 October: Actual R5 fixed PREFIX/non-ANALYZE PLAN completed on11a05bf5; own A275964 unlocked/closed10:42:05.244Z/provedtrue for diagnostic callback only. Actual estimated audit sort width falls1022→32, same estimated1207404 rows; root estimated cost1028784.17→398698.22. Exact closed source-map plan/markers and originalR4 comparison are recorded. This confirms the planned narrow hash projection, not actual row count/timing/evaluation count/speedup or earlier cancellation cause. All twelve full scopes, row/hash/count/order and restoration remain intact. Next bounded constructor rollback trial will measure actual complete before/after snapshots under unchanged45/70/120/180 limits and original WeakMap. Native constructors/QT/fullrestoration still NOT_RUN at checkpoint. No active owned DB connection/lock after diagnostic; S0 coordinator source correction continues separately. Install2 NOT_INSTALLED; final critics NOT_RUN.
+
 SEND_7 turn: {"chat":"HealthRoster","task":"CONTACT_QT_CBEFORE_FIXED_DIAGNOSTIC_V1","status":"TAKEN","takenAt":"2026-10-17T10:23:07.426Z","key":[20261013,1]}
 
 SEND_7 turn: {"chat":"HealthRoster","task":"CONTACT_QT_CBEFORE_FIXED_DIAGNOSTIC_V1","status":"RELEASED","takenAt":"2026-10-17T10:23:07.426Z","releasedAt":"2026-10-17T10:23:34.794Z","explicitUnlockConfirmed":true,"connectionClosed":true,"proved":true,"key":[20261013,1]}
@@ -1234,3 +1236,7 @@ SEND_7 turn: {"chat":"HealthRoster","task":"CONTACT_QT_CBEFORE_FIXED_DIAGNOSTIC_
 SEND_7 turn: {"chat":"HealthRoster","task":"DAILY_S0_CATALOGUE_ONLY_CAPTURE","status":"TAKEN","takenAt":"2026-10-17T10:27:49.877Z","key":[20261013,1]}
 
 SEND_7 turn: {"chat":"HealthRoster","task":"DAILY_S0_CATALOGUE_ONLY_CAPTURE","status":"RELEASED","takenAt":"2026-10-17T10:27:49.877Z","releasedAt":"2026-10-17T10:28:04.556Z","explicitUnlockConfirmed":true,"connectionClosed":true,"proved":true,"key":[20261013,1]}
+
+SEND_7 turn: {"chat":"HealthRoster","task":"CONTACT_QT_CBEFORE_FIXED_DIAGNOSTIC_V1","status":"TAKEN","takenAt":"2026-10-17T10:41:34.613Z","key":[20261013,1]}
+
+SEND_7 turn: {"chat":"HealthRoster","task":"CONTACT_QT_CBEFORE_FIXED_DIAGNOSTIC_V1","status":"RELEASED","takenAt":"2026-10-17T10:41:34.613Z","releasedAt":"2026-10-17T10:42:05.244Z","explicitUnlockConfirmed":true,"connectionClosed":true,"proved":true,"key":[20261013,1]}
