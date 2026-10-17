@@ -1,0 +1,37 @@
+[
+  {
+    "file": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_S1_EFFECT_ADMISSION_20261017.json",
+    "commit": "4761cf052a6a9adde83792d2f332a725ec7ffcb5",
+    "bytes": 867,
+    "sha256": "ed9bf357fb567cbd9f9dff8966141e931101bfd7435339a28fd572227bd6edf8",
+    "captured": "reference/aliases/DAILY_GENUINE_S1_EFFECT_ADMISSION_20261017.json"
+  },
+  {
+    "file": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_S1a_EFFECT_ADMISSION_20261017.json",
+    "commit": "4761cf052a6a9adde83792d2f332a725ec7ffcb5",
+    "bytes": 842,
+    "sha256": "c66f3c758ddba231b3b3896c7c3bbc32ac5b9660069291d0190624ba242ccdd8",
+    "captured": "reference/aliases/DAILY_GENUINE_S1a_EFFECT_ADMISSION_20261017.json"
+  },
+  {
+    "file": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_S2_EFFECT_ADMISSION_20261017.json",
+    "commit": "4761cf052a6a9adde83792d2f332a725ec7ffcb5",
+    "bytes": 841,
+    "sha256": "2f1f5201f195deb47fdcbce350e2c44670c249becb6b16eef4206172473e469a",
+    "captured": "reference/aliases/DAILY_GENUINE_S2_EFFECT_ADMISSION_20261017.json"
+  },
+  {
+    "file": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_S3_EFFECT_ADMISSION_20261017.json",
+    "commit": "4761cf052a6a9adde83792d2f332a725ec7ffcb5",
+    "bytes": 841,
+    "sha256": "805bc8e3b64836822eb35bb1549bdff59b8d630dcb0ea6b1788cbade897cd06c",
+    "captured": "reference/aliases/DAILY_GENUINE_S3_EFFECT_ADMISSION_20261017.json"
+  },
+  {
+    "file": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_S4_EFFECT_ADMISSION_20261017.json",
+    "commit": "4761cf052a6a9adde83792d2f332a725ec7ffcb5",
+    "bytes": 852,
+    "sha256": "e5046cb41158c2da3c2b6a58d78d6d5083fb72e1d1980d7a22e69c2562995ec3",
+    "captured": "reference/aliases/DAILY_GENUINE_S4_EFFECT_ADMISSION_20261017.json"
+  }
+]

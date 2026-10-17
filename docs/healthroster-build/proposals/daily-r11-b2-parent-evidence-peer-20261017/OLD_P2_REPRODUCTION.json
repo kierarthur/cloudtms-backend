@@ -1,0 +1,82 @@
+{
+  "status": "OLD_P2_REPRODUCED_HOLD",
+  "rows": [
+    {
+      "kind": "entry",
+      "file": "docs/healthroster-build/proposals/daily-genuine-root-s0-b2-r11-bookkeeper-20261017.mjs",
+      "parentFile": "docs/healthroster-build/proposals/daily-genuine-root-s0-b2-bookkeeper-20261017.mjs",
+      "parentCommit": "1574d1a9481d1e9158d91d1bae48d31f872362d9",
+      "claimedBeforeBytes": 9025,
+      "actualBeforeBytes": 9025,
+      "claimedBeforeSha256": "7d25340d94e57f4549de728fec04224b48f7ac6c9ed7c59213659046e6657c9f",
+      "actualBeforeSha256": "7d25340d94e57f4549de728fec04224b48f7ac6c9ed7c59213659046e6657c9f",
+      "errors": [],
+      "afterSha256": "57e49ebfcc0dd1d19e304c3163606c56dc02574a495a034300a15c26d69e36c0"
+    },
+    {
+      "kind": "entry",
+      "file": "docs/healthroster-build/proposals/daily-genuine-s0-b2-r11-tools-orchestration-20261017.js.txt",
+      "parentFile": "docs/healthroster-build/proposals/daily-genuine-s0-b2-tools-orchestration-20261017.js.txt",
+      "parentCommit": "1574d1a9481d1e9158d91d1bae48d31f872362d9",
+      "claimedBeforeBytes": 8014,
+      "actualBeforeBytes": 8014,
+      "claimedBeforeSha256": "a84ca64281f9d765cc99b9310d3a475fe2e3d3f1bc0a541698013ed4456e66ca",
+      "actualBeforeSha256": "a84ca64281f9d765cc99b9310d3a475fe2e3d3f1bc0a541698013ed4456e66ca",
+      "errors": [],
+      "afterSha256": "3bb8ffb01a06a5163da666bc05a3cd71ed53f170c80fe6dcc59046d78919efeb"
+    },
+    {
+      "kind": "entry",
+      "file": "docs/healthroster-build/proposals/daily-b2-r11-s0-publish-stageplans-20261017.mjs",
+      "parentFile": "docs/healthroster-build/proposals/daily-b2-s0-publish-stageplans-20261017.mjs",
+      "parentCommit": "1574d1a9481d1e9158d91d1bae48d31f872362d9",
+      "claimedBeforeBytes": 158,
+      "actualBeforeBytes": 22021,
+      "claimedBeforeSha256": "95925a07e52c25c31ffc5204b2188a62e9726b12560617c70d794c719af8cf63",
+      "actualBeforeSha256": "2e791467e258bf2b81938ce8e3a8cab9dd3ce9cefe37455e5a9492a25a037cef",
+      "errors": [
+        "WHOLE_BEFORE_NOT_COMPLETE_PARENT",
+        "BEFORE_HASH_NOT_ACTUAL_PARENT",
+        "BEFORE_SIZE_NOT_ACTUAL_PARENT"
+      ],
+      "afterSha256": "e1ee2c4713b069a481a21e18afbccf71fe82a810a6145a66a3f4eb8d58cea413"
+    },
+    {
+      "kind": "entry",
+      "file": "docs/healthroster-build/proposals/daily-five-stage-b2-r11-source-plan-20261017/compose.mjs",
+      "parentFile": "docs/healthroster-build/proposals/daily-five-stage-producer-hash-forward-20261017/compose.mjs",
+      "parentCommit": "1574d1a9481d1e9158d91d1bae48d31f872362d9",
+      "claimedBeforeBytes": 8336,
+      "actualBeforeBytes": 8336,
+      "claimedBeforeSha256": "6566ad887bdfcd61f68819650954321adcca6eb110879500a309180aa8288cc7",
+      "actualBeforeSha256": "6566ad887bdfcd61f68819650954321adcca6eb110879500a309180aa8288cc7",
+      "errors": [],
+      "afterSha256": "4eb91bcc1adbf0619bb0d652a993593ef802298b7ec05b7dac186343a1677cba"
+    },
+    {
+      "kind": "recipe",
+      "file": "recipe.mjs",
+      "parentFile": "docs/healthroster-build/proposals/daily-health-genuine-auth-r10-source-recipe-20261017/recipe.mjs",
+      "parentCommit": "1574d1a9481d1e9158d91d1bae48d31f872362d9",
+      "claimedBeforeBytes": 8339,
+      "actualBeforeBytes": 8339,
+      "claimedBeforeSha256": "74d472a57a91843956080e23dd6419e63387e2f8405481b9045a2394fe811848",
+      "actualBeforeSha256": "74d472a57a91843956080e23dd6419e63387e2f8405481b9045a2394fe811848",
+      "errors": [],
+      "afterSha256": "3583d9e998d18fca3fafc2f4e0951f2bea2ba79e5c32548513018c1cddda9cee"
+    },
+    {
+      "kind": "recipe",
+      "file": "materialize.mjs",
+      "parentFile": "docs/healthroster-build/proposals/daily-health-genuine-auth-r10-source-recipe-20261017/materialize.mjs",
+      "parentCommit": "1574d1a9481d1e9158d91d1bae48d31f872362d9",
+      "claimedBeforeBytes": 6776,
+      "actualBeforeBytes": 6776,
+      "claimedBeforeSha256": "4612767cf3523a9979629071bd4f4bb1e2eb31529abddf515acb276ff20bfa4d",
+      "actualBeforeSha256": "4612767cf3523a9979629071bd4f4bb1e2eb31529abddf515acb276ff20bfa4d",
+      "errors": [],
+      "afterSha256": "94845f1b471f02cd2232c0350837f29eedd63c0e9a748e1a34e080e5f2c04bfc"
+    }
+  ],
+  "priorPeerSuperseded": true
+}

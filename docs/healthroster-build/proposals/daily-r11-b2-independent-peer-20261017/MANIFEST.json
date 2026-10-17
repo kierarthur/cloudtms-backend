@@ -1,0 +1,34 @@
+{
+  "files": [
+    {
+      "file": "AUTHOR_MANIFEST.json",
+      "bytes": 23633,
+      "sha256": "2dfd4d6ffc8859456cd16aa102c125cd7e45035322724d743453f8871fc634e1"
+    },
+    {
+      "file": "RESULTS.json",
+      "bytes": 1208,
+      "sha256": "ba82bd2c614ba073d4db7d8d1c0a0f2b4e9922cb2e70af8b13ef01b49fbe9f84"
+    },
+    {
+      "file": "REVIEW.md",
+      "bytes": 4629,
+      "sha256": "cad95c4e5080b577bd6c291f81965bfb340d49cb1641b8831ffb893ab8af10d1"
+    },
+    {
+      "file": "SOURCE_PINS.json",
+      "bytes": 683,
+      "sha256": "b80adc3e7bc0746021766212b328071862391b4408277b230fb55836838df9df"
+    },
+    {
+      "file": "test-independent.mjs",
+      "bytes": 13376,
+      "sha256": "43c7756295dde6b6389a2515729d9e525815174805e60ee4ca6bdc83a6c293f7"
+    },
+    {
+      "file": "verify-archive.py",
+      "bytes": 2614,
+      "sha256": "13c27364792244cdf816c84a8e067e960fdbc379a5b20a9c47d3b69c41733a7e"
+    }
+  ]
+}

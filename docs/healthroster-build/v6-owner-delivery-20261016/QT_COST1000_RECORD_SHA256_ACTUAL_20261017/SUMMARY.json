@@ -1,0 +1,36 @@
+{
+  "status": "COST_CAPTURED_OWN_TURN_RELEASED",
+  "transport": {
+    "version": "QT_AUDIT_COST_CAPTURE_ONLY_V1",
+    "mode": "RECORD_SHA256",
+    "sampleLimit": 1000,
+    "sampleCount": "1000",
+    "evaluatedCount": "1000",
+    "bytesTotal": "32000",
+    "nativeStartedAt": "2026-10-17T18:16:27.120566+00:00",
+    "nativeEndedAt": "2026-10-17T18:16:27.254657+00:00",
+    "nativeObservedSpanMs": 134,
+    "freshObservedAt": "2026-10-17T18:16:27.429432+00:00",
+    "nativeRolledBack": true,
+    "connectedFresh": true,
+    "holderGranted": true,
+    "readOnly": true,
+    "scope": "BOUNDED_NONREPRESENTATIVE_COST_OBSERVATION_ONLY",
+    "cause": "NOT_PROVED",
+    "wholeTablePerformance": "NOT_PROVED",
+    "assertionEquivalence": "NOT_PROVED",
+    "qtAcceptance": "NOT_RUN",
+    "businessFixtures": 0
+  },
+  "compatibility": "ROOT_REVIEW_REQUIRED_NOT_QUALIFIED",
+  "businessScope": "NOT_RUN",
+  "originalSharedTurnCompleted": true,
+  "elapsedMs": 30202,
+  "budgets": {
+    "work": 120000,
+    "cleanup": 60000,
+    "whole": 180000,
+    "resultBytes": 65536,
+    "inputBytes": 131072
+  }
+}

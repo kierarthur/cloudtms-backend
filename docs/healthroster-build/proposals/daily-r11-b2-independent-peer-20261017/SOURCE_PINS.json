@@ -1,0 +1,9 @@
+{
+  "authorPacket": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026/.codex-tmp/daily-auth-r11-b2-source-recipe-20261017",
+  "authorManifest": "2dfd4d6ffc8859456cd16aa102c125cd7e45035322724d743453f8871fc634e1",
+  "authorSelection": "a74e4bf714ddc9d53b69a4d7d01b99ef5a9bf7805990cb23d13cef4abd015e01",
+  "entrypointForward": "fb9108c439c86367efeb3621f03d50fd65d404ec20b3599af99bd1dfc7abe1e3",
+  "recipeForward": "1882779dd02b25aa71b79a8250974187f55c4870619e701b93736430c3f2b4a1",
+  "capturedReportParent": "b7694b8b727084fb749c8b015285ae3c74e76f09",
+  "peerAuthorWorktree": "D:/Development/GitHub/.codex-worktrees/healthroster-checklist-native-14102026"
+}

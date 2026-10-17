@@ -1,0 +1,24 @@
+{
+  "version": "QT_AUDIT_COST_INPUT_V1",
+  "mode": "RECORD_SHA256",
+  "sampleLimit": 1000,
+  "identity": {
+    "physicalDatabase": "cloudtms_test_clone",
+    "databaseOid": 324139,
+    "backendPid": 300384,
+    "turnId": "hr_turn_56999c4a134485115b6bfd77c0a26f87",
+    "key": [
+      20261013,
+      1
+    ],
+    "takenAt": "2026-10-17T18:16:11.749Z",
+    "task": "QT_AUDIT_COST_1000_DIAGNOSTIC"
+  },
+  "label": "HR_QT_COST1000_RECORD_SHA256_56999C4A134485115B6BFD77C0A26F87",
+  "sqlSha256": "1eac5ac4351aaae707f20a010a5fce6444b342bd682f11eac5cf246dfa8eee12",
+  "verificationSqlSha256": "6e674644c299beef0ed3e12bc375029c58471f419b3a4a5140c925ddad9ba460",
+  "statementCount": 4,
+  "verificationStatementCount": 1,
+  "native": "NOT_RUN",
+  "scope": "ONE_FIXED_SAMPLE_DIAGNOSTIC_NOT_ACCEPTANCE"
+}

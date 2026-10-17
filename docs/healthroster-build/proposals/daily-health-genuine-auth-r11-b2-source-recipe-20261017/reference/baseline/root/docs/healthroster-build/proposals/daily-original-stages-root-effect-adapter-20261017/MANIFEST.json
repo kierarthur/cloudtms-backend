@@ -1,0 +1,82 @@
+{
+  "version": "DAILY_ORIGINAL_STAGES_ROOT_ADAPTER_SOURCE_FREEZE_V1",
+  "runtimeTargets": [
+    "run.mjs",
+    "validate.mjs"
+  ],
+  "historicalParent": "ea17085c96ec78bb0e72646b2f6ef90a422cdcda",
+  "rootComposerParent": "267f4e2c5fe30b02cbe69ca143f17d50dd89e960",
+  "reportSourceCheckpoint": "62226fa587bf5ad977043d6abd9d103002212b65",
+  "files": [
+    {
+      "file": "data.test.mjs",
+      "bytes": 3895,
+      "sha256": "d4cdfe573d17436c662427e69b8d669aed6016d941a0c3f7ff7fbc0de0688830"
+    },
+    {
+      "file": "FULL_PARENT_FORWARD.json",
+      "bytes": 5721,
+      "sha256": "d9cb3fe690b6e87ce318e4f898fefc283a1ff724ee85c121fb1e70389e9f53f6"
+    },
+    {
+      "file": "README.md",
+      "bytes": 4657,
+      "sha256": "83e3de9a37e8fe3133607caadc4a8ddf756e95132eb32eba087f2aa3b83f5644"
+    },
+    {
+      "file": "reference/composer-test.mjs",
+      "bytes": 12125,
+      "sha256": "2cebee3053b7564837b80081bd1846bca770d6652cff69822aada63e53d2858e"
+    },
+    {
+      "file": "reference/data-fixtures.mjs",
+      "bytes": 12150,
+      "sha256": "adfafc907544eb93d96f04aa0c6601346da07f0395dec4bf7777ec5665b68111"
+    },
+    {
+      "file": "reference/parent-run.mjs",
+      "bytes": 8279,
+      "sha256": "7d5ef4fda04d9a4ef6f8d84ed378e320f809244dc21c55276d3896dab0417541"
+    },
+    {
+      "file": "reference/recorder.mjs",
+      "bytes": 8472,
+      "sha256": "028cefd464b1ece2349b1c2eb6f53c49721f7e57be68debade208a9eccefa5f9"
+    },
+    {
+      "file": "RESULTS.json",
+      "bytes": 835,
+      "sha256": "13c14572953fd3b8cc7a47da138cd358672a2ebb5a255b0f6be93415b0655698"
+    },
+    {
+      "file": "run.mjs",
+      "bytes": 9023,
+      "sha256": "3667d63e081e3ad64d0dae7966c7b781f9fce85927d8f6bb4a7b7939f5332a86"
+    },
+    {
+      "file": "SOURCE_PINS.json",
+      "bytes": 4962,
+      "sha256": "2613fedd73b5c156d2019a0ae6686f3467479afd5ef95ad9e4af478d68dbbdb0"
+    },
+    {
+      "file": "test.mjs",
+      "bytes": 5819,
+      "sha256": "3cefd2cb100961af4cf6a121501ca63f7a5f1221c33d539c4b6443005bca598b"
+    },
+    {
+      "file": "TEST_FIXTURE_FULL_PARENT_FORWARD.json",
+      "bytes": 530,
+      "sha256": "a78ce5d5c202cfe3287d5301e90b2bed6cfa08c53806485021e16f7897a03c54"
+    },
+    {
+      "file": "validate.mjs",
+      "bytes": 2120,
+      "sha256": "643575524db3492d37e678168b5c706a11b4fe7552efff6caec4aaa189003267"
+    },
+    {
+      "file": "verify.mjs",
+      "bytes": 4028,
+      "sha256": "46c535cb616c59b744ec482d97d257d188b2523a70bddf180c45822fd33c3eb9"
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "version": "R11_B2_AUTH_SUPERSESSION_SOURCE_RESULTS_V1",
+  "status": "SOURCE_ONLY_BOILERPLATE_PASS",
+  "nodeTests": 36,
+  "pythonSuites": 6,
+  "historicalCounterexampleSets": {
+    "originalParentObjects": 55,
+    "functionalOwnerObjects": 19,
+    "metadataOwnerObjects": 14
+  },
+  "sourceParents": 77,
+  "authImages": 9,
+  "realPhaseCommitsRequired": 4,
+  "newDistinctRootImages": 5,
+  "wholeEntryInverses": 4,
+  "wholePriorRecipeInverses": 2,
+  "canonicalAliasGuards": 5,
+  "actualR11Receipt": "NOT_PROVIDED",
+  "actualR11SourceCommits": "NOT_PROVIDED",
+  "actualSourceAdmission": "NOT_RUN",
+  "actualAuth": "NOT_RUN",
+  "native": "NOT_RUN",
+  "privateStateTargetAccess": false,
+  "trackedWrites": false
+}

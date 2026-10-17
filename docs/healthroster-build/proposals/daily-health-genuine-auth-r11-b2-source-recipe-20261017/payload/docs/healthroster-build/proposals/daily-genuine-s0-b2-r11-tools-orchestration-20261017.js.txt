@@ -1,0 +1,52 @@
+return await (async function s0(tools,store,load,text,notify){
+ const root='D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026',report='D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026',K4=load('dailyB2OperatorCommit'),key='dailyS0B2Actual',state={sourceCommit:K4,ended:false,dispatched:[],output:''};
+ if(!/^[a-f0-9]{40}$/.test(K4??''))throw Error('GENUINE_K4_REQUIRED');store(key,state);
+ const absorb=r=>{state.output+=r.output??'';if(r.session_id)state.sessionId=r.session_id;if(r.exit_code!==undefined){state.exitCode=r.exit_code;state.ended=true;}store(key,state);};
+ async function run(cmd,cwd=root,tokens=2000){let r=await tools.exec_command({cmd,workdir:cwd,max_output_tokens:tokens,yield_time_ms:30000});while(r.session_id&&r.exit_code===undefined)r=await tools.write_stdin({session_id:r.session_id,chars:'',yield_time_ms:1000,max_output_tokens:tokens});if(r.exit_code!==0)throw Error('ROOT_SUBCOMMAND_REFUSED');return r.output;}
+ async function ready(expected){
+  const raw=await run('node '+report+'/docs/healthroster-build/proposals/daily-health-genuine-auth-r8-batch-source-recipe-20261017/payload/progress.mjs '+state.progressFile+' '+expected+' '+K4+' '+state.createdAfterMs+' '+(state.out??'NEW_BIND'),root,2000),v=JSON.parse(raw);
+  if(v.status!=='ACTUAL_READY_OBSERVED'||v.ready!==expected||v.operatorSourceCommit!==K4||(state.out&&v.ownedDirectory!==state.out))throw Error('ACTUAL_READY_REQUIRED');
+  state.out=v.ownedDirectory;store(key,state);
+ }
+ async function native(phase){
+  const script=`import fs from "node:fs";import{createHash}from"node:crypto";
+const out=${JSON.stringify(state.out)},phase=${JSON.stringify(phase)},f=out+"/S0_"+phase+"_INPUT.json";
+if(!/^D:\\/Development\\/GitHub\\/\\.codex-worktrees\\/healthroster-install2-14102026\\/\\.codex-tmp\\/daily-genuine-stages-20261017-[a-f0-9]{32}$/.test(out)||fs.realpathSync.native(out).replaceAll(String.fromCharCode(92),"/")!==out)throw Error("ROOT_OWNED_PATH");
+const s=fs.lstatSync(f);if(!s.isFile()||s.isSymbolicLink()||s.size>98304||s.size<=0)throw Error("ROOT_INPUT_BOUND");
+const b=JSON.parse(fs.readFileSync(f)),r=b.receipt,i=b.input,sha=x=>createHash("sha256").update(x).digest("hex");
+if(r.stage!=="S0"||r.phase!==phase||r.version!=="DAILY_GENUINE_READ_INPUT_V1"||i.database!=="agency_test"||i.continue_on_error!==false||i.max_rows_per_statement!==1||i.statement_timeout_ms!==30000||i.lock_timeout_ms!==2000||sha(i.sql)!==r.sqlSha256||sha(i.verification_sql)!==r.verificationSqlSha256||i.label!==r.label||r.statements!==2||r.verificationStatements!==1||r.identity.physicalDatabase!=="cloudtms_test_clone"||JSON.stringify(r.identity.key)!=="[20261013,1]")throw Error("ROOT_ACTUAL_INPUT_REFUSED");
+const v=JSON.stringify(b);if(Buffer.byteLength(v)+1>98304)throw Error("ROOT_PACKET_BOUND");process.stdout.write(v+"\\n");`;
+  const rawInput=await run("@'\n"+script+"\n'@ | node --input-type=module -",root,30000);if(rawInput.length>98304)throw Error('ROOT_INPUT_BOUND');
+  const b=JSON.parse(rawInput);state.dispatched.push(phase);store(key,state);
+  const r=await tools.mcp__cloudtms_miget_operations_kier_codex__miget_db_transaction_rollback(b.input);if(!r.structuredContent)throw Error('ACTUAL_STRUCTURED_NATIVE_REQUIRED');
+  store(key+phase+'Native',r.structuredContent);const raw=JSON.stringify(r.structuredContent,null,2)+'\n';if(raw.length>262144||raw.includes("\n'@"))throw Error('ROOT_NATIVE_BOUND');
+  await run("$value=@'\n"+raw+"'@\n$b=[Text.UTF8Encoding]::new($false).GetBytes($value+[Environment]::NewLine)\n$f=[IO.File]::Open('"+state.out+"/S0_"+phase+"_NATIVE.json',[IO.FileMode]::CreateNew);try{$f.Write($b,0,$b.Length)}finally{$f.Dispose()}",root,1000);
+ }
+ async function bookkeep(phase){
+  const v=JSON.parse(await run("$env:HR_ROOT_PHASE='"+phase+"'\n$env:HR_ROOT_OUT='"+state.out+"'\n$env:HR_OPERATOR_COMMIT='"+K4+"'\n$env:HR_B2_CONFIG_SHA='"+state.sourceAdmission.configSha256+"'\nnode docs/healthroster-build/proposals/daily-genuine-root-s0-b2-r11-bookkeeper-20261017.mjs",root,3000));
+  if(v.status!=='ROOT_ACTUAL_'+phase+'_COMMITTED')throw Error('ROOT_BOOKKEEPING_REQUIRED');state[phase+'Commit']=v.commit;store(key,state);
+ }
+ async function control(command){if(state.ended)throw Error('ORIGINAL_ALREADY_ENDED');absorb(await tools.write_stdin({session_id:state.sessionId,chars:command+'\n',yield_time_ms:1000,max_output_tokens:2000}));if(state.ended&&command!=='RELEASE'&&command!=='ABORT')throw Error('ORIGINAL_EARLY_EXIT');}
+ try{
+  state.sourceAdmission=JSON.parse(await run("$env:HR_OPERATOR_COMMIT='"+K4+"'\nnode docs/healthroster-build/proposals/daily-b2-r11-s0-publish-stageplans-20261017.mjs --source-only",root,3000));
+  if(state.sourceAdmission.status!=='B2_S0_PUBLIC_SOURCE_ADMITTED'||state.sourceAdmission.operatorCommit!==K4||!/^([a-f0-9]{64})$/.test(state.sourceAdmission.configSha256))throw Error('ACTUAL_B2_SOURCE_REQUIRED');store(key,state);
+  const prepared=JSON.parse(await run("$folder='"+root+"/.codex-tmp/daily-genuine-progress-20261017-'+[guid]::NewGuid().ToString('N')\nif(Test-Path -LiteralPath $folder){throw 'EXISTING'}\n[IO.Directory]::CreateDirectory($folder) | Out-Null\n[pscustomobject]@{folder=$folder;physical=(Get-Item -LiteralPath $folder).FullName.Replace('\\','/')} | ConvertTo-Json -Compress",root,1000));
+  if(prepared.folder!==prepared.physical||!/^D:\/Development\/GitHub\/\.codex-worktrees\/healthroster-install2-14102026\/\.codex-tmp\/daily-genuine-progress-20261017-[a-f0-9]{32}$/.test(prepared.folder))throw Error('ACTUAL_PROGRESS_PATH_REQUIRED');
+  state.progressFile=prepared.folder+'/PROGRESS.jsonl';state.createdAfterMs=Date.now();store(key,state);
+  absorb(await tools.exec_command({cmd:'C:\\Windows\\System32\\cmd.exe /d /c node '+report+'/docs/healthroster-build/proposals/daily-health-s0-stage-coordinator-20261017/coordinate.mjs --authorised-root-s0-staged > '+state.progressFile,shell:'C:/Windows/System32/cmd.exe',login:false,tty:true,workdir:report,yield_time_ms:1000,max_output_tokens:1000}));
+  if(!state.sessionId||state.ended)throw Error('ORIGINAL_S0_LAUNCH_REQUIRED');notify({phase:'S0_ORIGINAL_LAUNCHED',sessionId:state.sessionId,sourceCommit:K4});
+  await ready('BEFORE_READY');await native('BEFORE');await bookkeep('BEFORE');await control('BEFORE_SAVED');
+  await ready('SETUP_ENTRY_READY');await bookkeep('SETUP');await control('SETUP_COMMITTED');
+  await ready('AFTER_READY');await native('AFTER');await bookkeep('AFTER');await control('AFTER_SAVED');
+  await ready('S0_QUALIFIED_PENDING_RELEASE');await control('RELEASE');state.releaseSent=true;store(key,state);
+  for(let n=0;n<12&&!state.ended;n++)absorb(await tools.write_stdin({session_id:state.sessionId,chars:'',yield_time_ms:1000,max_output_tokens:2000}));
+  if(!state.ended||state.exitCode!==0)throw Error('ORIGINAL_CLOSE_NOT_PROVED');
+  const summary=JSON.parse(await run("Get-Content -Raw -LiteralPath '"+state.out+"/S0_COORDINATOR_SUMMARY.json'",root,3000));
+  if(summary.status!=='S0_NATIVE_QUALIFIED_OWN_TURN_RELEASED'||summary.operatorSourceCommit!==K4||summary.ownedDirectory!==state.out)throw Error('ACTUAL_S0_SUMMARY_REQUIRED');
+  state.summary=summary;store(key,state);text({status:'ACTUAL_S0_RELEASED_EXIT_ZERO',sourceCommit:K4,out:state.out,summary,commits:{BEFORE:state.BEFORECommit,SETUP:state.SETUPCommit,AFTER:state.AFTERCommit}});
+ }catch(e){
+  state.rootError=/^[A-Z0-9_]+$/.test(e?.message??'')?e.message:'ROOT_S0_ORCHESTRATION_HELD';store(key,state);
+  if(state.sessionId&&!state.ended){try{await control('ABORT');for(let n=0;n<12&&!state.ended;n++)absorb(await tools.write_stdin({session_id:state.sessionId,chars:'',yield_time_ms:1000,max_output_tokens:2000}));}catch{state.closeObservationError=true;store(key,state);}}
+  text({status:'ROOT_S0_ACTUAL_HOLD',code:state.rootError,sourceCommit:K4,out:state.out??null,progressFile:state.progressFile??null,ended:state.ended,exitCode:state.exitCode,dispatched:state.dispatched,reconciliationRequired:state.dispatched.length>0});
+ }
+})(tools,store,load,text,notify);

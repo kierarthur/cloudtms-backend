@@ -1,0 +1,23 @@
+{
+  "reportCommit": "b7694b8b727084fb749c8b015285ae3c74e76f09",
+  "rootCommit": "1574d1a9481d1e9158d91d1bae48d31f872362d9",
+  "runtimeTargets": {
+    "operator": [
+      "contract.mjs",
+      "SOURCE_PINS.json",
+      "MANIFEST.json"
+    ],
+    "holder": [
+      "EXTERNAL_SOURCE_PINS.json",
+      "MANIFEST.json"
+    ],
+    "coordinator": [
+      "SOURCE_PINS.json",
+      "MANIFEST.json"
+    ],
+    "continuation": [
+      "SOURCE_PINS.json",
+      "MANIFEST.json"
+    ]
+  }
+}

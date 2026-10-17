@@ -1,0 +1,187 @@
+{
+  "version": "DAILY_GENUINE_CURRENT_PRODUCER_AUDIT_FINAL_SOURCE_REVIEW_V1",
+  "firstLocalManifestSha256": "39a2de2fab40738c2ceb589491e4e06bc8212f5b4e3e42d1dd9667ee9bdfb500",
+  "firstFreezeFilesUnchanged": 41,
+  "correction": "Four pre-RETURN direct custom routines omitted the fifth genuine policy resolver in the unchanged actual RETURN. Complete source retained all six calls; this append corrects only the source census.",
+  "currentSource": {
+    "sourceParent": "5b4f4e4c196871fa85722435deeee3ad418908f2",
+    "currentCheckpoint": "d3bf033e1ccb171d2b382f3c59b9fc2a85448933",
+    "inputs": 7,
+    "completeFunctions": 22,
+    "savedCommittedRawEqual": true,
+    "native": "NOT_RUN"
+  },
+  "customDirectCallSites": [
+    {
+      "name": "private._candidate_feature_enabled_current_v1",
+      "line": 30
+    },
+    {
+      "name": "private._candidate_normalize_manager_policy_v1",
+      "line": 268
+    },
+    {
+      "name": "public._ctms_assert_import_correction_settings_write_v1",
+      "line": 273
+    },
+    {
+      "name": "public._inv_write_audit",
+      "line": 737
+    },
+    {
+      "name": "public.import_auto_authorise_policy_resolve_v1",
+      "line": 781
+    },
+    {
+      "name": "public.import_auto_authorise_policy_resolve_v1",
+      "line": 787
+    }
+  ],
+  "distinctCustomDirectRoutines": [
+    {
+      "name": "private._candidate_feature_enabled_current_v1",
+      "baselineMetadata": {
+        "acl": [
+          {
+            "grantee": "postgres",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          }
+        ],
+        "owner": "postgres",
+        "config": [
+          "search_path=pg_catalog, public, private, pg_temp"
+        ],
+        "schema": "private",
+        "identity": "_candidate_feature_enabled_current_v1(p_feature_key text)",
+        "parallel": "u",
+        "volatility": "s",
+        "security_definer": true,
+        "definition_sha256": "06d3fc5a330beaa37a65e7397920f75aaf1cf3632067418c188a20857fb40a19"
+      },
+      "bodyInspected": false,
+      "nativeBinding": "NOT_OBSERVED_HERE"
+    },
+    {
+      "name": "private._candidate_normalize_manager_policy_v1",
+      "baselineMetadata": {
+        "acl": [
+          {
+            "grantee": "postgres",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          }
+        ],
+        "owner": "postgres",
+        "config": [
+          "search_path=\"\""
+        ],
+        "schema": "private",
+        "identity": "_candidate_normalize_manager_policy_v1(p_policy jsonb)",
+        "parallel": "s",
+        "volatility": "i",
+        "security_definer": false,
+        "definition_sha256": "826cbfe81ec0f0cb9c203ff401e0700a2dc15452a7f0d15217f42f284a65247f"
+      },
+      "bodyInspected": false,
+      "nativeBinding": "NOT_OBSERVED_HERE"
+    },
+    {
+      "name": "public._ctms_assert_import_correction_settings_write_v1",
+      "baselineMetadata": {
+        "acl": [
+          {
+            "grantee": "postgres",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          }
+        ],
+        "owner": "postgres",
+        "config": [
+          "search_path=public, pg_temp"
+        ],
+        "schema": "public",
+        "identity": "_ctms_assert_import_correction_settings_write_v1(p_is_nhsp boolean, p_autoprocess_hr boolean, p_no_timesheet_required boolean, p_reversal_complete_financials_date correction_financials_date_basis_enum, p_reversal_replacement_financials_date correction_financials_date_basis_enum)",
+        "parallel": "u",
+        "volatility": "i",
+        "security_definer": true,
+        "definition_sha256": "e9696b95a3a6ee4e5f9ad61f1210b9191cc4c088743081bcccdd2634714d7081"
+      },
+      "bodyInspected": false,
+      "nativeBinding": "NOT_OBSERVED_HERE"
+    },
+    {
+      "name": "public._inv_write_audit",
+      "baselineMetadata": {
+        "acl": [
+          {
+            "grantee": "postgres",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          },
+          {
+            "grantee": "service_role",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          }
+        ],
+        "owner": "postgres",
+        "config": [
+          "search_path=public"
+        ],
+        "schema": "public",
+        "identity": "_inv_write_audit(p_actor_user_id uuid, p_action text, p_after_json jsonb, p_entity text, p_subject_id text, p_before_json jsonb, p_reason text, p_ip text, p_user_agent text, p_correlation_id text)",
+        "parallel": "u",
+        "volatility": "v",
+        "security_definer": true,
+        "definition_sha256": "d4e3a1d0d92e05cf077cb5ad97f4760a72f7ca4a92b458deb81f72e100066086"
+      },
+      "bodyInspected": false,
+      "nativeBinding": "NOT_OBSERVED_HERE"
+    },
+    {
+      "name": "public.import_auto_authorise_policy_resolve_v1",
+      "baselineMetadata": {
+        "acl": [
+          {
+            "grantee": "postgres",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          },
+          {
+            "grantee": "service_role",
+            "grantable": false,
+            "privilege": "EXECUTE"
+          }
+        ],
+        "owner": "postgres",
+        "config": [
+          "search_path=pg_catalog, public, private, extensions, pg_temp"
+        ],
+        "schema": "public",
+        "identity": "import_auto_authorise_policy_resolve_v1(p_source_system hr_source_enum, p_client_id uuid, p_contract_id uuid, p_validation_context boolean)",
+        "parallel": "u",
+        "volatility": "s",
+        "security_definer": true,
+        "definition_sha256": "d72289969d0ad2b8f83544a893ffd331389b01841e540b709a9ba8bc591a6b2b"
+      },
+      "bodyInspected": false,
+      "nativeBinding": "NOT_OBSERVED_HERE"
+    }
+  ],
+  "sourceAst": {
+    "outerGrammar": "PASS",
+    "fullPlBody": "NOT_PROVED_CATALOGUE_DEPENDENT",
+    "actualReturnPolicyCalls": 2,
+    "native": "NOT_RUN"
+  },
+  "sourceTests": 11,
+  "futureRootActor": "BIND_SAFE_ROOT_OBSERVATION_PRIVATELY",
+  "vacancy": "NOT_BOUND",
+  "workerDeployedSource": "NOT_PROVED_HERE",
+  "native": "NOT_RUN",
+  "nativeBusinessRowsRead": 0,
+  "businessRowsCreated": 0,
+  "runtimeTargets": [],
+  "bankingBodiesSelected": 0
+}

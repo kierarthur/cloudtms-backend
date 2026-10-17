@@ -1,0 +1,17 @@
+{
+  "version": "DAILY_R11_RETAINED_RAW_PARENT_EOF_V1",
+  "scope": "Exactly seven inherited composer EOF blank-line notices; no other diff check warning. Byte-exact complete parents, inverses and frozen manifests retained.",
+  "originalRawSourceCommit": "d6af1981b74b2ff1ae3b02891bdb5c1b2266d71a",
+  "files": [
+    "docs/healthroster-build/proposals/daily-five-stage-b2-r11-source-plan-20261017/compose.mjs",
+    "docs/healthroster-build/proposals/daily-health-genuine-auth-r11-b2-source-recipe-20261017/payload/docs/healthroster-build/proposals/daily-five-stage-b2-r11-source-plan-20261017/compose.mjs",
+    "docs/healthroster-build/proposals/daily-health-genuine-auth-r11-b2-source-recipe-20261017/reference/baseline/root/docs/healthroster-build/proposals/daily-five-stage-producer-hash-forward-20261017/compose.mjs",
+    "docs/healthroster-build/proposals/daily-health-genuine-auth-r11-b2-source-recipe-20261017/reference/entry/compose.mjs",
+    "docs/healthroster-build/proposals/daily-r11-b2-original109-parent-evidence-held-20261017/payload/docs/healthroster-build/proposals/daily-five-stage-b2-r11-source-plan-20261017/compose.mjs",
+    "docs/healthroster-build/proposals/daily-r11-b2-original109-parent-evidence-held-20261017/reference/baseline/root/docs/healthroster-build/proposals/daily-five-stage-producer-hash-forward-20261017/compose.mjs",
+    "docs/healthroster-build/proposals/daily-r11-b2-original109-parent-evidence-held-20261017/reference/entry/compose.mjs"
+  ],
+  "sourceTests": "77 Node plus6 Python and actual116/77/six full-parent checks PASS",
+  "runtimeChangeForWhitespace": false,
+  "auth": "NOT_RUN"
+}

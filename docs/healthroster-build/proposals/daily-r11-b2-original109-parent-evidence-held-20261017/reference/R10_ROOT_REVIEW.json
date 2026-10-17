@@ -1,0 +1,46 @@
+{
+  "version": "DAILY_AUTH_R10_SOURCE_RECIPE_ROOT_REVIEW_V1",
+  "verdict": "ACCEPT_BOUNDED_SOURCE_RECIPE_SUBJECT_TO_ACTUAL_BINDING",
+  "reportBaseCommit": "62226fa587bf5ad977043d6abd9d103002212b65",
+  "rootCaptureCommit": "267f4e2c5fe30b02cbe69ca143f17d50dd89e960",
+  "proposal": "docs/healthroster-build/proposals/daily-health-genuine-auth-r10-source-recipe-20261017",
+  "manifestSha256": "be86f4a8ec2fa12526c8937cf523e8d23bf8157024a412e4fc0b57fa172f6ed3",
+  "filesIncludingManifest": 36,
+  "completeCapturedParents": 23,
+  "sourceTests": {
+    "pass": 20,
+    "fail": 0
+  },
+  "actualFinalizer": "Source-only finalization on both actual current heads; original public preflight passed with exactly three synthetic private metadata predicates and zero private target access.",
+  "rootReview": [
+    "Whole prior R9 receipt validator retained; actual new closed public receipt required, distinct state-path literal; no target lookup.",
+    "Own proposal image verified saved/index/current/historical in I2; runtime complete targets stay in Report with actual phase commits and ancestry.",
+    "Nine exact runtime images in four actual normal pushed commits; old images remain full raw inverses and untouched pins retained.",
+    "Root copied all36 exact bytes and checked all26 manual draft evidence references against saved/HEAD/index; manual review remains unbound until actual K4.",
+    "Final operator full preflight, coordinator and continuation current-source acceptance still required before A; original stage actor, clocks, one-shot, native and release guards remain controlling."
+  ],
+  "independentPeer": {
+    "file": "docs/healthroster-build/proposals/daily-auth-r10-final-independent-peer-20261017/REVIEW.json",
+    "manifestSha256": "9ca0cd458c9360facb6f15f4d8ed47b8261ba8bcec41b7def6b22e76660414b3",
+    "verdict": "ACCEPT_BOUNDED_SOURCE_RECIPE",
+    "authorTests": 20,
+    "independentTests": 6,
+    "realParentsExact": 23
+  },
+  "documentationQualifications": [
+    "Boilerplate handoff said37; actual final manifest has35 entries plus MANIFEST=36.",
+    "Opening README describes historical unbound preparation. Current BASE_PARENT_SELECTION is bound to actual62226/267f; no auth or live admission follows from that binding."
+  ],
+  "auth": "NOT_RUN",
+  "native": "NOT_RUN",
+  "businessFixturesCreated": 0,
+  "privateStateContentsRead": 0,
+  "install2": "NOT_INSTALLED",
+  "finalCritics": "NOT_RUN",
+  "immutableCaptureWhitespaceException": {
+    "file": "docs/healthroster-build/proposals/daily-auth-r10-final-independent-peer-20261017/extra.test.mjs",
+    "line": 13,
+    "kind": "new blank line at EOF",
+    "reason": "Preserve independently sealed exact raw source and its manifest; all other paths must pass diff check."
+  }
+}

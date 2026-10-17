@@ -1,0 +1,23 @@
+{
+  "file": "docs/healthroster-build/proposals/daily-five-stage-producer-hash-forward-20261017/compose.mjs",
+  "bytes": 8336,
+  "sha256": "6566ad887bdfcd61f68819650954321adcca6eb110879500a309180aa8288cc7",
+  "beforeSha256": "6a22ef0bb4089d50325084ee96259b73637052f9e09808cad421febdfabf16cc",
+  "edits": [
+    {
+      "before": "import {createHash} from 'node:crypto';",
+      "after": "import {createHash} from 'node:crypto';\nimport {currentFiles} from 'file:///D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026/docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/current-read.mjs';",
+      "occurrences": 1
+    },
+    {
+      "before": "'_R10_",
+      "after": "'_B2_",
+      "occurrences": 7
+    },
+    {
+      "before": "const plan={version:'DAILY_GENUINE_ROOT_STAGE_BOOKKEEPER_PLAN_V1',stage,operatorSourceCommit:source,",
+      "after": "const plan={version:'DAILY_GENUINE_ROOT_STAGE_BOOKKEEPER_PLAN_V2',stage,currentReadEvidence:currentFiles(stage).evidence,currentConsumptionEvidence:currentFiles(stage).consumptionEvidence,operatorSourceCommit:source,",
+      "occurrences": 1
+    }
+  ]
+}

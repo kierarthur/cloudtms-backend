@@ -1,0 +1,53 @@
+[
+  {
+    "command": [
+      "node",
+      "--test",
+      "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026/.codex-tmp/daily-auth-r11-b2-complete-parent-evidence-forward-20261017/test.mjs",
+      "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026/.codex-tmp/daily-auth-r11-b2-complete-parent-evidence-forward-20261017/inverse-parent.test.mjs"
+    ],
+    "exitCode": 0,
+    "output": "\u2714 old109 exact publisher snippet reproduces P2 despite self-consistent before hash/size (3.5366ms)\n\u2714 all six claimed before images equal fixed full captured parent paths, lengths, hashes and bytes (2.0509ms)\n\u2714 self-consistent abbreviated claimed parent is rejected 0 (0.7886ms)\n\u2714 self-consistent abbreviated claimed parent is rejected 1 (0.7625ms)\n\u2714 self-consistent abbreviated claimed parent is rejected 2 (1.1332ms)\n\u2714 self-consistent abbreviated claimed parent is rejected 3 (1.0017ms)\n\u2714 self-consistent abbreviated claimed parent is rejected 4 (1.2907ms)\n\u2714 self-consistent abbreviated claimed parent is rejected 5 (1.4908ms)\n\u2714 wrong complete existing parent-file mapping is rejected 0 (0.9764ms)\n\u2714 wrong complete existing parent-file mapping is rejected 1 (0.2867ms)\n\u2714 wrong complete existing parent-file mapping is rejected 2 (0.2061ms)\n\u2714 wrong complete existing parent-file mapping is rejected 3 (0.1661ms)\n\u2714 wrong complete existing parent-file mapping is rejected 4 (0.1241ms)\n\u2714 wrong complete existing parent-file mapping is rejected 5 (0.1945ms)\n\u2714 real-reader contract accepts all six complete actual image tuples (1.8006ms)\n\u2714 any actual saved parent substitution refuses 0 (1.582ms)\n\u2714 any actual saved parent substitution refuses 1 (2.2776ms)\n\u2714 any actual saved parent substitution refuses 2 (1.6613ms)\n\u2714 any actual saved parent substitution refuses 3 (1.8163ms)\n\u2714 any actual saved parent substitution refuses 4 (1.9275ms)\n\u2714 any actual saved parent substitution refuses 5 (1.6589ms)\n\u2714 any actual index parent substitution refuses 0 (1.6274ms)\n\u2714 any actual index parent substitution refuses 1 (1.5496ms)\n\u2714 any actual index parent substitution refuses 2 (1.4534ms)\n\u2714 any actual index parent substitution refuses 3 (1.3649ms)\n\u2714 any actual index parent substitution refuses 4 (1.4321ms)\n\u2714 any actual index parent substitution refuses 5 (2.0139ms)\n\u2714 any actual HEAD parent substitution refuses 0 (2.1042ms)\n\u2714 any actual HEAD parent substitution refuses 1 (2.4146ms)\n\u2714 any actual HEAD parent substitution refuses 2 (2.8814ms)\n\u2714 any actual HEAD parent substitution refuses 3 (1.5591ms)\n\u2714 any actual HEAD parent substitution refuses 4 (1.4152ms)\n\u2714 any actual HEAD parent substitution refuses 5 (1.4848ms)\n\u2714 any actual history parent substitution refuses 0 (1.3404ms)\n\u2714 any actual history parent substitution refuses 1 (1.3754ms)\n\u2714 any actual history parent substitution refuses 2 (1.6191ms)\n\u2714 any actual history parent substitution refuses 3 (1.5123ms)\n\u2714 any actual history parent substitution refuses 4 (1.4716ms)\n\u2714 any actual history parent substitution refuses 5 (1.5064ms)\n\u2714 actual parent ancestry refusal and end HEAD movement remain closed (2.6963ms)\n\u2714 generator full-parent binding no longer aliases the replacement snippet variable (0.4606ms)\n\u2714 nine exact B2 auth targets in four phases have complete raw inverse for every image (29.6695ms)\n\u2714 all B2 modules/manifests retain current-read/current-ipc and every unaffected source/pin row (21.8904ms)\n\u2714 typed source proof refuses missing/unknown/future commits or receipt changes (3.6067ms)\n\u2714 R11 receipt retains all original admission/privacy/close/count predicates and new path (7.6741ms)\n\u2714 strict overlay accepts exact nine images plus every unchanged baseline row (21.1989ms)\n\u2714 strict overlay refuses auth image substitution 0 (19.5361ms)\n\u2714 strict overlay refuses auth image substitution 1 (17.4433ms)\n\u2714 strict overlay refuses auth image substitution 2 (15.8542ms)\n\u2714 strict overlay refuses auth image substitution 3 (16.4967ms)\n\u2714 strict overlay refuses auth image substitution 4 (15.7932ms)\n\u2714 strict overlay refuses auth image substitution 5 (15.8676ms)\n\u2714 strict overlay refuses auth image substitution 6 (15.6971ms)\n\u2714 strict overlay refuses auth image substitution 7 (15.9454ms)\n\u2714 strict overlay refuses auth image substitution 8 (14.7459ms)\n\u2714 strict overlay refuses unchanged/base saved substitution (16.0391ms)\n\u2714 strict overlay refuses unchanged/base index substitution (15.2883ms)\n\u2714 strict overlay refuses unchanged/base head substitution (16.4776ms)\n\u2714 strict overlay refuses unchanged/base old substitution (14.2034ms)\n\u2714 strict overlay refuses unchanged/base endHead substitution (15.5937ms)\n\u2714 no omitted/extra/duplicate ninth image or baseline omission can pass (45.4269ms)\n\u2714 actual mount refuses uncommitted, current/index/history drift and ancestry failure (2.7133ms)\n\u2714 exact four-phase arguments require each actual preceding commit (0.3903ms)\n\u2714 new entry/composer full images reverse exactly and all old files stay distinct (1.6063ms)\n\u2714 new root config closes actual auth phases/final K4 and preserves original metadata selection (1.9816ms)\n\u2714 receipt validator full prior function retained with only R11 label/prior-path change (0.4522ms)\n\u2714 five canonical alias snapshots are exact typed parents and only post-genuine-S0 guarded replacements (1.3359ms)\n\u2714 all before-A and native/clock/currentness/release protections remain in new entry copies (0.5753ms)\n\u2714 actual config loader admits only matching committed source review/metadata/auth-phase selection (13.3116ms)\n\u2714 actual public R11 receipt reader refuses any saved/index/HEAD/history/ancestor/head substitution (1.1323ms)\n\u2714 actual canonical alias writer admits exact five old images under current/history/index and completes owned-only commit (2.2592ms)\n\u2714 actual canonical alias writer refuses stage 0 substitution before any write (1.8639ms)\n\u2714 actual canonical alias writer refuses stage 1 substitution before any write (1.9213ms)\n\u2714 actual canonical alias writer refuses stage 2 substitution before any write (1.4353ms)\n\u2714 actual canonical alias writer refuses stage 3 substitution before any write (1.3704ms)\n\u2714 actual canonical alias writer refuses stage 4 substitution before any write (1.8066ms)\n\u2714 four source phase commits cannot collapse into a nominal single commit (0.4552ms)\n\u2139 tests 77\n\u2139 suites 0\n\u2139 pass 77\n\u2139 fail 0\n\u2139 cancelled 0\n\u2139 skipped 0\n\u2139 todo 0\n\u2139 duration_ms 563.744\n"
+  },
+  {
+    "command": [
+      "C:\\Users\\KierArthur\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+      "-B",
+      "-m",
+      "unittest",
+      "discover",
+      "-s",
+      "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026/.codex-tmp/daily-auth-r11-b2-complete-parent-evidence-forward-20261017",
+      "-p",
+      "test_history.py",
+      "-v"
+    ],
+    "exitCode": 0,
+    "output": "test_complete_functional_reverse_and_baseline_counts (test_history.Guards.test_complete_functional_reverse_and_baseline_counts) ... ok\r\ntest_each_original_14_metadata_history_owner (test_history.Guards.test_each_original_14_metadata_history_owner) ... ok\r\ntest_each_original_19_functional_history_owner (test_history.Guards.test_each_original_19_functional_history_owner) ... ok\r\ntest_each_original_55_history_object (test_history.Guards.test_each_original_55_history_object) ... ok\r\ntest_full_original_history_19_bodies_14_metadata (test_history.Guards.test_full_original_history_19_bodies_14_metadata) ... ok\r\ntest_historical_accepted_baseline_not_current_alias_or_count (test_history.Guards.test_historical_accepted_baseline_not_current_alias_or_count) ... ok\r\n\r\n----------------------------------------------------------------------\r\nRan 6 tests in 0.566s\r\n\r\nOK\r\n"
+  },
+  {
+    "command": [
+      "C:\\Users\\KierArthur\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+      "-B",
+      "-m",
+      "unittest",
+      "discover",
+      "-s",
+      "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-checklist-native-14102026\\.codex-tmp\\daily-r11-b2-parent-evidence-peer-20261017",
+      "-p",
+      "test_parent.py",
+      "-v"
+    ],
+    "exitCode": 0,
+    "output": "test_actual_old_publisher_failure_not_hidden_by_hash_consistency (test_parent.CompleteParentTests.test_actual_old_publisher_failure_not_hidden_by_hash_consistency) ... ok\r\ntest_all_six_complete_parent_vectors (test_parent.CompleteParentTests.test_all_six_complete_parent_vectors) ... ok\r\ntest_each_claim_is_checked_against_complete_bytes (test_parent.CompleteParentTests.test_each_claim_is_checked_against_complete_bytes) ... ok\r\ntest_self_consistent_snippet_is_not_whole_parent (test_parent.CompleteParentTests.test_self_consistent_snippet_is_not_whole_parent) ... ok\r\n\r\n----------------------------------------------------------------------\r\nRan 4 tests in 0.008s\r\n\r\nOK\r\n"
+  },
+  {
+    "command": [
+      "C:\\Users\\KierArthur\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+      "-B",
+      "D:/Development/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/.codex-tmp/daily-r11-b2-independent-peer-20261017/verify-archive.py"
+    ],
+    "exitCode": 0,
+    "output": "{\"status\": \"FROZEN_PUBLIC_SOURCE_AND_REAL_HISTORICAL_OBJECTS_PASS\", \"authorFiles\": 109, \"actualGitBlobs\": 151, \"native\": \"NOT_RUN\", \"sourceAdmission\": \"NOT_RUN\", \"auth\": \"NOT_RUN\", \"privateTargetAccess\": false}\r\n"
+  }
+]

@@ -1,0 +1,11 @@
+{
+  "version": "DAILY_GENUINE_ROOT_EFFECT_ADMISSION_V1",
+  "stage": "S1a",
+  "operatorSourceCommit": "6b5ebedecf95c8a1adfda5141bbf3eccf5294d23",
+  "catalogueSha256": "717b0254c002aaa71860add11c3cfff4adafb7dc77f83679f0c7fabb7f0e514e",
+  "workerSourceSha256": "637bacbb79016c357724ba1e88f8d854d2dcc55201d0bd77a0a14bedd293d968",
+  "nativeOwnerEvidence": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_S1A_FIXED_NATIVE_METADATA_20261017.json",
+  "schemaEffectEvidence": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_S1A_ROOT_SOURCE_REVIEW_20261017.json",
+  "canonicalBeforeEvidence": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_S1a_R10_BEFORE_NATIVE_QUALIFICATION_20261017.json",
+  "reviewRecord": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_S1a_R10_PREDECISION_20261017.json"
+}

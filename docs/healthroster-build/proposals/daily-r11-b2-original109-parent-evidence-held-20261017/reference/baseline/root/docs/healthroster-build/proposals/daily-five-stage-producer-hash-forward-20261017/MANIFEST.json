@@ -1,0 +1,60 @@
+{
+  "version": "STAGE_PRODUCER_HASH_SOURCE_FORWARD_MANIFEST_V1",
+  "files": [
+    {
+      "file": "compose.mjs",
+      "bytes": 8336,
+      "sha256": "6566ad887bdfcd61f68819650954321adcca6eb110879500a309180aa8288cc7"
+    },
+    {
+      "file": "FULL_PARENT_FORWARD.json",
+      "bytes": 2925,
+      "sha256": "f60ed6af90df83fe650e4d9379ff63c2f4b0a03dba023883173c9b1af6a1906b"
+    },
+    {
+      "file": "PREDECISION_TEMPLATE.json",
+      "bytes": 2015,
+      "sha256": "e3562c1f6ac700df864a46969275a70d7c5ec15b8fa4c6f2e5d6434caff11201"
+    },
+    {
+      "file": "README.md",
+      "bytes": 2286,
+      "sha256": "b78c74f6bfee4c596b60ea982f158541a1b71540b3d2da7b22d9ed4b152dac8d"
+    },
+    {
+      "file": "reference/compose.mjs",
+      "bytes": 6526,
+      "sha256": "e19cb21e5497ac5d2654ca21863fba09430c6d1b32793507d6729fefa6221f86"
+    },
+    {
+      "file": "reference/MANIFEST.json",
+      "bytes": 1160,
+      "sha256": "7e75f7d5d63db81551ec9e494e76bc6b9b2341ed44af1fff637c2b76814b5f0c"
+    },
+    {
+      "file": "reference/PREDECISION_TEMPLATE.json",
+      "bytes": 1840,
+      "sha256": "a40feda176053f46bbd0c8294e14f7ef954b7810161ca6d99ab6a46f8ef030d2"
+    },
+    {
+      "file": "reference/test.mjs",
+      "bytes": 7778,
+      "sha256": "3799aba1ca6d1f7a0a6e4e6ed6e881bd8d7fd98009f44348a257074df7aa8e9f"
+    },
+    {
+      "file": "RESULTS.json",
+      "bytes": 361,
+      "sha256": "dccddff2a1a71b7249ec622aab253039d52d9303df774a5e7fef3436d7f5e052"
+    },
+    {
+      "file": "SOURCE_PINS.json",
+      "bytes": 1071,
+      "sha256": "0b412c8fabaafb1285c95b4b2f8450acf4d7f0e7d6b66be287cf5ea9916334ea"
+    },
+    {
+      "file": "test.mjs",
+      "bytes": 10921,
+      "sha256": "1436d05fa5033be15180d2a1bb8cac70c060cc5ded43de57e83332918dcc55b2"
+    }
+  ]
+}

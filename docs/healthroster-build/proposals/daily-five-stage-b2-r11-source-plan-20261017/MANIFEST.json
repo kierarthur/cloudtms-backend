@@ -1,0 +1,10 @@
+{
+  "version": "FINITE_R11_NAMESPACE_COMPOSER_V1",
+  "files": [
+    {
+      "file": "compose.mjs",
+      "bytes": 8364,
+      "sha256": "4eb91bcc1adbf0619bb0d652a993593ef802298b7ec05b7dac186343a1677cba"
+    }
+  ]
+}

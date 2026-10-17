@@ -1,0 +1,280 @@
+{
+  "version": "ACTUAL_COST_RECORD_SHA256_SUCCESS_RUNTIME_V1",
+  "mode": "RECORD_SHA256",
+  "sourceCommit": "a65b97f59c51e972c6a4379127b46bfc6fdbeae9",
+  "nonce": "b1e26dc0660a69f2e82dc090a526f9bc",
+  "out": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/.codex-tmp/qt-cost-native-cmd-20261017-b1e26dc0660a69f2e82dc090a526f9bc",
+  "status": "BOUNDED_COST_CAPTURE_OWN_TURN_RELEASED",
+  "nativeCalls": 1,
+  "scope": "BOUNDED_READ_ONLY_NONREPRESENTATIVE_SAMPLE_NOT_QT_ACCEPTANCE",
+  "launch": {
+    "chunk_id": "6a55a8",
+    "wall_time_seconds": 10.0070045,
+    "session_id": 60103,
+    "original_token_count": 4,
+    "output": "\u001b[?9001h\u001b[?1004h"
+  },
+  "sessionId": 60103,
+  "ready": {
+    "status": "COST_INPUT_READY",
+    "ownedDirectory": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/.codex-tmp/qt-audit-cost1000-20261017-d9f83dc78589b512ba1b4e88c0aeddd1",
+    "inputFile": "INPUT.json",
+    "nativeResultFile": "NATIVE_RESULT.json",
+    "holderStartedAt": "2026-10-17T18:16:06.790Z",
+    "remainingWorkMs": 112634,
+    "compatibility": "ROOT_REVIEW_REQUIRED",
+    "businessScope": "NOT_RUN",
+    "mode": "RECORD_SHA256"
+  },
+  "bridge": {
+    "transport": "ACTUAL_REDIRECTED_CHILD_STDOUT",
+    "progressFile": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/.codex-tmp/qt-cost-native-cmd-20261017-b1e26dc0660a69f2e82dc090a526f9bc/PROGRESS.jsonl",
+    "rawPtyResponses": [
+      {
+        "chunk_id": "4fa62e",
+        "wall_time_seconds": 0.2510324,
+        "session_id": 60103,
+        "original_token_count": 17,
+        "output": "\u001b[?25l\u001b[2J\u001b[m\u001b[HRESULT_READY\r\n\u001b]0;C:\\Windows\\system32\\cmd.exe\u0007\u001b[?25h"
+      },
+      {
+        "chunk_id": "eb6e46",
+        "wall_time_seconds": 0.2622258,
+        "session_id": 60103,
+        "original_token_count": 3,
+        "output": "RELEASE\r\n"
+      },
+      {
+        "chunk_id": "3f2b09",
+        "wall_time_seconds": 0.0000083,
+        "exit_code": 0,
+        "original_token_count": 9,
+        "output": "\r\n\u001b[?25l\u001b[3;1H\u001b[?25h\u001b[?9001l\u001b[?1004l"
+      }
+    ],
+    "progressReads": [
+      {
+        "version": "QT_COST_REDIRECTED_PROGRESS_V1",
+        "nonce": "b1e26dc0660a69f2e82dc090a526f9bc",
+        "offset": 413,
+        "prefixSha256": "5da99d0e954d1806c1db76f97694666f323625f476c301347fbd5c6c82f86e42",
+        "fileId": "1852511126:281474979525214:1792260966684151000",
+        "delta": "{\"status\":\"COST_INPUT_READY\",\"ownedDirectory\":\"D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/.codex-tmp/qt-audit-cost1000-20261017-d9f83dc78589b512ba1b4e88c0aeddd1\",\"inputFile\":\"INPUT.json\",\"nativeResultFile\":\"NATIVE_RESULT.json\",\"holderStartedAt\":\"2026-10-17T18:16:06.790Z\",\"remainingWorkMs\":112634,\"compatibility\":\"ROOT_REVIEW_REQUIRED\",\"businessScope\":\"NOT_RUN\",\"mode\":\"RECORD_SHA256\"}\n"
+      },
+      {
+        "version": "QT_COST_REDIRECTED_PROGRESS_V1",
+        "nonce": "b1e26dc0660a69f2e82dc090a526f9bc",
+        "offset": 838,
+        "prefixSha256": "0f8b728d680add48d4a9e429c83d47f1a9fa2c3b4f680e30a7f012880582a55c",
+        "fileId": "1852511126:281474979525214:1792260966684151000",
+        "delta": "{\"status\":\"COST_CAPTURED_PENDING_RELEASE\",\"ownedDirectory\":\"D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/.codex-tmp/qt-audit-cost1000-20261017-d9f83dc78589b512ba1b4e88c0aeddd1\",\"inputFile\":\"INPUT.json\",\"nativeResultFile\":\"NATIVE_RESULT.json\",\"holderStartedAt\":\"2026-10-17T18:16:06.790Z\",\"remainingWorkMs\":98181,\"compatibility\":\"ROOT_REVIEW_REQUIRED\",\"businessScope\":\"NOT_RUN\",\"mode\":\"RECORD_SHA256\"}\n"
+      },
+      {
+        "version": "QT_COST_REDIRECTED_PROGRESS_V1",
+        "nonce": "b1e26dc0660a69f2e82dc090a526f9bc",
+        "offset": 1122,
+        "prefixSha256": "8594a0ee47bc58925c2a98c4f9ab2570e75be6c44dc3ea951725e8bd1ace79ae",
+        "fileId": "1852511126:281474979525214:1792260966684151000",
+        "delta": "{\"status\":\"COST_CAPTURED_OWN_TURN_RELEASED\",\"ownedDirectory\":\"D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/.codex-tmp/qt-audit-cost1000-20261017-d9f83dc78589b512ba1b4e88c0aeddd1\",\"businessScope\":\"NOT_RUN\",\"compatibility\":\"ROOT_REVIEW_REQUIRED_NOT_QUALIFIED\"}\n"
+      },
+      {
+        "version": "QT_COST_REDIRECTED_PROGRESS_V1",
+        "nonce": "b1e26dc0660a69f2e82dc090a526f9bc",
+        "offset": 1122,
+        "prefixSha256": "8594a0ee47bc58925c2a98c4f9ab2570e75be6c44dc3ea951725e8bd1ace79ae",
+        "fileId": "1852511126:281474979525214:1792260966684151000",
+        "delta": ""
+      }
+    ]
+  },
+  "nativeInput": {
+    "database": "agency_test",
+    "label": "HR_QT_COST1000_RECORD_SHA256_56999C4A134485115B6BFD77C0A26F87",
+    "sql": "set local transaction_read_only=on;\nselect pg_catalog.jsonb_build_object('version','QT_AUDIT_COST_CLOCK_V1','mode','RECORD_SHA256','phase','START','sampleLimit',1000,'database',current_database(),'databaseOid',(select oid::bigint from pg_catalog.pg_database where datname=current_database()),'backendPid',pg_backend_pid(),'holderPid',300384,'holderGranted',(exists(select 1 from pg_catalog.pg_locks l where l.locktype='advisory' and l.database=324139 and l.pid=300384 and l.classid=20261013 and l.objid=1 and l.objsubid=2 and l.mode='ExclusiveLock' and l.granted)),'readOnly',current_setting('transaction_read_only')::boolean,'noRoleSwitch',current_user=session_user,'observedAt',clock_timestamp(),\n'closureAdmitted',(1/(case when (with expected_columns(ord,name,type_oid,identity) as(values (1,'id',2950,''),(2,'ts_utc',1184,''),(3,'actor_user_id',2950,''),(4,'actor_display',25,''),(5,'actor_role_at_time',25,''),(6,'object_type',25,''),(7,'object_id_text',25,''),(8,'action',25,''),(9,'before_json',3802,''),(10,'after_json',3802,''),(11,'reason',25,''),(12,'ip',25,''),(13,'user_agent',25,''),(14,'correlation_id',25,''),(15,'event_sequence_is_authoritative',16,''),(16,'event_sequence',20,'a')),\nexpected_types(oid,send_symbol,out_symbol) as(values (2950,'uuid_send','uuid_out'),(1184,'timestamptz_send','timestamptz_out'),(25,'textsend','textout'),(3802,'jsonb_send','jsonb_out'),(16,'boolsend','boolout'),(20,'int8send','int8out')),\nexpected_functions(identity,source_symbol,arg_oid,return_oid) as(values ('pg_catalog.record_send(record)','record_send',2249,17),('pg_catalog.to_jsonb(anyelement)','to_jsonb',2283,3802),('pg_catalog.md5(text)','md5_text',25,25),('pg_catalog.sha256(bytea)','sha256_bytea',17,17),('pg_catalog.pg_column_size(\"any\")','pg_column_size',2276,23)),\nr as(select c.* from pg_catalog.pg_class c join pg_catalog.pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relname='audit_events')\nselect\n (select count(*)=1 and coalesce(bool_and(r.relkind='r' and r.relpersistence='p' and r.relrowsecurity and not r.relforcerowsecurity and r.relowner=(select oid from pg_catalog.pg_roles where rolname='dee50tht') and r.relam=(select oid from pg_catalog.pg_am where amname='heap' and amtype='t')),false) from r)\n and (select count(*)=16 from pg_catalog.pg_attribute a join r on r.oid=a.attrelid where a.attnum>0 and not a.attisdropped)\n and not exists(select 1 from expected_columns e where not exists(select 1 from pg_catalog.pg_attribute a join r on r.oid=a.attrelid where a.attnum=e.ord and a.attname=e.name and a.atttypid=e.type_oid and not a.attisdropped and a.attidentity::text=e.identity and a.attgenerated=''))\n and not exists(select 1 from pg_catalog.pg_inherits i join r on r.oid in(i.inhrelid,i.inhparent))\n and not exists(select 1 from pg_catalog.pg_rewrite w join r on r.oid=w.ev_class)\n and (select count(*)=1 from pg_catalog.pg_policy p join r on r.oid=p.polrelid)\n and (select count(*)=2 from pg_catalog.pg_roles where rolname in('dee50tht','service_role'))\n and exists(select 1 from pg_catalog.pg_policy p join r on r.oid=p.polrelid where p.polname='cloudtms_miget_service_owner_all' and p.polcmd='*' and p.polpermissive and pg_catalog.pg_get_expr(p.polqual,p.polrelid)='true' and pg_catalog.pg_get_expr(p.polwithcheck,p.polrelid)='true'\n and array(select unnest(p.polroles) order by 1)=(select array_agg(oid order by oid) from pg_catalog.pg_roles where rolname in('dee50tht','service_role')))\n and not exists(select 1 from expected_types e where not exists(select 1 from pg_catalog.pg_type t join pg_catalog.pg_namespace n on n.oid=t.typnamespace join pg_catalog.pg_proc snd on snd.oid=t.typsend join pg_catalog.pg_language sl on sl.oid=snd.prolang join pg_catalog.pg_proc outp on outp.oid=t.typoutput join pg_catalog.pg_language ol on ol.oid=outp.prolang\n where t.oid=e.oid and n.nspname='pg_catalog' and t.typtype='b' and t.typbasetype=0 and t.typisdefined\n and snd.pronargs=1 and snd.proargtypes[0]=t.oid and snd.prorettype=17 and not snd.proretset and snd.provariadic=0 and outp.pronargs=1 and outp.proargtypes[0]=t.oid and outp.prorettype=2275 and not outp.proretset and outp.provariadic=0\n and snd.pronamespace=n.oid and snd.proowner=10 and snd.prokind='f' and sl.lanname='internal' and snd.prosrc=e.send_symbol and snd.probin is null and snd.proconfig is null and not snd.prosecdef and snd.provolatile in('i','s')\n and outp.pronamespace=n.oid and outp.proowner=10 and outp.prokind='f' and ol.lanname='internal' and outp.prosrc=e.out_symbol and outp.probin is null and outp.proconfig is null and not outp.prosecdef and outp.provolatile in('i','s')))\n and not exists(select 1 from expected_functions e where not exists(select 1 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace join pg_catalog.pg_language l on l.oid=p.prolang\n where p.oid=pg_catalog.to_regprocedure(e.identity) and p.pronargs=1 and p.proargtypes[0]=e.arg_oid and p.prorettype=e.return_oid and not p.proretset and p.provariadic=0 and n.nspname='pg_catalog' and p.proowner=10 and p.prokind='f' and l.lanname='internal' and p.prosrc=e.source_symbol and p.probin is null and p.proconfig is null and not p.prosecdef and p.provolatile in('i','s'))) as allowed) and current_database()='cloudtms_test_clone' and (select oid from pg_catalog.pg_database where datname=current_database())=324139\n and current_user=session_user and current_user='dee50tht' and current_setting('transaction_read_only')='on' and current_setting('server_version_num')::integer=170011 and (exists(select 1 from pg_catalog.pg_locks l where l.locktype='advisory' and l.database=324139 and l.pid=300384 and l.classid=20261013 and l.objid=1 and l.objsubid=2 and l.mode='ExclusiveLock' and l.granted))\n and exists(select 1 from private.cloudtms_database_identity where singleton and environment='TEST' and customer_key is null)\n and exists(select 1 from private.bpay_next_module_control where id=1 and active_owner='LEGACY' and owner_epoch=1)\n and not exists(select 1 from private.cloudtms_database_releases where status='APPLYING') then 1 else 0 end))=1) as cost_clock;\nwith measured as materialized(select pg_catalog.octet_length(pg_catalog.sha256(pg_catalog.record_send(s.audit_row))) as byte_count from (select a as audit_row from public.audit_events a limit 1000) s)\nselect pg_catalog.jsonb_build_object('version','QT_AUDIT_COST_CONSUMED_V1','mode','RECORD_SHA256','sampleLimit',1000,'sampleCount',count(*)::text,'evaluatedCount',count(byte_count)::text,'bytesTotal',coalesce(sum(byte_count::bigint),0)::text,'database',current_database(),'backendPid',pg_backend_pid(),'holderPid',300384,'holderGranted',(exists(select 1 from pg_catalog.pg_locks l where l.locktype='advisory' and l.database=324139 and l.pid=300384 and l.classid=20261013 and l.objid=1 and l.objsubid=2 and l.mode='ExclusiveLock' and l.granted)),'readOnly',current_setting('transaction_read_only')::boolean,'noRoleSwitch',current_user=session_user) as cost_counters from measured;\nselect pg_catalog.jsonb_build_object('version','QT_AUDIT_COST_CLOCK_V1','mode','RECORD_SHA256','phase','END','sampleLimit',1000,'database',current_database(),'databaseOid',(select oid::bigint from pg_catalog.pg_database where datname=current_database()),'backendPid',pg_backend_pid(),'holderPid',300384,'holderGranted',(exists(select 1 from pg_catalog.pg_locks l where l.locktype='advisory' and l.database=324139 and l.pid=300384 and l.classid=20261013 and l.objid=1 and l.objsubid=2 and l.mode='ExclusiveLock' and l.granted)),'readOnly',current_setting('transaction_read_only')::boolean,'noRoleSwitch',current_user=session_user,'observedAt',clock_timestamp(),\n'closureAdmitted',(1/(case when (with expected_columns(ord,name,type_oid,identity) as(values (1,'id',2950,''),(2,'ts_utc',1184,''),(3,'actor_user_id',2950,''),(4,'actor_display',25,''),(5,'actor_role_at_time',25,''),(6,'object_type',25,''),(7,'object_id_text',25,''),(8,'action',25,''),(9,'before_json',3802,''),(10,'after_json',3802,''),(11,'reason',25,''),(12,'ip',25,''),(13,'user_agent',25,''),(14,'correlation_id',25,''),(15,'event_sequence_is_authoritative',16,''),(16,'event_sequence',20,'a')),\nexpected_types(oid,send_symbol,out_symbol) as(values (2950,'uuid_send','uuid_out'),(1184,'timestamptz_send','timestamptz_out'),(25,'textsend','textout'),(3802,'jsonb_send','jsonb_out'),(16,'boolsend','boolout'),(20,'int8send','int8out')),\nexpected_functions(identity,source_symbol,arg_oid,return_oid) as(values ('pg_catalog.record_send(record)','record_send',2249,17),('pg_catalog.to_jsonb(anyelement)','to_jsonb',2283,3802),('pg_catalog.md5(text)','md5_text',25,25),('pg_catalog.sha256(bytea)','sha256_bytea',17,17),('pg_catalog.pg_column_size(\"any\")','pg_column_size',2276,23)),\nr as(select c.* from pg_catalog.pg_class c join pg_catalog.pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relname='audit_events')\nselect\n (select count(*)=1 and coalesce(bool_and(r.relkind='r' and r.relpersistence='p' and r.relrowsecurity and not r.relforcerowsecurity and r.relowner=(select oid from pg_catalog.pg_roles where rolname='dee50tht') and r.relam=(select oid from pg_catalog.pg_am where amname='heap' and amtype='t')),false) from r)\n and (select count(*)=16 from pg_catalog.pg_attribute a join r on r.oid=a.attrelid where a.attnum>0 and not a.attisdropped)\n and not exists(select 1 from expected_columns e where not exists(select 1 from pg_catalog.pg_attribute a join r on r.oid=a.attrelid where a.attnum=e.ord and a.attname=e.name and a.atttypid=e.type_oid and not a.attisdropped and a.attidentity::text=e.identity and a.attgenerated=''))\n and not exists(select 1 from pg_catalog.pg_inherits i join r on r.oid in(i.inhrelid,i.inhparent))\n and not exists(select 1 from pg_catalog.pg_rewrite w join r on r.oid=w.ev_class)\n and (select count(*)=1 from pg_catalog.pg_policy p join r on r.oid=p.polrelid)\n and (select count(*)=2 from pg_catalog.pg_roles where rolname in('dee50tht','service_role'))\n and exists(select 1 from pg_catalog.pg_policy p join r on r.oid=p.polrelid where p.polname='cloudtms_miget_service_owner_all' and p.polcmd='*' and p.polpermissive and pg_catalog.pg_get_expr(p.polqual,p.polrelid)='true' and pg_catalog.pg_get_expr(p.polwithcheck,p.polrelid)='true'\n and array(select unnest(p.polroles) order by 1)=(select array_agg(oid order by oid) from pg_catalog.pg_roles where rolname in('dee50tht','service_role')))\n and not exists(select 1 from expected_types e where not exists(select 1 from pg_catalog.pg_type t join pg_catalog.pg_namespace n on n.oid=t.typnamespace join pg_catalog.pg_proc snd on snd.oid=t.typsend join pg_catalog.pg_language sl on sl.oid=snd.prolang join pg_catalog.pg_proc outp on outp.oid=t.typoutput join pg_catalog.pg_language ol on ol.oid=outp.prolang\n where t.oid=e.oid and n.nspname='pg_catalog' and t.typtype='b' and t.typbasetype=0 and t.typisdefined\n and snd.pronargs=1 and snd.proargtypes[0]=t.oid and snd.prorettype=17 and not snd.proretset and snd.provariadic=0 and outp.pronargs=1 and outp.proargtypes[0]=t.oid and outp.prorettype=2275 and not outp.proretset and outp.provariadic=0\n and snd.pronamespace=n.oid and snd.proowner=10 and snd.prokind='f' and sl.lanname='internal' and snd.prosrc=e.send_symbol and snd.probin is null and snd.proconfig is null and not snd.prosecdef and snd.provolatile in('i','s')\n and outp.pronamespace=n.oid and outp.proowner=10 and outp.prokind='f' and ol.lanname='internal' and outp.prosrc=e.out_symbol and outp.probin is null and outp.proconfig is null and not outp.prosecdef and outp.provolatile in('i','s')))\n and not exists(select 1 from expected_functions e where not exists(select 1 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace join pg_catalog.pg_language l on l.oid=p.prolang\n where p.oid=pg_catalog.to_regprocedure(e.identity) and p.pronargs=1 and p.proargtypes[0]=e.arg_oid and p.prorettype=e.return_oid and not p.proretset and p.provariadic=0 and n.nspname='pg_catalog' and p.proowner=10 and p.prokind='f' and l.lanname='internal' and p.prosrc=e.source_symbol and p.probin is null and p.proconfig is null and not p.prosecdef and p.provolatile in('i','s'))) as allowed) and current_database()='cloudtms_test_clone' and (select oid from pg_catalog.pg_database where datname=current_database())=324139\n and current_user=session_user and current_user='dee50tht' and current_setting('transaction_read_only')='on' and current_setting('server_version_num')::integer=170011 and (exists(select 1 from pg_catalog.pg_locks l where l.locktype='advisory' and l.database=324139 and l.pid=300384 and l.classid=20261013 and l.objid=1 and l.objsubid=2 and l.mode='ExclusiveLock' and l.granted))\n and exists(select 1 from private.cloudtms_database_identity where singleton and environment='TEST' and customer_key is null)\n and exists(select 1 from private.bpay_next_module_control where id=1 and active_owner='LEGACY' and owner_epoch=1)\n and not exists(select 1 from private.cloudtms_database_releases where status='APPLYING') then 1 else 0 end))=1) as cost_clock;",
+    "verification_sql": "select pg_catalog.jsonb_build_object('version','QT_AUDIT_COST_CLOCK_V1','mode','RECORD_SHA256','phase','FRESH','sampleLimit',1000,'database',current_database(),'databaseOid',(select oid::bigint from pg_catalog.pg_database where datname=current_database()),'backendPid',pg_backend_pid(),'holderPid',300384,'holderGranted',(exists(select 1 from pg_catalog.pg_locks l where l.locktype='advisory' and l.database=324139 and l.pid=300384 and l.classid=20261013 and l.objid=1 and l.objsubid=2 and l.mode='ExclusiveLock' and l.granted)),'readOnly',current_setting('transaction_read_only')::boolean,'noRoleSwitch',current_user=session_user,'observedAt',clock_timestamp(),\n'closureAdmitted',(1/(case when (with expected_columns(ord,name,type_oid,identity) as(values (1,'id',2950,''),(2,'ts_utc',1184,''),(3,'actor_user_id',2950,''),(4,'actor_display',25,''),(5,'actor_role_at_time',25,''),(6,'object_type',25,''),(7,'object_id_text',25,''),(8,'action',25,''),(9,'before_json',3802,''),(10,'after_json',3802,''),(11,'reason',25,''),(12,'ip',25,''),(13,'user_agent',25,''),(14,'correlation_id',25,''),(15,'event_sequence_is_authoritative',16,''),(16,'event_sequence',20,'a')),\nexpected_types(oid,send_symbol,out_symbol) as(values (2950,'uuid_send','uuid_out'),(1184,'timestamptz_send','timestamptz_out'),(25,'textsend','textout'),(3802,'jsonb_send','jsonb_out'),(16,'boolsend','boolout'),(20,'int8send','int8out')),\nexpected_functions(identity,source_symbol,arg_oid,return_oid) as(values ('pg_catalog.record_send(record)','record_send',2249,17),('pg_catalog.to_jsonb(anyelement)','to_jsonb',2283,3802),('pg_catalog.md5(text)','md5_text',25,25),('pg_catalog.sha256(bytea)','sha256_bytea',17,17),('pg_catalog.pg_column_size(\"any\")','pg_column_size',2276,23)),\nr as(select c.* from pg_catalog.pg_class c join pg_catalog.pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relname='audit_events')\nselect\n (select count(*)=1 and coalesce(bool_and(r.relkind='r' and r.relpersistence='p' and r.relrowsecurity and not r.relforcerowsecurity and r.relowner=(select oid from pg_catalog.pg_roles where rolname='dee50tht') and r.relam=(select oid from pg_catalog.pg_am where amname='heap' and amtype='t')),false) from r)\n and (select count(*)=16 from pg_catalog.pg_attribute a join r on r.oid=a.attrelid where a.attnum>0 and not a.attisdropped)\n and not exists(select 1 from expected_columns e where not exists(select 1 from pg_catalog.pg_attribute a join r on r.oid=a.attrelid where a.attnum=e.ord and a.attname=e.name and a.atttypid=e.type_oid and not a.attisdropped and a.attidentity::text=e.identity and a.attgenerated=''))\n and not exists(select 1 from pg_catalog.pg_inherits i join r on r.oid in(i.inhrelid,i.inhparent))\n and not exists(select 1 from pg_catalog.pg_rewrite w join r on r.oid=w.ev_class)\n and (select count(*)=1 from pg_catalog.pg_policy p join r on r.oid=p.polrelid)\n and (select count(*)=2 from pg_catalog.pg_roles where rolname in('dee50tht','service_role'))\n and exists(select 1 from pg_catalog.pg_policy p join r on r.oid=p.polrelid where p.polname='cloudtms_miget_service_owner_all' and p.polcmd='*' and p.polpermissive and pg_catalog.pg_get_expr(p.polqual,p.polrelid)='true' and pg_catalog.pg_get_expr(p.polwithcheck,p.polrelid)='true'\n and array(select unnest(p.polroles) order by 1)=(select array_agg(oid order by oid) from pg_catalog.pg_roles where rolname in('dee50tht','service_role')))\n and not exists(select 1 from expected_types e where not exists(select 1 from pg_catalog.pg_type t join pg_catalog.pg_namespace n on n.oid=t.typnamespace join pg_catalog.pg_proc snd on snd.oid=t.typsend join pg_catalog.pg_language sl on sl.oid=snd.prolang join pg_catalog.pg_proc outp on outp.oid=t.typoutput join pg_catalog.pg_language ol on ol.oid=outp.prolang\n where t.oid=e.oid and n.nspname='pg_catalog' and t.typtype='b' and t.typbasetype=0 and t.typisdefined\n and snd.pronargs=1 and snd.proargtypes[0]=t.oid and snd.prorettype=17 and not snd.proretset and snd.provariadic=0 and outp.pronargs=1 and outp.proargtypes[0]=t.oid and outp.prorettype=2275 and not outp.proretset and outp.provariadic=0\n and snd.pronamespace=n.oid and snd.proowner=10 and snd.prokind='f' and sl.lanname='internal' and snd.prosrc=e.send_symbol and snd.probin is null and snd.proconfig is null and not snd.prosecdef and snd.provolatile in('i','s')\n and outp.pronamespace=n.oid and outp.proowner=10 and outp.prokind='f' and ol.lanname='internal' and outp.prosrc=e.out_symbol and outp.probin is null and outp.proconfig is null and not outp.prosecdef and outp.provolatile in('i','s')))\n and not exists(select 1 from expected_functions e where not exists(select 1 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace join pg_catalog.pg_language l on l.oid=p.prolang\n where p.oid=pg_catalog.to_regprocedure(e.identity) and p.pronargs=1 and p.proargtypes[0]=e.arg_oid and p.prorettype=e.return_oid and not p.proretset and p.provariadic=0 and n.nspname='pg_catalog' and p.proowner=10 and p.prokind='f' and l.lanname='internal' and p.prosrc=e.source_symbol and p.probin is null and p.proconfig is null and not p.prosecdef and p.provolatile in('i','s'))) as allowed) and current_database()='cloudtms_test_clone' and (select oid from pg_catalog.pg_database where datname=current_database())=324139\n and current_user=session_user and current_user='dee50tht' and current_setting('transaction_read_only')='on' and current_setting('server_version_num')::integer=170011 and (exists(select 1 from pg_catalog.pg_locks l where l.locktype='advisory' and l.database=324139 and l.pid=300384 and l.classid=20261013 and l.objid=1 and l.objsubid=2 and l.mode='ExclusiveLock' and l.granted))\n and exists(select 1 from private.cloudtms_database_identity where singleton and environment='TEST' and customer_key is null)\n and exists(select 1 from private.bpay_next_module_control where id=1 and active_owner='LEGACY' and owner_epoch=1)\n and not exists(select 1 from private.cloudtms_database_releases where status='APPLYING') then 1 else 0 end))=1) as cost_clock;",
+    "continue_on_error": false,
+    "max_rows_per_statement": 1,
+    "statement_timeout_ms": 30000,
+    "lock_timeout_ms": 2000
+  },
+  "nativeStartedAt": "2026-10-17T18:16:24.844Z",
+  "rawNativeResult": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\n  \"accepted\": true,\n  \"databaseTarget\": \"agency_test\",\n  \"database\": \"cloudtms_test_clone\",\n  \"label\": \"HR_QT_COST1000_RECORD_SHA256_56999C4A134485115B6BFD77C0A26F87\",\n  \"sqlSha256\": \"1eac5ac4351aaae707f20a010a5fce6444b342bd682f11eac5cf246dfa8eee12\",\n  \"statementCount\": 4,\n  \"statements\": [\n    {\n      \"statement\": 1,\n      \"command\": \"SET\",\n      \"rowCount\": null,\n      \"fields\": [],\n      \"rows\": [],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 2,\n      \"command\": \"SELECT\",\n      \"rowCount\": 1,\n      \"fields\": [\n        \"cost_clock\"\n      ],\n      \"rows\": [\n        {\n          \"cost_clock\": {\n            \"mode\": \"RECORD_SHA256\",\n            \"phase\": \"START\",\n            \"version\": \"QT_AUDIT_COST_CLOCK_V1\",\n            \"database\": \"cloudtms_test_clone\",\n            \"readOnly\": true,\n            \"holderPid\": 300384,\n            \"backendPid\": 300398,\n            \"observedAt\": \"2026-10-17T18:16:27.120566+00:00\",\n            \"databaseOid\": 324139,\n            \"sampleLimit\": 1000,\n            \"noRoleSwitch\": true,\n            \"holderGranted\": true,\n            \"closureAdmitted\": true\n          }\n        }\n      ],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 3,\n      \"command\": \"SELECT\",\n      \"rowCount\": 1,\n      \"fields\": [\n        \"cost_counters\"\n      ],\n      \"rows\": [\n        {\n          \"cost_counters\": {\n            \"mode\": \"RECORD_SHA256\",\n            \"version\": \"QT_AUDIT_COST_CONSUMED_V1\",\n            \"database\": \"cloudtms_test_clone\",\n            \"readOnly\": true,\n            \"holderPid\": 300384,\n            \"backendPid\": 300398,\n            \"bytesTotal\": \"32000\",\n            \"sampleCount\": \"1000\",\n            \"sampleLimit\": 1000,\n            \"noRoleSwitch\": true,\n            \"holderGranted\": true,\n            \"evaluatedCount\": \"1000\"\n          }\n        }\n      ],\n      \"rowsTruncated\": false\n    },\n    {\n      \"statement\": 4,\n      \"command\": \"SELECT\",\n      \"rowCount\": 1,\n      \"fields\": [\n        \"cost_clock\"\n      ],\n      \"rows\": [\n        {\n          \"cost_clock\": {\n            \"mode\": \"RECORD_SHA256\",\n            \"phase\": \"END\",\n            \"version\": \"QT_AUDIT_COST_CLOCK_V1\",\n            \"database\": \"cloudtms_test_clone\",\n            \"readOnly\": true,\n            \"holderPid\": 300384,\n            \"backendPid\": 300398,\n            \"observedAt\": \"2026-10-17T18:16:27.254657+00:00\",\n            \"databaseOid\": 324139,\n            \"sampleLimit\": 1000,\n            \"noRoleSwitch\": true,\n            \"holderGranted\": true,\n            \"closureAdmitted\": true\n          }\n        }\n      ],\n      \"rowsTruncated\": false\n    }\n  ],\n  \"rolledBack\": true,\n  \"rollbackVerification\": {\n    \"connectedFresh\": true,\n    \"database\": \"cloudtms_test_clone\",\n    \"statements\": [\n      {\n        \"statement\": 1,\n        \"command\": \"SELECT\",\n        \"rowCount\": 1,\n        \"fields\": [\n          \"cost_clock\"\n        ],\n        \"rows\": [\n          {\n            \"cost_clock\": {\n              \"mode\": \"RECORD_SHA256\",\n              \"phase\": \"FRESH\",\n              \"version\": \"QT_AUDIT_COST_CLOCK_V1\",\n              \"database\": \"cloudtms_test_clone\",\n              \"readOnly\": true,\n              \"holderPid\": 300384,\n              \"backendPid\": 300398,\n              \"observedAt\": \"2026-10-17T18:16:27.429432+00:00\",\n              \"databaseOid\": 324139,\n              \"sampleLimit\": 1000,\n              \"noRoleSwitch\": true,\n              \"holderGranted\": true,\n              \"closureAdmitted\": true\n            }\n          }\n        ],\n        \"rowsTruncated\": false\n      }\n    ]\n  },\n  \"warnings\": [\n    \"All transactional database and catalog changes were rolled back.\",\n    \"PostgreSQL sequence increments (including serial/identity nextval calls) are not rolled back and can leave harmless gaps.\",\n    \"Do not invoke functions with payment, provider, email, network, or other effects outside PostgreSQL; those effects are not covered by rollback.\"\n  ]\n}"
+      }
+    ],
+    "structuredContent": {
+      "accepted": true,
+      "databaseTarget": "agency_test",
+      "database": "cloudtms_test_clone",
+      "label": "HR_QT_COST1000_RECORD_SHA256_56999C4A134485115B6BFD77C0A26F87",
+      "sqlSha256": "1eac5ac4351aaae707f20a010a5fce6444b342bd682f11eac5cf246dfa8eee12",
+      "statementCount": 4,
+      "statements": [
+        {
+          "statement": 1,
+          "command": "SET",
+          "rowCount": null,
+          "fields": [],
+          "rows": [],
+          "rowsTruncated": false
+        },
+        {
+          "statement": 2,
+          "command": "SELECT",
+          "rowCount": 1,
+          "fields": [
+            "cost_clock"
+          ],
+          "rows": [
+            {
+              "cost_clock": {
+                "mode": "RECORD_SHA256",
+                "phase": "START",
+                "version": "QT_AUDIT_COST_CLOCK_V1",
+                "database": "cloudtms_test_clone",
+                "readOnly": true,
+                "holderPid": 300384,
+                "backendPid": 300398,
+                "observedAt": "2026-10-17T18:16:27.120566+00:00",
+                "databaseOid": 324139,
+                "sampleLimit": 1000,
+                "noRoleSwitch": true,
+                "holderGranted": true,
+                "closureAdmitted": true
+              }
+            }
+          ],
+          "rowsTruncated": false
+        },
+        {
+          "statement": 3,
+          "command": "SELECT",
+          "rowCount": 1,
+          "fields": [
+            "cost_counters"
+          ],
+          "rows": [
+            {
+              "cost_counters": {
+                "mode": "RECORD_SHA256",
+                "version": "QT_AUDIT_COST_CONSUMED_V1",
+                "database": "cloudtms_test_clone",
+                "readOnly": true,
+                "holderPid": 300384,
+                "backendPid": 300398,
+                "bytesTotal": "32000",
+                "sampleCount": "1000",
+                "sampleLimit": 1000,
+                "noRoleSwitch": true,
+                "holderGranted": true,
+                "evaluatedCount": "1000"
+              }
+            }
+          ],
+          "rowsTruncated": false
+        },
+        {
+          "statement": 4,
+          "command": "SELECT",
+          "rowCount": 1,
+          "fields": [
+            "cost_clock"
+          ],
+          "rows": [
+            {
+              "cost_clock": {
+                "mode": "RECORD_SHA256",
+                "phase": "END",
+                "version": "QT_AUDIT_COST_CLOCK_V1",
+                "database": "cloudtms_test_clone",
+                "readOnly": true,
+                "holderPid": 300384,
+                "backendPid": 300398,
+                "observedAt": "2026-10-17T18:16:27.254657+00:00",
+                "databaseOid": 324139,
+                "sampleLimit": 1000,
+                "noRoleSwitch": true,
+                "holderGranted": true,
+                "closureAdmitted": true
+              }
+            }
+          ],
+          "rowsTruncated": false
+        }
+      ],
+      "rolledBack": true,
+      "rollbackVerification": {
+        "connectedFresh": true,
+        "database": "cloudtms_test_clone",
+        "statements": [
+          {
+            "statement": 1,
+            "command": "SELECT",
+            "rowCount": 1,
+            "fields": [
+              "cost_clock"
+            ],
+            "rows": [
+              {
+                "cost_clock": {
+                  "mode": "RECORD_SHA256",
+                  "phase": "FRESH",
+                  "version": "QT_AUDIT_COST_CLOCK_V1",
+                  "database": "cloudtms_test_clone",
+                  "readOnly": true,
+                  "holderPid": 300384,
+                  "backendPid": 300398,
+                  "observedAt": "2026-10-17T18:16:27.429432+00:00",
+                  "databaseOid": 324139,
+                  "sampleLimit": 1000,
+                  "noRoleSwitch": true,
+                  "holderGranted": true,
+                  "closureAdmitted": true
+                }
+              }
+            ],
+            "rowsTruncated": false
+          }
+        ]
+      },
+      "warnings": [
+        "All transactional database and catalog changes were rolled back.",
+        "PostgreSQL sequence increments (including serial/identity nextval calls) are not rolled back and can leave harmless gaps.",
+        "Do not invoke functions with payment, provider, email, network, or other effects outside PostgreSQL; those effects are not covered by rollback."
+      ]
+    }
+  },
+  "nativeFinishedAt": "2026-10-17T18:16:25.891Z",
+  "result": {
+    "status": "BOUNDED_COST_CAPTURE_OWN_TURN_RELEASED",
+    "mode": "RECORD_SHA256",
+    "capture": {
+      "version": "QT_AUDIT_COST_CAPTURE_ONLY_V1",
+      "mode": "RECORD_SHA256",
+      "sampleLimit": 1000,
+      "sampleCount": "1000",
+      "evaluatedCount": "1000",
+      "bytesTotal": "32000",
+      "nativeStartedAt": "2026-10-17T18:16:27.120566+00:00",
+      "nativeEndedAt": "2026-10-17T18:16:27.254657+00:00",
+      "nativeObservedSpanMs": 134,
+      "freshObservedAt": "2026-10-17T18:16:27.429432+00:00",
+      "nativeRolledBack": true,
+      "connectedFresh": true,
+      "holderGranted": true,
+      "readOnly": true,
+      "scope": "BOUNDED_NONREPRESENTATIVE_COST_OBSERVATION_ONLY",
+      "cause": "NOT_PROVED",
+      "wholeTablePerformance": "NOT_PROVED",
+      "assertionEquivalence": "NOT_PROVED",
+      "qtAcceptance": "NOT_RUN",
+      "businessFixtures": 0
+    },
+    "nativeCalls": 1,
+    "ownSessionClosed": true,
+    "scope": "DIAGNOSTIC_ONLY_NOT_QT_ACCEPTANCE"
+  }
+}

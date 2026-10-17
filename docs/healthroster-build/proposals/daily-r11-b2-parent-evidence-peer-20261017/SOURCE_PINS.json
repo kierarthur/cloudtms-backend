@@ -1,0 +1,35 @@
+{
+  "authorPath": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026/.codex-tmp/daily-auth-r11-b2-complete-parent-evidence-forward-20261017",
+  "authorFiles": {
+    "MANIFEST.json": {
+      "bytes": 24815,
+      "sha256": "6da7eb1e73db34abcf743a818ff30c0a25ad48f42d6c833ce83110a372dcd6f7"
+    },
+    "PARENT_EVIDENCE_FORWARD.json": {
+      "bytes": 302823,
+      "sha256": "4f05f5f553809facd955fb7fc5e5575b9f64f91bdab3c568f4777c92fcda3ddc"
+    },
+    "ENTRYPOINT_FORWARD.json": {
+      "bytes": 103339,
+      "sha256": "a0cd76f0f1a26c234c64785a0c9f1d6592e98247988ff681daeaf7b827b6e1d3"
+    },
+    "RECIPE_FORWARD.json": {
+      "bytes": 31674,
+      "sha256": "5c5913db0106bdc23a3a5d87792c561a441083f71f0271a4d09231fb7cf2ce10"
+    },
+    "parent-evidence.mjs": {
+      "bytes": 2596,
+      "sha256": "c57e5b92e89251b1a00239f1f72e8c6a9536589b7579f94fff2a286e3a9167d9"
+    },
+    "verify.mjs": {
+      "bytes": 3704,
+      "sha256": "d5b8cc83a8effe8f2b6824dc3919533d5ab578bca412dd9e67182306dae83389"
+    }
+  },
+  "oldArchive": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-report-build-13102026/.codex-tmp/daily-auth-r11-b2-source-recipe-20261017",
+  "oldPeer": "D:/Development/GitHub/.codex-worktrees/healthroster-checklist-native-14102026/.codex-tmp/daily-r11-b2-independent-peer-20261017",
+  "heads": {
+    "root": "a65b97f59c51e972c6a4379127b46bfc6fdbeae9",
+    "report": "b7694b8b727084fb749c8b015285ae3c74e76f09"
+  }
+}
