@@ -1,0 +1,64 @@
+{
+  "version": "SHARED_FINAL_DEFINER_GIT_BUFFER_FORWARD_V1",
+  "parent": "69dde78cd4d26d863cb7aa1f3aeb53d61bbc088f",
+  "targets": [
+    {
+      "target": "scripts/bpay-next-final-definers.mjs",
+      "payload": "payload/scripts/bpay-next-final-definers.mjs",
+      "sha256": "b6a8143f2bae077a4b72857419b4f8fab9f7652181f6ad3bf1fdcfbd4b77bafa"
+    }
+  ],
+  "files": [
+    {
+      "file": "CURRENT_PARENT.json",
+      "bytes": 795,
+      "sha256": "ecbe2490ac8713d25fa78a6b6b61327226683f5ba98545d682da1f5db755b094"
+    },
+    {
+      "file": "FULL_PARENT_FORWARD.json",
+      "bytes": 759,
+      "sha256": "48aa1a207637aa27846ea22a146fa57991af585a821bad3e754c89d6da847fcb"
+    },
+    {
+      "file": "README.md",
+      "bytes": 2802,
+      "sha256": "9be342f7aed9f360e9f23b70225e97ecdf08530579eb700b1c7dc1583986cdca"
+    },
+    {
+      "file": "REGRESSION_RESULTS.json",
+      "bytes": 2358,
+      "sha256": "56f7229a31f825d8bb41ef2658dce397d8690d124a8490da997ad0281d3c0297"
+    },
+    {
+      "file": "current/scripts/bpay-next-final-definers.mjs",
+      "bytes": 13611,
+      "sha256": "51ab7fd6d5c582ee7f4cab612502c4fc7ac11088cb1a996dd2cf1e6561468d09"
+    },
+    {
+      "file": "payload/scripts/bpay-next-final-definers.mjs",
+      "bytes": 13639,
+      "sha256": "b6a8143f2bae077a4b72857419b4f8fab9f7652181f6ad3bf1fdcfbd4b77bafa"
+    },
+    {
+      "file": "prepare.mjs",
+      "bytes": 2506,
+      "sha256": "0b020cf05db50b695e5aa06474a8fd06fc35f0ec1b9ee6e60b9a79978c9a8d75"
+    },
+    {
+      "file": "regression.mjs",
+      "bytes": 8989,
+      "sha256": "f34e66e7e0aa1447e71cd06100b95a5cbc543c82c53330c1fb21e8bdf232b052"
+    },
+    {
+      "file": "remove-owned-fixture.ps1",
+      "bytes": 764,
+      "sha256": "4ebf614a993e5f2a0c5bef9d43269195082901521056d31f12fc66f9052d3c4f"
+    },
+    {
+      "file": "verify.mjs",
+      "bytes": 4846,
+      "sha256": "32ba351633a8f2242a0da9c5e41cdbab94ed7382a81c4bd93bb7b5cc75b477e0"
+    }
+  ],
+  "native": "NOT_RUN"
+}
