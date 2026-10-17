@@ -1,0 +1,40 @@
+{
+  "version": "CONTACT_OWNING_C_COMPACT_ROTA_SOURCE_SELECTION_V1",
+  "parentCommit": "284035b174aa57e28b9e1c64530854be66c1011b",
+  "targets": [
+    {
+      "target": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/fixed-metadata-reader.mjs",
+      "payload": "payload/fixed-metadata-reader.mjs",
+      "bytes": 31562,
+      "sha256": "e35710a93dd7375ff470f2ec45a163ccd1574b9ad487fafdb2208ad5e2120e12"
+    },
+    {
+      "target": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/result-validator.mjs",
+      "payload": "payload/result-validator.mjs",
+      "bytes": 12564,
+      "sha256": "11d2f4282b5d6f274e1ec62dfc8dabf4d78a11f7571d9bdc0f2c0b5c51807052"
+    },
+    {
+      "target": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/hold-compact-claim-case.mjs",
+      "payload": "payload/hold-compact-claim-case.mjs",
+      "bytes": 8265,
+      "sha256": "19107e9b503ed32a74b3b64471dab3366a93cc1dcadd00d0b40d069da2eb081b"
+    },
+    {
+      "target": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/MANIFEST.json",
+      "payload": "payload/MANIFEST.json",
+      "bytes": 9492,
+      "sha256": "d124017179ea2fd695ada7549775af8d1394e1cd93679ead53bc8c429018a481"
+    },
+    {
+      "target": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/claim-eligibility-source.mjs",
+      "payload": "payload/claim-eligibility-source.mjs",
+      "bytes": 5034,
+      "sha256": "1a5a4f84fbfd70025accb38ac8bba57d8e18ffb8ebaba97f4283c3fa98940dee",
+      "absentInCurrent": true
+    }
+  ],
+  "rootInputs63Changed": false,
+  "originalLiveDefaultBoundFirstUseChanged": false,
+  "native": "NOT_RUN"
+}

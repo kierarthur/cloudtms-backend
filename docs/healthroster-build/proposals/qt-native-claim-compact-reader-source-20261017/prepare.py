@@ -1,0 +1,67 @@
+from pathlib import Path
+import json,hashlib,subprocess,os,re
+HERE=Path(__file__).resolve().parent
+ROOT=Path('D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026')
+BASE='docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/'
+def sha(b):return hashlib.sha256(b).hexdigest()
+def git(*a):return subprocess.check_output(['git','-c','gc.auto=0','-c','maintenance.auto=false',*a],cwd=ROOT,env={**os.environ,'GIT_OPTIONAL_LOCKS':'0','GIT_NO_LAZY_FETCH':'1'})
+def save(n,b):
+ p=HERE/n;p.parent.mkdir(parents=True,exist_ok=True);p.write_bytes(b if isinstance(b,bytes) else b.encode())
+def doc(n,x):save(n,json.dumps(x,indent=2)+'\n')
+head=git('rev-parse','HEAD').decode().strip();parents=[]
+manifest=json.loads((ROOT/BASE/'MANIFEST.json').read_bytes())
+for path in sorted([ROOT/BASE/r['file'] for r in manifest['files']]+[ROOT/BASE/'MANIFEST.json']):
+ if not path.is_file():continue
+ name=str(path.relative_to(ROOT/BASE)).replace('\\','/');rel=BASE+name;b=path.read_bytes();index=git('show',':'+rel)
+ assert b==index,rel
+ try:old=git('show',head+':'+rel)
+ except subprocess.CalledProcessError:old=None
+ save('parent/'+name,b)
+ parents.append({'file':rel,'capture':'parent/'+name,'bytes':len(b),'sha256':sha(b),'binding':'SAVED_INDEX_HEAD_EXACT' if b==old else 'ROOT_STAGED_SAVED_INDEX_EXACT_HEAD_DISTINCT','historicalCommit':head,'historicalBytes':len(old) if old else None,'historicalSha256':sha(old) if old else None})
+assert git('rev-parse','HEAD').decode().strip()==head
+changes=[]
+def change(name,hunks,newname=None):
+ before=(HERE/'parent'/name).read_bytes().decode();after=before
+ for h in hunks:
+  if after.count(h['before'])!=1:
+   pattern=re.escape(h['before']).replace('\\\n','\\r?\\n');matches=list(re.finditer(pattern,after));assert len(matches)==1,(name,h['before'][:60],len(matches));h['before']=matches[0].group()
+  assert after.count(h['before'])==1,(name,h['before'][:60]);after=after.replace(h['before'],h['after'])
+ raw=(HERE/'parent'/name).read_bytes();assert before.encode()==raw
+ target=newname or name;save('payload/'+target,after)
+ changes.append({'target':BASE+target,'payload':'payload/'+target,'beforeFile':BASE+name,'parent':'parent/'+name,'beforeBytes':len(raw),'beforeSha256':sha(raw),'bytes':len(after.encode()),'sha256':sha(after.encode()),'hunks':hunks,'wholeInverse':{'before':before,'after':after}})
+# The compiler is pure source construction; it cannot brand or admit a frame.
+compiler=(HERE/'COMPACT_COMPILER_TEMPLATE.mjs').read_text(encoding='utf8')
+save('payload/claim-eligibility-source.mjs',compiler)
+reader=(HERE/'parent/fixed-metadata-reader.mjs').read_bytes().decode()
+h=[]
+def sub(a,b):h.append({'before':a,'after':b})
+sub("import {compileNativeBatch,joinNativeSnapshotFrames} from './batch-source.mjs';","import {compileNativeBatch,joinNativeSnapshotFrames} from './batch-source.mjs';\nimport {CLAIM_MODE,copyNativeClaimCut,assertProjectedClaimFlags,compileEligibleClaimBatch} from './claim-eligibility-source.mjs';")
+sub("export async function createFixedMetadataReader(args){return createMetadataReader(args,false);}","const eligibleClaimMode=Symbol('owning-C derived claim mode');\nconst eligibleClaimFrames=new WeakMap();\nconst frameBinding=p=>{const {liveRestoration,...snapshot}=p.snapshot;return sha(JSON.stringify({snapshot,peer:p.peer,provenance:p.provenance,transport:p.transport,fixtureProof:p.fixtureProof,childClosed:p.childClosed}));};\nexport function assertCompactClaimSnapshots({receipt,beforePacket,afterPacket},required=false){\n const b=eligibleClaimFrames.get(beforePacket),a=eligibleClaimFrames.get(afterPacket);\n const declared=[beforePacket,afterPacket].some(p=>p?.provenance?.claimProjection!==undefined);\n if(!b&&!a&&!declared&&!required)return false;\n check(b&&a&&b.owner===a.owner&&b.phase==='BEFORE'&&a.phase==='AFTER'&&a.beforePacket===beforePacket,'LOCAL_METADATA_CLAIM_OWNING_READER_REQUIRED');\n check(b.binding===frameBinding(beforePacket)&&a.binding===frameBinding(afterPacket),'LOCAL_METADATA_CLAIM_FRAME_CHANGED');\n check(b.turnSha256===sha(JSON.stringify(receipt.holderIdentity))&&a.turnSha256===b.turnSha256&&b.caseId===receipt.caseId&&a.caseId===b.caseId,'LOCAL_METADATA_CLAIM_TURN_CASE_REQUIRED');\n check(b.referenceSha256===receipt.canonicalSqlSha256&&a.referenceSha256===b.referenceSha256&&a.cutSha256===sha(JSON.stringify(copyNativeClaimCut(beforePacket.snapshot))),'LOCAL_METADATA_CLAIM_EXACT_BEFORE_CUT_REQUIRED');\n return true;\n}\nexport async function createFixedCompactClaimMetadataReader(args){\n check(args&&Object.keys(args).sort().join('|')==='caseId|root|turn','LOCAL_METADATA_CLAIM_EXACT_FACTORY_ARGS_REQUIRED');\n return createMetadataReader(args,true,eligibleClaimMode);\n}\nexport async function createFixedMetadataReader(args){return createMetadataReader(args,false);}")
+sub("async function createMetadataReader({root,turn,caseId},batch){","async function createMetadataReader({root,turn,caseId},batch,mode){\n const eligible=mode===eligibleClaimMode;check(mode===undefined||eligible,'LOCAL_METADATA_CLAIM_MODE_REFUSED');\n const owner=Object.freeze({});let nativeCut,beforePacketIdentity;")
+sub(" const input=built?.input??referenceInput;"," const claimBuilt=eligible?compileEligibleClaimBatch({referenceInput,referenceCanonicalSql:canonicalSql,backgroundFields:live.boundBackgroundSnapshotFieldsSql(),managed:await import(pathToFileURL(path.join(root,'scripts/cloudtms-managed-release-sql.mjs')).href),phase:'BEFORE'}):null;\n const input=claimBuilt?.input??built?.input??referenceInput;")
+sub("  const afterInput=input.slice(0,-'rollback;\\n'.length)+fixtureSql+'\\nrollback;\\n';\n  check((batch?afterInput.startsWith(input.slice(0,-'rollback;\\n'.length))&&afterInput.indexOf(fixtureSql)>afterInput.indexOf(built.finalQuery):afterInput.split(canonicalSql).length===2&&afterInput.indexOf(fixtureSql)>afterInput.indexOf(canonicalSql)),'LOCAL_METADATA_CANONICAL_ORDER_REFUSED');\n  return {input:afterInput,fixtureSql};","  const afterBuilt=eligible?compileEligibleClaimBatch({referenceInput,referenceCanonicalSql:canonicalSql,backgroundFields:live.boundBackgroundSnapshotFieldsSql(),managed:managedClaim,phase:'AFTER',cut:nativeCut}):null;\n  const selectedInput=afterBuilt?.input??input;\n  const afterInput=selectedInput.slice(0,-'rollback;\\n'.length)+fixtureSql+'\\nrollback;\\n';\n  check((batch?afterInput.startsWith(selectedInput.slice(0,-'rollback;\\n'.length))&&afterInput.indexOf(fixtureSql)>afterInput.indexOf((afterBuilt??built).finalQuery):afterInput.split(canonicalSql).length===2&&afterInput.indexOf(fixtureSql)>afterInput.indexOf(canonicalSql)),'LOCAL_METADATA_CANONICAL_ORDER_REFUSED');\n  return {input:afterInput,fixtureSql,...eligible?{claimBuilt:afterBuilt}:{}};")
+sub(" let phase='BEFORE',beforePeer,beforeSnapshot;"," const managedClaim=eligible?await import(pathToFileURL(path.join(root,'scripts/cloudtms-managed-release-sql.mjs')).href):null;\n let phase='BEFORE',beforePeer,beforeSnapshot;")
+sub("   program=wanted==='AFTER'?afterProgram(args):{input};","   if(eligible&&wanted==='AFTER')check(nativeCut&&beforePacketIdentity&&!('before' in args)&&!('cut' in args)&&!('mode' in args),'LOCAL_METADATA_CLAIM_PRIVATE_BEFORE_REQUIRED');\n   program=wanted==='AFTER'?afterProgram(args):{input,...eligible?{claimBuilt}:{}};")
+sub("   assertPins(root);phase=wanted==='BEFORE'?'AFTER':'DONE';if(wanted==='BEFORE'){beforePeer=p;beforeSnapshot=s;}\n   return {...result,","   if(eligible){check(!turn.signal.aborted,'LOCAL_METADATA_TURN_LOST');if(wanted==='BEFORE')nativeCut=copyNativeClaimCut(s);assertProjectedClaimFlags(s,wanted,nativeCut);}\n   assertPins(root);phase=wanted==='BEFORE'?'AFTER':'DONE';if(wanted==='BEFORE'){beforePeer=eligible?structuredClone(p):p;beforeSnapshot=eligible?structuredClone(s):s;}\n   const packet={...result,")
+sub("     childClosed:true,route:'OWNER_SEND5B_FIXED_READ_ONLY_METADATA_NOT_PROPOSED_B_SQL',observeLiveBusiness:true,nativeQualification:'NOT_PROVED_BY_READER'}};","     childClosed:true,route:'OWNER_SEND5B_FIXED_READ_ONLY_METADATA_NOT_PROPOSED_B_SQL',observeLiveBusiness:true,nativeQualification:'NOT_PROVED_BY_READER'}};\n   if(eligible){\n    const projected=program.claimBuilt,projection=projected.projection;\n    packet.provenance={...packet.provenance,canonicalSqlSha256:projection.projectionCanonicalSqlSha256,referenceCanonicalSqlSha256:projection.referenceCanonicalSqlSha256,claimProjection:projection};\n    packet.transport={...packet.transport,derivedClaimProjection:CLAIM_MODE,claimProjection:projection};\n    eligibleClaimFrames.set(packet,{owner,phase:wanted,beforePacket:beforePacketIdentity,caseId,turnSha256:sha(JSON.stringify(turn.identity)),referenceSha256:sha(canonicalSql),cutSha256:projection.cutSha256,binding:frameBinding(packet)});\n    if(wanted==='BEFORE')beforePacketIdentity=packet;\n   }\n   return packet;")
+sub("  sourceDescriptor:Object.freeze({canonicalSqlSha256:sha(canonicalSql),inputSha256:sha(input),scope:SCOPE,limits:LIMITS,...batch?{batch:built.descriptor}:{}}),","  sourceDescriptor:Object.freeze({canonicalSqlSha256:eligible?claimBuilt.projection.projectionCanonicalSqlSha256:sha(canonicalSql),inputSha256:sha(input),scope:SCOPE,limits:LIMITS,...batch?{batch:(claimBuilt??built).descriptor}:{},...eligible?{claimProjection:CLAIM_MODE,referenceCanonicalSqlSha256:sha(canonicalSql)}:{}}),")
+sub("  inspectSource:({transaction,observations,before}={})=>({input,canonicalSql,relations,...batch?{batch:built}:{},...transaction?{after:afterProgram({transaction,observations},before)}:{}})});","  inspectSource:({transaction,observations,before}={})=>{check(!eligible||before===undefined,'LOCAL_METADATA_CLAIM_CALLER_BEFORE_REFUSED');return{input,canonicalSql:eligible?claimBuilt.canonicalSql:canonicalSql,relations,...batch?{batch:claimBuilt??built}:{},...eligible?{referenceCanonicalSql:canonicalSql}:{},...transaction?{after:afterProgram({transaction,observations},before)}:{}};}});")
+change('fixed-metadata-reader.mjs',h)
+change('result-validator.mjs',[{'before':"import {source,requireThat,SCOPE,sortWriters}from'./source.mjs';import {observedInstant}from'./timing.mjs';",'after':"import {source,requireThat,SCOPE,sortWriters}from'./source.mjs';import {observedInstant}from'./timing.mjs';\nimport {assertCompactClaimSnapshots}from'./fixed-metadata-reader.mjs';"},{'before':"export function bindSnapshots({receipt,stage,beforePacket,afterPacket}){",'after':"export function bindSnapshots({receipt,stage,beforePacket,afterPacket}){\n const eligible=assertCompactClaimSnapshots({receipt,beforePacket,afterPacket});"},{'before':"p.provenance.canonicalSqlSha256===receipt.canonicalSqlSha256",'after':"(eligible?p.provenance.referenceCanonicalSqlSha256===receipt.canonicalSqlSha256:p.provenance.canonicalSqlSha256===receipt.canonicalSqlSha256)"}])
+# Explicit opt-in validator cannot accept unbranded or copied derived packets.
+f=changes[-1];extra="\nexport async function validateCompactClaimRestoration(args){assertCompactClaimSnapshots(args,true);return validateRestoration(args);}\n";text=(HERE/f['payload']).read_bytes().decode();save(f['payload'],text+extra);f['hunks'].append({'before':'','after':extra,'kind':'APPEND'});f['wholeInverse']['after']=text+extra;f['bytes']=len((text+extra).encode());f['sha256']=sha((text+extra).encode())
+change('hold-case.mjs',[{'before':"{readStage,validateRestoration,nativeClockFrames}",'after':"{readStage,validateCompactClaimRestoration as validateRestoration,nativeClockFrames}"},{'before':"{createFixedBatchMetadataReader}",'after':"{createFixedCompactClaimMetadataReader as createFixedBatchMetadataReader}"},{'before':"built.receipt.canonicalSqlSha256===reader.sourceDescriptor.canonicalSqlSha256",'after':"built.receipt.canonicalSqlSha256===reader.sourceDescriptor.referenceCanonicalSqlSha256"}],newname='hold-compact-claim-case.mjs')
+# Complete immutable source inventory; existing rows unchanged except exact two changed files.
+m=json.loads((HERE/'parent/MANIFEST.json').read_bytes());m.update(version='CONTACT_OWNING_C_COMPACT_ROTA_PROJECTION_FORWARD_V1',sourceParent=head,sourceTests=54,native='NOT_RUN');oldrows=json.loads((HERE/'parent/MANIFEST.json').read_bytes())['files'];newfiles=['claim-eligibility-source.mjs','hold-compact-claim-case.mjs']
+for row in m['files']:
+ if row['file'] in ['fixed-metadata-reader.mjs','result-validator.mjs']:
+  b=(HERE/'payload'/row['file']).read_bytes();row.update(bytes=len(b),sha256=sha(b))
+for name in newfiles:
+ b=(HERE/'payload'/name).read_bytes();m['files'].append({'file':name,'bytes':len(b),'sha256':sha(b)})
+m['files'].sort(key=lambda x:x['file'])
+change('MANIFEST.json',[{'before':(HERE/'parent/MANIFEST.json').read_bytes().decode(),'after':json.dumps(m,indent=2)+'\n'}])
+newtargets=[{'target':BASE+n,'payload':'payload/'+n,'bytes':len((HERE/'payload'/n).read_bytes()),'sha256':sha((HERE/'payload'/n).read_bytes()),'absentInCurrent':not (ROOT/BASE/n).exists()} for n in ['claim-eligibility-source.mjs']]
+assert all(x['absentInCurrent'] for x in newtargets)
+doc('PARENTS.json',{'root':str(ROOT),'capturedHead':head,'currentImages':parents,'sourceAdmission':'NOT_RUN; STAGED_DISTINCTIONS_RETAINED'})
+doc('FORWARD.json',{'version':'CONTACT_OWNING_C_COMPACT_ROTA_SOURCE_V1','parentCommit':head,'targets':changes,'newTargets':newtargets,'defaultLiveRendererChanges':0,'legacyFirstUseChanges':0})
+print(json.dumps({'capturedHead':head,'parents':len(parents),'changedOrDerivedTargets':len(changes),'newTargets':len(newtargets)}))

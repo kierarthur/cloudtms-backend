@@ -1,0 +1,19 @@
+{
+  "status": "PASS_COMPACT_SOURCE_ONLY_PENDING_INDEPENDENT_PEER_AND_ROOT_ADOPTION",
+  "nodeTests": 54,
+  "actualOldAndCompactFullCallerCases": 270,
+  "PG17": "3 field/3 whole-final ASTs; 8 negatives; exact required field/P expressions, outbox and every other AST",
+  "selectedTargets": 5,
+  "completeParentFiles": 56,
+  "completeRawInverses": 4,
+  "retainedOriginalManifestRows": 53,
+  "originalManifestRows": 55,
+  "newManifestRows": 57,
+  "sharedRawSources": 6,
+  "R11WatchedOverlap": 0,
+  "earlierFullerFieldPacket": "UNCHANGED_UNADOPTED",
+  "sourceAdmission": "NOT_RUN",
+  "native": "NOT_RUN",
+  "SQLerrorTerminationEquivalence": false,
+  "speedupCauseOrWholeTableTimingClaimed": false
+}

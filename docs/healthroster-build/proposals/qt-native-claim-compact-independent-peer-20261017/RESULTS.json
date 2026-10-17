@@ -1,0 +1,66 @@
+{
+  "version": "COMPACT_CLAIM_READER_INDEPENDENT_SOURCE_PEER_V1",
+  "verdict": "ACCEPT_BOUNDED_SOURCE_CANDIDATE",
+  "author": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-v2-report-build-13102026\\.codex-tmp\\qt-native-claim-compact-reader-source-20261017",
+  "authorManifestSha256": "ee1011ffaf366465565bd2393508b01f30b1ae2d1c04eb97b9e8c5b86e66f21b",
+  "authorFiles": 97,
+  "authorTests": 54,
+  "authorCompleteOldVsNewFlows": 270,
+  "independentSuites": 8,
+  "actualRootHeadObserved": "7650c71d0238f78e1e441dee046ac151cdeb7345",
+  "observedAtUtc": "2026-10-17T19:57:41.120656+00:00",
+  "runs": [
+    {
+      "argv": [
+        "C:/Program Files/nodejs/node.exe",
+        "--experimental-vm-modules",
+        "--test",
+        "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-v2-report-build-13102026\\.codex-tmp\\qt-native-claim-compact-reader-source-20261017\\test.mjs",
+        "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-v2-report-build-13102026\\.codex-tmp\\qt-native-claim-compact-reader-source-20261017\\holder.test.mjs"
+      ],
+      "exitCode": 0,
+      "stdout": "(node:18316) ExperimentalWarning: VM Modules is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\n\u2714 whole holder selects opt-in reader/reference guard and original post-B validation/release order (model only) (6.2255ms)\n\u2714 whole holder holds on reference (3.0032ms)\n\u2714 whole holder holds on afteruncertain (1.965ms)\n\u2714 whole holder holds on ownclose (1.9069ms)\n\u2714 whole holder holds on abort (1.8508ms)\n\u2714 source refusal before A/output remains unchanged (1.1172ms)\n(node:40704) ExperimentalWarning: VM Modules is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\n\u2714 actual opt-in reader to strict original B parser to independent AFTER to original qualifier/fresh-restoration flow (fictional frames only) (28.7949ms)\n\u2714 original/default factory source stays exact canonical/batch bytes; no derived provenance (8.2583ms)\n\u2714 pure compact projection retains complete original values and full COALESCE, preserving complete original COALESCE and all remaining bytes (12.5408ms)\n\u2714 validated native BEFORE cut refuses epoch (9.0771ms)\n\u2714 validated native BEFORE cut refuses nullXmax (9.019ms)\n\u2714 validated native BEFORE cut refuses zero (8.6095ms)\n\u2714 validated native BEFORE cut refuses injection (8.606ms)\n\u2714 validated native BEFORE cut refuses epochwrap (8.5139ms)\n\u2714 validated native BEFORE cut refuses nullXip (8.9776ms)\n\u2714 validated native BEFORE cut refuses outofrangeXip (8.5989ms)\n\u2714 validated native BEFORE cut refuses numericXip (9.1897ms)\n\u2714 copy is immutable and aliases cannot mutate the genuine cut; unknown factory args and inspection cuts refuse (8.9514ms)\n\u2714 edited genuine packet refuses snapshot (17.6854ms)\n\u2714 edited genuine packet refuses peer (12.7219ms)\n\u2714 edited genuine packet refuses provenance (12.8022ms)\n\u2714 edited genuine packet refuses transport (11.5548ms)\n\u2714 copied flags/provenance, mixed owning readers and wrong turn/case/reference cannot acquire brand (24.2966ms)\n\u2714 actual opt-in factory refuses source (3.7219ms)\n\u2714 actual opt-in factory refuses lostA (8.7524ms)\n\u2714 actual opt-in factory refuses childclosedfailure (8.6235ms)\n\u2714 actual opt-in factory refuses lateabort (8.5026ms)\n\u2714 actual opt-in factory refuses peer (8.8422ms)\n\u2714 actual opt-in factory refuses wrongrole (8.8059ms)\n\u2714 actual opt-in factory refuses beforetrueflag (8.4574ms)\n\u2714 after-before/caller-before/false or null eligible claim never qualifies; original complete map/writer checks still apply (41.1501ms)\n\u2714 candidate legacy reader returns byte-equal full before/after/descriptor vs complete actual parent reader (14.9751ms)\n\u2714 earlier active-XIP receipt retains genuine original proof/acceptance; ineligible after proof refuses (24.8986ms)\n\u2714 every original non-background relation retains full hash equality: public.audit_events (12.4748ms)\n\u2714 every original non-background relation retains full hash equality: public.settings_defaults (11.9399ms)\n\u2714 every original non-background relation retains full hash equality: public.tms_users (13.7126ms)\n\u2714 every original non-background relation retains full hash equality: public.weekly_candidate_cohorts (13.3945ms)\n\u2714 every original non-background relation retains full hash equality: public.weekly_candidate_outreach_generations (14.2687ms)\n\u2714 every original non-background relation retains full hash equality: public.weekly_manager_recipient_generations (12.7298ms)\n\u2714 every original non-background relation retains full hash equality: public.weekly_message_dispatch_commands (16.2412ms)\n\u2714 every original non-background relation retains full hash equality: public.weekly_source_global_settings (12.07ms)\n\u2714 every original non-background relation retains full hash equality: public.weekly_timesheet_submission_request_memberships (11.8564ms)\n\u2714 every original non-background relation retains full hash equality: public.weekly_timesheet_submission_requests (12.507ms)\n\u2714 full original validator predicate remains mandatory: fullmap (12.4983ms)\n\u2714 full original validator predicate remains mandatory: rowhash (12.1705ms)\n\u2714 full original validator predicate remains mandatory: writer (11.4436ms)\n\u2714 full original validator predicate remains mandatory: epoch (12.6318ms)\n\u2714 full original validator predicate remains mandatory: oldrowdelete (11.8547ms)\n\u2714 genuine after must retain independent PID and copied public projection cannot mint a packet proof (20.2765ms)\n\u2714 source compiler refuses altered complete P/fields, caller-owned cut and oversized genuine cut (9.5657ms)\n\u2714 270 complete actual old-reader/parser/qualifier vs compact-reader/parser/qualifier returned-frame flows preserve exact status/error order (7592.1626ms)\n\u2714 AFTER keeps native xmin and transaction status for every row; BEFORE/base and outbox transfer exact (18.7239ms)\n\u2714 both nonempty outbox maps retain every field, nextAttemptAt and original retry decision, with no compact transfer (92.5186ms)\n\u2714 private native BEFORE peer remains unaliased; editing returned peer cannot alter identity authority or qualify (16.7209ms)\n\u2139 tests 54\n\u2139 suites 0\n\u2139 pass 54\n\u2139 fail 0\n\u2139 cancelled 0\n\u2139 skipped 0\n\u2139 todo 0\n\u2139 duration_ms 8619.4141\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "C:/Program Files/nodejs/node.exe",
+        "--experimental-vm-modules",
+        "--test",
+        "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-v2-money-build-13102026\\.codex-tmp\\qt-native-claim-compact-independent-peer-20261017\\peer.test.mjs"
+      ],
+      "exitCode": 0,
+      "stdout": "(node:57356) ExperimentalWarning: VM Modules is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\n\u2714 selected compact caller accepts genuine-shaped original seven-field turn and binds its extra two fields (28.6989ms)\n\u2714 selected compact caller refuses copies even when projection declarations are stripped/relabelled (16.6709ms)\n\u2714 actual private native cut survives external XIP mutation, and edited returned BEFORE cannot qualify (13.853ms)\n\u2714 fixture proof, child closure and native AFTER snapshot mutation are part of private frame binding (49.9419ms)\n\u2714 every AFTER row must physically retain xmin and status, including historical unchanged rows (24.5346ms)\n\u2714 eligible NULL/future/order-invalid native timestamps preserve original caller refusal code (66.4939ms)\n\u2714 native cut is isolated even with no active XIP; ineligible historical AFTER row has exact closed four-key shape (13.0494ms)\n\u2714 final original WeakMap still rejects a copied qualifier after selected compact flow (13.4999ms)\n\u2139 tests 8\n\u2139 suites 0\n\u2139 pass 8\n\u2139 fail 0\n\u2139 cancelled 0\n\u2139 skipped 0\n\u2139 todo 0\n\u2139 duration_ms 420.7225\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "C:/Users/KierArthur/AppData/Local/Programs/Python/Python312/python.exe",
+        "-B",
+        "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-v2-report-build-13102026\\.codex-tmp\\qt-native-claim-compact-reader-source-20261017\\pg17-proof.py"
+      ],
+      "exitCode": 0,
+      "stdout": "{\"status\": \"PASS_GRAMMAR_AST_ONLY\", \"fieldTrees\": 3, \"wholeFinalTrees\": 3, \"originalEligiblePAndTimestampsExact\": true, \"allAfterXminStatusExact\": true, \"outboxAndAllOtherASTExact\": true, \"negativeASTs\": 8, \"psqlBags\": \"TWO_GRAMMAR_ONLY_PLACEHOLDERS_NOT_NATIVE_DATA\", \"native\": \"NOT_RUN\"}\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "C:/Users/KierArthur/AppData/Local/Programs/Python/Python312/python.exe",
+        "-B",
+        "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-v2-report-build-13102026\\.codex-tmp\\qt-native-claim-compact-reader-source-20261017\\verify.py",
+        "--current"
+      ],
+      "exitCode": 0,
+      "stdout": "{\"status\": \"PASS_SOURCE_ONLY\", \"completeParentFiles\": 56, \"completeRawInverses\": 4, \"selectedTargets\": 5, \"oldManifestRows\": 55, \"retainedRows\": 53, \"sharedSources\": 6, \"native\": \"NOT_RUN\"}\n",
+      "stderr": ""
+    }
+  ],
+  "native": "NOT_RUN",
+  "actualSourceAdmission": "NOT_RUN",
+  "PartB": "NOT_SIGNED_OFF",
+  "performance": "NOT_PROVED",
+  "SQLerrorDomainEqualityClaim": false,
+  "privateAccess": false,
+  "trackedWrite": false,
+  "commitOrPush": false
+}

@@ -1,15 +1,90 @@
 {
-  "version": "CONTACT_CBEFORE_PLAN_SOURCE_SCOPE_FORWARD_V1",
-  "sourceParent": "feb36c0c13c87b57b7566172e4bfaa1254117794",
-  "sourceTests": 16,
+  "version": "CONTACT_OWNING_C_COMPACT_ROTA_PROJECTION_FORWARD_V1",
+  "sourceParent": "284035b174aa57e28b9e1c64530854be66c1011b",
+  "sourceTests": 54,
   "parsedNativeInputPlBodies": 21,
   "native": "NOT_RUN",
   "runtimeTargets": [],
   "files": [
     {
+      "file": "GRAMMAR_RECORD_BINDING.json",
+      "bytes": 8346,
+      "sha256": "b52f582b9ff5bddb63157d8f51ace86a879660702b26c1bae78d72a25bccd5ad"
+    },
+    {
+      "file": "GRAMMAR_RUN.txt",
+      "bytes": 145,
+      "sha256": "eb4a655cbb8e7aaaa867edd06d6b990eee08e265bbf29bc751906d516b76fbe8"
+    },
+    {
+      "file": "OFFLINE_INPUTS.json",
+      "bytes": 130966,
+      "sha256": "8ac6d102e431ea03355706e1c6dfa554ebd833ebb043218437b63b999ce9cf3d"
+    },
+    {
+      "file": "PLAN_SOURCE_SCOPES.json",
+      "bytes": 8763,
+      "sha256": "f897562d54a994dbd0b610b3c5fe10dc32ee4cf7b477d63f0fd5cba1e52f6aca"
+    },
+    {
+      "file": "PROGRAMMES.json",
+      "bytes": 74594,
+      "sha256": "08e618c1ac9cf4842591175f4016457ce49ad7dfc55b9f1fd6eb4f54f27ef118"
+    },
+    {
+      "file": "PROGRAMME_PARENT_REVERSES.json",
+      "bytes": 67460,
+      "sha256": "0e1212594a157082ba13bc879601fa24c3124ec32de0eaf9e0791e3767ad725d"
+    },
+    {
+      "file": "READER_PARENT_REVERSE.json",
+      "bytes": 50942,
+      "sha256": "f1aae48feab2fc504ea94ab252719fbbd6c17a09226d03e958a212eabb6c5475"
+    },
+    {
+      "file": "README.md",
+      "bytes": 11407,
+      "sha256": "5a65fae3b0b6362a67cabf5a187d99385c768e18e82db9abc8d59912581c5ad3"
+    },
+    {
+      "file": "ROOT_SOURCE_BINDING.json",
+      "bytes": 18589,
+      "sha256": "74965cda56af3384d22960345e26b798e10844a741b8163656808c250a74482b"
+    },
+    {
+      "file": "SETUP_ENTRY.md",
+      "bytes": 6416,
+      "sha256": "f3d2eeaec0f1c87f71f331d542a2df15ed72feec82787bf57c8cf25ceb70a15d"
+    },
+    {
+      "file": "SOURCE_PINS.json",
+      "bytes": 27619,
+      "sha256": "3a2afc97ba4d43ce4212d103c9723122b22ae6cd1e7b27c43989558d066c3751"
+    },
+    {
+      "file": "SOURCE_REVIEW.json",
+      "bytes": 1614,
+      "sha256": "bb957d24d4ca4af3a1e11329b52219a04c6406e97201cf8e496d17e2383f835c"
+    },
+    {
+      "file": "TEST_RESULTS.txt",
+      "bytes": 1589,
+      "sha256": "3964d86c61ae13cbf51a48186c5f963eb0ea30f9578bb45dfdc08509eb1499af"
+    },
+    {
+      "file": "audit-bag-plan.mjs",
+      "bytes": 11057,
+      "sha256": "8bec378d43bb0ffc50421f259c8bcdc6da1a7783e57477b6faac5f3f092d0aa2"
+    },
+    {
       "file": "batch-source.mjs",
       "bytes": 9947,
       "sha256": "d8ae4bd26c310f610a1549edbe4baf00dd9b0bcb0fb63fdb6db5f907e80bee4d"
+    },
+    {
+      "file": "batch-timing-diagnostic.mjs",
+      "bytes": 6689,
+      "sha256": "0df911bb6d99cbb9b94c5798040562d3a1f73ff6afde571bd1b7cd672c00dbe7"
     },
     {
       "file": "build-program.mjs",
@@ -20,6 +95,11 @@
       "file": "capture.mjs",
       "bytes": 5742,
       "sha256": "b2fe28a9ea65746167ccf461dc1e30828e250b055719449dcc53a307ec8ca69b"
+    },
+    {
+      "file": "claim-eligibility-source.mjs",
+      "bytes": 5034,
+      "sha256": "1a5a4f84fbfd70025accb38ac8bba57d8e18ffb8ebaba97f4283c3fa98940dee"
     },
     {
       "file": "component-source.mjs",
@@ -43,8 +123,8 @@
     },
     {
       "file": "fixed-metadata-reader.mjs",
-      "bytes": 27369,
-      "sha256": "649970e791827bae200a58190e6ace711979864346743337956d628c1d87d7db"
+      "bytes": 31562,
+      "sha256": "e35710a93dd7375ff470f2ec45a163ccd1574b9ad487fafdb2208ad5e2120e12"
     },
     {
       "file": "freeze.mjs",
@@ -52,24 +132,29 @@
       "sha256": "01ae9e3d65d46e381fdcaee6b653515cf0c13c551f774bfa64fd17d268c2080e"
     },
     {
-      "file": "GRAMMAR_RECORD_BINDING.json",
-      "bytes": 8346,
-      "sha256": "b52f582b9ff5bddb63157d8f51ace86a879660702b26c1bae78d72a25bccd5ad"
-    },
-    {
-      "file": "GRAMMAR_RUN.txt",
-      "bytes": 145,
-      "sha256": "eb4a655cbb8e7aaaa867edd06d6b990eee08e265bbf29bc751906d516b76fbe8"
-    },
-    {
       "file": "grammar-and-bindings.py",
       "bytes": 4603,
       "sha256": "80b3c5e45a3e891cb51fa1d912f98f16360e314b71bf493c1f0a25ee3d513e93"
     },
     {
+      "file": "hold-audit-bag-plan.mjs",
+      "bytes": 5064,
+      "sha256": "3199113424163d9053899d542dbf5e3880bc78ac945f08bc7bad67475ef973ba"
+    },
+    {
+      "file": "hold-batch-timing.mjs",
+      "bytes": 5043,
+      "sha256": "b24241fb383360bffe2e19268f1aa97c3e3379c6a103cd9bf4c4b4efee5e5a51"
+    },
+    {
       "file": "hold-case.mjs",
       "bytes": 8180,
       "sha256": "01522035ba4a2fc3bc505ddd6a58c9418ce684ab296b0ff6eeab780af2c37501"
+    },
+    {
+      "file": "hold-compact-claim-case.mjs",
+      "bytes": 8265,
+      "sha256": "19107e9b503ed32a74b3b64471dab3366a93cc1dcadd00d0b40d069da2eb081b"
     },
     {
       "file": "input-builder.mjs",
@@ -92,16 +177,6 @@
       "sha256": "84abd1f06ec85ffa002cd79fa4f5cf010d7f939bf86b4546ca35c56de54000eb"
     },
     {
-      "file": "OFFLINE_INPUTS.json",
-      "bytes": 130966,
-      "sha256": "8ac6d102e431ea03355706e1c6dfa554ebd833ebb043218437b63b999ce9cf3d"
-    },
-    {
-      "file": "PLAN_SOURCE_SCOPES.json",
-      "bytes": 8763,
-      "sha256": "f897562d54a994dbd0b610b3c5fe10dc32ee4cf7b477d63f0fd5cba1e52f6aca"
-    },
-    {
       "file": "prepare-adapter.mjs",
       "bytes": 2663,
       "sha256": "1539089e7df65cae43010b3c2d9e207e1685363e373a9e9b689cf2cc0dcaf516"
@@ -112,34 +187,9 @@
       "sha256": "29e1eb52ec124be1ae9e294568e27c4df61bb7c8b42e33404532894b5dc1441f"
     },
     {
-      "file": "PROGRAMME_PARENT_REVERSES.json",
-      "bytes": 67460,
-      "sha256": "0e1212594a157082ba13bc879601fa24c3124ec32de0eaf9e0791e3767ad725d"
-    },
-    {
-      "file": "PROGRAMMES.json",
-      "bytes": 74594,
-      "sha256": "08e618c1ac9cf4842591175f4016457ce49ad7dfc55b9f1fd6eb4f54f27ef118"
-    },
-    {
       "file": "qt-assertions.sql",
       "bytes": 27584,
       "sha256": "a21a9314646f167b924bce1fc0e4c997ef8396991e963573f810c22bc4b7db30"
-    },
-    {
-      "file": "READER_PARENT_REVERSE.json",
-      "bytes": 50942,
-      "sha256": "f1aae48feab2fc504ea94ab252719fbbd6c17a09226d03e958a212eabb6c5475"
-    },
-    {
-      "file": "README.md",
-      "bytes": 11407,
-      "sha256": "5a65fae3b0b6362a67cabf5a187d99385c768e18e82db9abc8d59912581c5ad3"
-    },
-    {
-      "file": "reference/actor/build-program.mjs",
-      "bytes": 16157,
-      "sha256": "cbb099f9e238252933204d73da78d792d1afd140aa86fb2d2feb22203e828cae"
     },
     {
       "file": "reference/actor/NATIVE_DEPENDENCY_DIAG_R1.json",
@@ -150,6 +200,11 @@
       "file": "reference/actor/SOURCE_PINS.json",
       "bytes": 20797,
       "sha256": "21144bb7647c4ff3d764ae09d23366c6bf21f637392c386481f06b1f1611fb7d"
+    },
+    {
+      "file": "reference/actor/build-program.mjs",
+      "bytes": 16157,
+      "sha256": "cbb099f9e238252933204d73da78d792d1afd140aa86fb2d2feb22203e828cae"
     },
     {
       "file": "reference/adapter/control.mjs",
@@ -218,38 +273,13 @@
     },
     {
       "file": "result-validator.mjs",
-      "bytes": 12196,
-      "sha256": "881d2be8d7d34c11ca6db9d9e5d2092afae87a6fb03ceba534ee39cd25800e11"
-    },
-    {
-      "file": "ROOT_SOURCE_BINDING.json",
-      "bytes": 18589,
-      "sha256": "74965cda56af3384d22960345e26b798e10844a741b8163656808c250a74482b"
-    },
-    {
-      "file": "SETUP_ENTRY.md",
-      "bytes": 6416,
-      "sha256": "f3d2eeaec0f1c87f71f331d542a2df15ed72feec82787bf57c8cf25ceb70a15d"
-    },
-    {
-      "file": "SOURCE_PINS.json",
-      "bytes": 27619,
-      "sha256": "3a2afc97ba4d43ce4212d103c9723122b22ae6cd1e7b27c43989558d066c3751"
-    },
-    {
-      "file": "SOURCE_REVIEW.json",
-      "bytes": 1614,
-      "sha256": "bb957d24d4ca4af3a1e11329b52219a04c6406e97201cf8e496d17e2383f835c"
+      "bytes": 12564,
+      "sha256": "11d2f4282b5d6f274e1ec62dfc8dabf4d78a11f7571d9bdc0f2c0b5c51807052"
     },
     {
       "file": "source.mjs",
       "bytes": 14702,
       "sha256": "24449c3b195c6b552547536c0ce93c3ce88e3059b105724d014d33d2a0468313"
-    },
-    {
-      "file": "TEST_RESULTS.txt",
-      "bytes": 1589,
-      "sha256": "3964d86c61ae13cbf51a48186c5f963eb0ea30f9578bb45dfdc08509eb1499af"
     },
     {
       "file": "test.mjs",
@@ -260,26 +290,6 @@
       "file": "timing.mjs",
       "bytes": 1313,
       "sha256": "0cc645a9c17fc5340b04adfc7ad79b6f134d655f3d1a959dc6baa526b44b19c9"
-    },
-    {
-      "file": "batch-timing-diagnostic.mjs",
-      "bytes": 6689,
-      "sha256": "0df911bb6d99cbb9b94c5798040562d3a1f73ff6afde571bd1b7cd672c00dbe7"
-    },
-    {
-      "file": "hold-batch-timing.mjs",
-      "bytes": 5043,
-      "sha256": "b24241fb383360bffe2e19268f1aa97c3e3379c6a103cd9bf4c4b4efee5e5a51"
-    },
-    {
-      "file": "audit-bag-plan.mjs",
-      "bytes": 11057,
-      "sha256": "8bec378d43bb0ffc50421f259c8bcdc6da1a7783e57477b6faac5f3f092d0aa2"
-    },
-    {
-      "file": "hold-audit-bag-plan.mjs",
-      "bytes": 5064,
-      "sha256": "3199113424163d9053899d542dbf5e3880bc78ac945f08bc7bad67475ef973ba"
     }
   ],
   "parentManifestSha256": "f46fb60686b41f5357ae9f43e079529e5ccb7645aae250ffe93c5a8bfca0de51",

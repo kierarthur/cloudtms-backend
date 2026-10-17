@@ -1,0 +1,46 @@
+{
+  "rows": [
+    {
+      "file": "scripts/healthroster-live-test-restoration.mjs",
+      "capture": "reference/scripts/healthroster-live-test-restoration.mjs",
+      "bytes": 15050,
+      "sha256": "a91c1bf04f868ff372b20fb6beca239a7807fe9cc92c0c2682afffcd79554adc",
+      "commit": "3948d99a2f21093e19428fa3a3f8de97517be5b2"
+    },
+    {
+      "file": "scripts/healthroster-install1-live-fields-first-use.mjs",
+      "capture": "reference/scripts/healthroster-install1-live-fields-first-use.mjs",
+      "bytes": 2856,
+      "sha256": "1e0be74f791f139febf0a81e1a96ed3a5996392457dd524afa0c7aac33a799a5",
+      "commit": "3948d99a2f21093e19428fa3a3f8de97517be5b2"
+    },
+    {
+      "file": "scripts/healthroster-install1-full-rehearsal.mjs",
+      "capture": "reference/scripts/healthroster-install1-full-rehearsal.mjs",
+      "bytes": 48330,
+      "sha256": "31acd390acf2ef6dbbd062fbb157feea66f9b5d328440414e67b2bfd4a3f78ab",
+      "commit": "3948d99a2f21093e19428fa3a3f8de97517be5b2"
+    },
+    {
+      "file": "scripts/cloudtms-managed-release-sql.mjs",
+      "capture": "reference/scripts/cloudtms-managed-release-sql.mjs",
+      "bytes": 7853,
+      "sha256": "ff391fccf7f690d4d476e935870d740667e4dfd92b972bfd5d7d80b1b3bb912b",
+      "commit": "3948d99a2f21093e19428fa3a3f8de97517be5b2"
+    },
+    {
+      "file": "scripts/healthroster-turn-control.mjs",
+      "capture": "reference/scripts/healthroster-turn-control.mjs",
+      "bytes": 9580,
+      "sha256": "ae6aa38307faf3fdc7a1c1a0fe20ff6aab3589c420c5bfd5642566e3a0c23ad8",
+      "commit": "3948d99a2f21093e19428fa3a3f8de97517be5b2"
+    },
+    {
+      "file": "supabase/release/export_contract.sql",
+      "capture": "reference/supabase/release/export_contract.sql",
+      "bytes": 14978,
+      "sha256": "05a904bd4f7739409b28e0459b9f68d7c54a5e51796aefbe2829b370ce1dfe43",
+      "commit": "3948d99a2f21093e19428fa3a3f8de97517be5b2"
+    }
+  ]
+}

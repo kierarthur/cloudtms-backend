@@ -1,0 +1,76 @@
+{
+  "authority": "FICTIONAL_SOURCE_MODEL_ONLY_NOT_NATIVE_CUT",
+  "cut": {
+    "xmax": "500",
+    "xip": [
+      "499"
+    ]
+  },
+  "original": "jsonb_build_object('keyHash',encode(pg_catalog.sha256(pg_catalog.convert_to((r.batch_receipt_id)::text,'UTF8')),'hex'),\n   'rowHash',encode(pg_catalog.sha256(pg_catalog.convert_to((to_jsonb(r))::text,'UTF8')),'hex'),'xmin',r.xmin::text,'xactStatus',case when pg_snapshot_xmax((select snapshot_value from background_statement_snapshot))::text::numeric<4294967296 then pg_xact_status(r.xmin::text::xid8) end,\n   'nativeClaimProved',coalesce((r.environment='TEST' and r.actor_class='SIGNED_SYSTEM' and r.operation_class='PROJECTION_CLAIM'\n  and r.claim_target='MASTER_AVAILABILITY_SHEET' and r.claim_limit between 1 and 100\n  and r.claim_request_id is not null and r.item_count=1\n  and r.item_keys_json=jsonb_build_array('claim:'||r.claim_request_id::text)\n  and r.state='COMPLETED' and r.terminal_http_status=200\n  and r.terminal_response_body->>'batch_receipt_id'=r.batch_receipt_id::text\n  and r.terminal_response_body->>'claim_request_id'=r.claim_request_id::text\n  and r.terminal_response_body->'items'=r.claimed_items_json\n  and (case when pg_input_is_valid(r.terminal_response_body->>'lease_set_expires_at','timestamptz')\n    then (r.terminal_response_body->>'lease_set_expires_at')::timestamptz end)=r.lease_expires_at_utc\n  and extract(epoch from r.lease_expires_at_utc-r.created_at_utc) between 30 and 600\n  and extract(epoch from r.lease_expires_at_utc-r.created_at_utc)=trunc(extract(epoch from r.lease_expires_at_utc-r.created_at_utc))\n  and r.request_hash=private._candidate_daily_json_sha256_v1(jsonb_build_object('operation','PROJECTION_CLAIM',\n    'claim_request_id',r.claim_request_id,'target',r.claim_target,'claimant',r.lease_owner,\n    'max_items',r.claim_limit,'lease_seconds',extract(epoch from r.lease_expires_at_utc-r.created_at_utc)::integer))\n  and r.terminal_response_sha256=private._candidate_daily_json_sha256_v1(r.terminal_response_body)),false),'createdAt',r.created_at_utc,'updatedAt',r.updated_at_utc,'completedAt',r.completed_at_utc)",
+  "projected": "(jsonb_build_object('keyHash',encode(pg_catalog.sha256(pg_catalog.convert_to((r.batch_receipt_id)::text,'UTF8')),'hex'),\n   'rowHash',encode(pg_catalog.sha256(pg_catalog.convert_to((to_jsonb(r))::text,'UTF8')),'hex'),'xmin',r.xmin::text,'xactStatus',case when pg_snapshot_xmax((select snapshot_value from background_statement_snapshot))::text::numeric<4294967296 then pg_xact_status(r.xmin::text::xid8) end) || case when (r.xmin::text::numeric >= 500::numeric or r.xmin::text = any(array['499']::text[])) then jsonb_build_object('nativeClaimProved',coalesce((r.environment='TEST' and r.actor_class='SIGNED_SYSTEM' and r.operation_class='PROJECTION_CLAIM'\n  and r.claim_target='MASTER_AVAILABILITY_SHEET' and r.claim_limit between 1 and 100\n  and r.claim_request_id is not null and r.item_count=1\n  and r.item_keys_json=jsonb_build_array('claim:'||r.claim_request_id::text)\n  and r.state='COMPLETED' and r.terminal_http_status=200\n  and r.terminal_response_body->>'batch_receipt_id'=r.batch_receipt_id::text\n  and r.terminal_response_body->>'claim_request_id'=r.claim_request_id::text\n  and r.terminal_response_body->'items'=r.claimed_items_json\n  and (case when pg_input_is_valid(r.terminal_response_body->>'lease_set_expires_at','timestamptz')\n    then (r.terminal_response_body->>'lease_set_expires_at')::timestamptz end)=r.lease_expires_at_utc\n  and extract(epoch from r.lease_expires_at_utc-r.created_at_utc) between 30 and 600\n  and extract(epoch from r.lease_expires_at_utc-r.created_at_utc)=trunc(extract(epoch from r.lease_expires_at_utc-r.created_at_utc))\n  and r.request_hash=private._candidate_daily_json_sha256_v1(jsonb_build_object('operation','PROJECTION_CLAIM',\n    'claim_request_id',r.claim_request_id,'target',r.claim_target,'claimant',r.lease_owner,\n    'max_items',r.claim_limit,'lease_seconds',extract(epoch from r.lease_expires_at_utc-r.created_at_utc)::integer))\n  and r.terminal_response_sha256=private._candidate_daily_json_sha256_v1(r.terminal_response_body)),false),'createdAt',r.created_at_utc,'updatedAt',r.updated_at_utc,'completedAt',r.completed_at_utc) else '{}'::jsonb end)",
+  "originalCoalesce": "coalesce((r.environment='TEST' and r.actor_class='SIGNED_SYSTEM' and r.operation_class='PROJECTION_CLAIM'\n  and r.claim_target='MASTER_AVAILABILITY_SHEET' and r.claim_limit between 1 and 100\n  and r.claim_request_id is not null and r.item_count=1\n  and r.item_keys_json=jsonb_build_array('claim:'||r.claim_request_id::text)\n  and r.state='COMPLETED' and r.terminal_http_status=200\n  and r.terminal_response_body->>'batch_receipt_id'=r.batch_receipt_id::text\n  and r.terminal_response_body->>'claim_request_id'=r.claim_request_id::text\n  and r.terminal_response_body->'items'=r.claimed_items_json\n  and (case when pg_input_is_valid(r.terminal_response_body->>'lease_set_expires_at','timestamptz')\n    then (r.terminal_response_body->>'lease_set_expires_at')::timestamptz end)=r.lease_expires_at_utc\n  and extract(epoch from r.lease_expires_at_utc-r.created_at_utc) between 30 and 600\n  and extract(epoch from r.lease_expires_at_utc-r.created_at_utc)=trunc(extract(epoch from r.lease_expires_at_utc-r.created_at_utc))\n  and r.request_hash=private._candidate_daily_json_sha256_v1(jsonb_build_object('operation','PROJECTION_CLAIM',\n    'claim_request_id',r.claim_request_id,'target',r.claim_target,'claimant',r.lease_owner,\n    'max_items',r.claim_limit,'lease_seconds',extract(epoch from r.lease_expires_at_utc-r.created_at_utc)::integer))\n  and r.terminal_response_sha256=private._candidate_daily_json_sha256_v1(r.terminal_response_body)),false)",
+  "originalCoalesceSha256": "1c49b9b3456fc1a5d932b728d71b5dde9dd6ba2d11edb54986006b5c7542bc38",
+  "referenceCanonicalSha256": "69ce08ab7749cc4bea2fdece6e6b768a29d470e32ecefa0211168d2952fb31a8",
+  "before": {
+    "mode": "CONTACT_OWNING_C_COMPACT_ROTA_ELIGIBILITY_V1",
+    "phase": "BEFORE",
+    "referenceCanonicalSqlSha256": "69ce08ab7749cc4bea2fdece6e6b768a29d470e32ecefa0211168d2952fb31a8",
+    "projectionCanonicalSqlSha256": "7e11dc22a4ad77efd077c3abf5d90f62f59fa53bea4bb6cfa15d69327a934380",
+    "originalCompleteCoalesceSha256": "1c49b9b3456fc1a5d932b728d71b5dde9dd6ba2d11edb54986006b5c7542bc38",
+    "originalCompleteBatchRowSha256": "705aa371479cb68a5213a611c70550c3ea6d093ec7ce963f0e47110380dee454",
+    "boundFieldsSha256": "fad1de9921b810536fd51b564655e047d060e965aa3f75b159ae1b3524354961",
+    "cutSha256": null,
+    "beforeRotaFields": [
+      "keyHash",
+      "rowHash"
+    ],
+    "afterAllRotaFields": [
+      "keyHash",
+      "rowHash",
+      "xmin",
+      "xactStatus"
+    ],
+    "afterEligibleAdditionalFields": [
+      "nativeClaimProved",
+      "createdAt",
+      "updatedAt",
+      "completedAt"
+    ],
+    "outboxMapsUnchanged": true,
+    "allRowHashesCountsKeysRetained": true,
+    "rawCanonicalEqualityClaimed": false,
+    "sqlErrorDomainEquivalent": false
+  },
+  "after": {
+    "mode": "CONTACT_OWNING_C_COMPACT_ROTA_ELIGIBILITY_V1",
+    "phase": "AFTER",
+    "referenceCanonicalSqlSha256": "69ce08ab7749cc4bea2fdece6e6b768a29d470e32ecefa0211168d2952fb31a8",
+    "projectionCanonicalSqlSha256": "8f5958e7ef2d96891fae8ec4a763cf08258f1a538ab595d47267d367ca4d454a",
+    "originalCompleteCoalesceSha256": "1c49b9b3456fc1a5d932b728d71b5dde9dd6ba2d11edb54986006b5c7542bc38",
+    "originalCompleteBatchRowSha256": "705aa371479cb68a5213a611c70550c3ea6d093ec7ce963f0e47110380dee454",
+    "boundFieldsSha256": "fad1de9921b810536fd51b564655e047d060e965aa3f75b159ae1b3524354961",
+    "cutSha256": "274ea117e987a9c7730e6160f0ebc8887df3a8472a0f6acddd8e2be9cd96bb94",
+    "beforeRotaFields": [
+      "keyHash",
+      "rowHash"
+    ],
+    "afterAllRotaFields": [
+      "keyHash",
+      "rowHash",
+      "xmin",
+      "xactStatus"
+    ],
+    "afterEligibleAdditionalFields": [
+      "nativeClaimProved",
+      "createdAt",
+      "updatedAt",
+      "completedAt"
+    ],
+    "outboxMapsUnchanged": true,
+    "allRowHashesCountsKeysRetained": true,
+    "rawCanonicalEqualityClaimed": false,
+    "sqlErrorDomainEquivalent": false
+  },
+  "bagQueriesUnchanged": true,
+  "runtimeNativeExecution": "NOT_RUN"
+}

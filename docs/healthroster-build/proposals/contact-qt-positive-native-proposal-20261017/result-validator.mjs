@@ -1,6 +1,7 @@
 // Finite observed result validation; the original live WeakMap qualifier is reused.
 import fs from'node:fs';import {fileURLToPath}from'node:url';import path from'node:path';
 import {source,requireThat,SCOPE,sortWriters}from'./source.mjs';import {observedInstant}from'./timing.mjs';
+import {assertCompactClaimSnapshots}from'./fixed-metadata-reader.mjs';
 const here=path.dirname(fileURLToPath(import.meta.url)),plans=JSON.parse(fs.readFileSync(here+'/PROGRAMMES.json')),
  relations=JSON.parse(fs.readFileSync(here+'/SOURCE_PINS.json')).relationNames;
 const pid=v=>Number.isSafeInteger(v)&&v>0;
@@ -58,9 +59,10 @@ export function readStage(result,receipt){
  return{transaction,observations:[observation],expectedUnits:[0],freshPeerPid:held.backendPid,nativeClocks:clocks,nativeCompletionObservedAt:completed.observedAt,mcpVerificationObservedAt:held.observedAt};
 }
 export function bindSnapshots({receipt,stage,beforePacket,afterPacket}){
+ const eligible=assertCompactClaimSnapshots({receipt,beforePacket,afterPacket});
  requireThat(JSON.stringify(receipt.snapshotRelations)===JSON.stringify(relations),'CONTACT_QT_EXACT_TWELVE_RELATIONS_REQUIRED');
  for(const[p,phase]of[[beforePacket,'BEFORE'],[afterPacket,'AFTER']]){
-  requireThat(p?.childClosed===true&&p.provenance?.phase===phase&&p.provenance.scope===SCOPE&&p.provenance.canonicalSqlSha256===receipt.canonicalSqlSha256&&p.provenance.observeLiveBusiness===true,'CONTACT_QT_ORIGINAL_CANONICAL_SOURCE_REQUIRED');
+  requireThat(p?.childClosed===true&&p.provenance?.phase===phase&&p.provenance.scope===SCOPE&&(eligible?p.provenance.referenceCanonicalSqlSha256===receipt.canonicalSqlSha256:p.provenance.canonicalSqlSha256===receipt.canonicalSqlSha256)&&p.provenance.observeLiveBusiness===true,'CONTACT_QT_ORIGINAL_CANONICAL_SOURCE_REQUIRED');
   const v=p.peer;requireThat(v.database==='cloudtms_test_clone'&&v.databaseOid===receipt.holderIdentity.databaseOid&&v.holderPid===receipt.holderIdentity.backendPid
    &&v.readOnly===true&&v.isolation==='repeatable read'&&v.noRoleSwitch===true&&pid(v.readerPid)&&v.readerPid!==receipt.holderIdentity.backendPid,'CONTACT_QT_CANONICAL_PEER_REQUIRED');
   requireThat(JSON.stringify(p.snapshot.businessRelations.map(r=>r.relation).sort())===JSON.stringify(relations)&&p.snapshot.marker===receipt.marker&&p.snapshot.markerAbsent===true,'CONTACT_QT_COMPLETE_SCOPE_REQUIRED');
@@ -85,3 +87,5 @@ export async function validateRestoration({root,result,receipt,beforePacket,afte
   localTransport:{before:beforePacket.transport,after:afterPacket.transport},before:safe(local.before),after:safe(local.after),restoration,nativeClockFrames:stage.nativeClocks,
   nativeCompletionObservedAt:stage.nativeCompletionObservedAt,mcpVerificationObservedAt:stage.mcpVerificationObservedAt,providerEffects:'NONE_IN_SCOPE',directRoleApi:'NOT_RUN',crossAgencyProof:'NOT_RUN',postWaitRace:'NOT_RUN',fullInstallRehearsal:'NOT_RUN'};
 }
+
+export async function validateCompactClaimRestoration(args){assertCompactClaimSnapshots(args,true);return validateRestoration(args);}

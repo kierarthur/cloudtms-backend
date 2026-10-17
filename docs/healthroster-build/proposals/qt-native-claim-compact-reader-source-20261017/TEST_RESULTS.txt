@@ -1,0 +1,70 @@
+(node:3552) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ whole holder selects opt-in reader/reference guard and original post-B validation/release order (model only) (5.9992ms)
+✔ whole holder holds on reference (2.6334ms)
+✔ whole holder holds on afteruncertain (1.8444ms)
+✔ whole holder holds on ownclose (2.1959ms)
+✔ whole holder holds on abort (1.8391ms)
+✔ source refusal before A/output remains unchanged (1.1868ms)
+(node:18328) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ actual opt-in reader to strict original B parser to independent AFTER to original qualifier/fresh-restoration flow (fictional frames only) (31.3656ms)
+✔ original/default factory source stays exact canonical/batch bytes; no derived provenance (9.0751ms)
+✔ pure compact projection retains complete original values and full COALESCE, preserving complete original COALESCE and all remaining bytes (14.4281ms)
+✔ validated native BEFORE cut refuses epoch (9.7648ms)
+✔ validated native BEFORE cut refuses nullXmax (8.537ms)
+✔ validated native BEFORE cut refuses zero (8.4026ms)
+✔ validated native BEFORE cut refuses injection (8.2933ms)
+✔ validated native BEFORE cut refuses epochwrap (8.703ms)
+✔ validated native BEFORE cut refuses nullXip (8.7934ms)
+✔ validated native BEFORE cut refuses outofrangeXip (8.9754ms)
+✔ validated native BEFORE cut refuses numericXip (8.694ms)
+✔ copy is immutable and aliases cannot mutate the genuine cut; unknown factory args and inspection cuts refuse (8.5896ms)
+✔ edited genuine packet refuses snapshot (14.205ms)
+✔ edited genuine packet refuses peer (12.1738ms)
+✔ edited genuine packet refuses provenance (12.1452ms)
+✔ edited genuine packet refuses transport (10.7168ms)
+✔ copied flags/provenance, mixed owning readers and wrong turn/case/reference cannot acquire brand (22.4748ms)
+✔ actual opt-in factory refuses source (3.1991ms)
+✔ actual opt-in factory refuses lostA (7.0927ms)
+✔ actual opt-in factory refuses childclosedfailure (7.9549ms)
+✔ actual opt-in factory refuses lateabort (7.629ms)
+✔ actual opt-in factory refuses peer (7.7719ms)
+✔ actual opt-in factory refuses wrongrole (7.9139ms)
+✔ actual opt-in factory refuses beforetrueflag (7.439ms)
+✔ after-before/caller-before/false or null eligible claim never qualifies; original complete map/writer checks still apply (37.3837ms)
+✔ candidate legacy reader returns byte-equal full before/after/descriptor vs complete actual parent reader (18.6887ms)
+✔ earlier active-XIP receipt retains genuine original proof/acceptance; ineligible after proof refuses (25.0366ms)
+✔ every original non-background relation retains full hash equality: public.audit_events (12.6845ms)
+✔ every original non-background relation retains full hash equality: public.settings_defaults (11.0626ms)
+✔ every original non-background relation retains full hash equality: public.tms_users (15.5887ms)
+✔ every original non-background relation retains full hash equality: public.weekly_candidate_cohorts (13.2719ms)
+✔ every original non-background relation retains full hash equality: public.weekly_candidate_outreach_generations (14.6474ms)
+✔ every original non-background relation retains full hash equality: public.weekly_manager_recipient_generations (14.0057ms)
+✔ every original non-background relation retains full hash equality: public.weekly_message_dispatch_commands (11.9177ms)
+✔ every original non-background relation retains full hash equality: public.weekly_source_global_settings (14.2482ms)
+✔ every original non-background relation retains full hash equality: public.weekly_timesheet_submission_request_memberships (11.1194ms)
+✔ every original non-background relation retains full hash equality: public.weekly_timesheet_submission_requests (11.0283ms)
+✔ full original validator predicate remains mandatory: fullmap (12.23ms)
+✔ full original validator predicate remains mandatory: rowhash (11.2215ms)
+✔ full original validator predicate remains mandatory: writer (11.8895ms)
+✔ full original validator predicate remains mandatory: epoch (10.7798ms)
+✔ full original validator predicate remains mandatory: oldrowdelete (11.3347ms)
+✔ genuine after must retain independent PID and copied public projection cannot mint a packet proof (17.2968ms)
+✔ source compiler refuses altered complete P/fields, caller-owned cut and oversized genuine cut (11.1915ms)
+✔ 270 complete actual old-reader/parser/qualifier vs compact-reader/parser/qualifier returned-frame flows preserve exact status/error order (6806.6774ms)
+✔ AFTER keeps native xmin and transaction status for every row; BEFORE/base and outbox transfer exact (13.2048ms)
+✔ both nonempty outbox maps retain every field, nextAttemptAt and original retry decision, with no compact transfer (87.0691ms)
+✔ private native BEFORE peer remains unaliased; editing returned peer cannot alter identity authority or qualify (14.2016ms)
+ℹ tests 54
+ℹ suites 0
+ℹ pass 54
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 7775.6353
+
+{"status": "PASS_GRAMMAR_AST_ONLY", "fieldTrees": 3, "wholeFinalTrees": 3, "originalEligiblePAndTimestampsExact": true, "allAfterXminStatusExact": true, "outboxAndAllOtherASTExact": true, "negativeASTs": 8, "psqlBags": "TWO_GRAMMAR_ONLY_PLACEHOLDERS_NOT_NATIVE_DATA", "native": "NOT_RUN"}
+
+{"status": "PASS_SOURCE_ONLY", "completeParentFiles": 56, "completeRawInverses": 4, "selectedTargets": 5, "oldManifestRows": 55, "retainedRows": 53, "sharedSources": 6, "native": "NOT_RUN"}

@@ -1,0 +1,20 @@
+{
+  "version": "COMPACT_CLAIM_READER_INDEPENDENT_PEER_FREEZE_V1",
+  "files": [
+    {
+      "file": "peer.test.mjs",
+      "bytes": 5486,
+      "sha256": "0f57115e9430513962a2c44ee35bce6f9e7baa51b62ca72731170dccf780d661"
+    },
+    {
+      "file": "RESULTS.json",
+      "bytes": 9786,
+      "sha256": "4f3560541a6bb44ca29c4905b464af34b849674e60ffb24011d506663fd9c2d0"
+    },
+    {
+      "file": "REVIEW.md",
+      "bytes": 5397,
+      "sha256": "a05633445a2f5c8899d541d71237a5e5a07316440fee0500645f5b96d705b211"
+    }
+  ]
+}

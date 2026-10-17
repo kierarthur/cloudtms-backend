@@ -1,0 +1,13 @@
+{
+  "historicalStagedRoot": "bb9786de3c4efa4327cbf01cc8da58f285657604",
+  "historicalCommittedReaderSha256": "45d6079e1b6b38dbbd9e376c7c18eeeddc13007f50cc7b359c0f8929a5d88053",
+  "historicalStagedReaderSha256": "649970e791827bae200a58190e6ace711979864346743337956d628c1d87d7db",
+  "realAuditPlanAdoptionCommit": "3948d99a2f21093e19428fa3a3f8de97517be5b2",
+  "auditPlanWholeInverseSha256": "1fe93fdf9ed240bd92373b1d8abe989359721763f44c9940b25e78ceff229ebc",
+  "actualCompleteParentCommit": "284035b174aa57e28b9e1c64530854be66c1011b",
+  "proof": "All56 individual complete parent files are directly matched to actual captured/saved/index/HEAD and this real historical commit; no virtual baseline or ancestry-only substitution",
+  "futureAdoption": "NOT_PROVIDED; root must commit exact5 selected images then run original real committed source admission",
+  "earlierFullerFieldPacket": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-v2-report-build-13102026\\.codex-tmp\\qt-native-claim-eligible-reader-source-20261017",
+  "earlierFullerFieldManifestSha256": "8824a970bfbb4a90664519b90a08f5494fcc2fff0c6148f50935f88c84ef255f",
+  "earlierFullerFieldAdopted": false
+}

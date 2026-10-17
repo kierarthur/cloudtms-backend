@@ -11,6 +11,7 @@ import {SqlstateStderrCapture,diagnosticContext,diagnosticError,preserveMetadata
 import {DiagnosticMemoryCapture,diagnosticMarker} from './metadata-progress-diagnostic.mjs';
 import {COMPONENTS,compileComponentInputs} from './component-source.mjs';
 import {compileNativeBatch,joinNativeSnapshotFrames} from './batch-source.mjs';
+import {CLAIM_MODE,copyNativeClaimCut,assertProjectedClaimFlags,compileEligibleClaimBatch} from './claim-eligibility-source.mjs';
 import {BatchTimingCapture,compileBatchTimingInput,batchTimingProgressFor} from './batch-timing-diagnostic.mjs';
 export {batchTimingProgressFor};
 import {AuditBagPlanCapture,compileAuditBagPlan,auditBagPlanProgressFor} from './audit-bag-plan.mjs';
@@ -99,9 +100,28 @@ async function runFixedChild({input,env,turn,phase,diagnosticMode=null,batch=fal
  });
 }
 
+const eligibleClaimMode=Symbol('owning-C derived claim mode');
+const eligibleClaimFrames=new WeakMap();
+const frameBinding=p=>{const {liveRestoration,...snapshot}=p.snapshot;return sha(JSON.stringify({snapshot,peer:p.peer,provenance:p.provenance,transport:p.transport,fixtureProof:p.fixtureProof,childClosed:p.childClosed}));};
+export function assertCompactClaimSnapshots({receipt,beforePacket,afterPacket},required=false){
+ const b=eligibleClaimFrames.get(beforePacket),a=eligibleClaimFrames.get(afterPacket);
+ const declared=[beforePacket,afterPacket].some(p=>p?.provenance?.claimProjection!==undefined);
+ if(!b&&!a&&!declared&&!required)return false;
+ check(b&&a&&b.owner===a.owner&&b.phase==='BEFORE'&&a.phase==='AFTER'&&a.beforePacket===beforePacket,'LOCAL_METADATA_CLAIM_OWNING_READER_REQUIRED');
+ check(b.binding===frameBinding(beforePacket)&&a.binding===frameBinding(afterPacket),'LOCAL_METADATA_CLAIM_FRAME_CHANGED');
+ check(b.turnSha256===sha(JSON.stringify(receipt.holderIdentity))&&a.turnSha256===b.turnSha256&&b.caseId===receipt.caseId&&a.caseId===b.caseId,'LOCAL_METADATA_CLAIM_TURN_CASE_REQUIRED');
+ check(b.referenceSha256===receipt.canonicalSqlSha256&&a.referenceSha256===b.referenceSha256&&a.cutSha256===sha(JSON.stringify(copyNativeClaimCut(beforePacket.snapshot))),'LOCAL_METADATA_CLAIM_EXACT_BEFORE_CUT_REQUIRED');
+ return true;
+}
+export async function createFixedCompactClaimMetadataReader(args){
+ check(args&&Object.keys(args).sort().join('|')==='caseId|root|turn','LOCAL_METADATA_CLAIM_EXACT_FACTORY_ARGS_REQUIRED');
+ return createMetadataReader(args,true,eligibleClaimMode);
+}
 export async function createFixedMetadataReader(args){return createMetadataReader(args,false);}
 export async function createFixedBatchMetadataReader(args){return createMetadataReader(args,true);}
-async function createMetadataReader({root,turn,caseId},batch){
+async function createMetadataReader({root,turn,caseId},batch,mode){
+ const eligible=mode===eligibleClaimMode;check(mode===undefined||eligible,'LOCAL_METADATA_CLAIM_MODE_REFUSED');
+ const owner=Object.freeze({});let nativeCut,beforePacketIdentity;
  check(turn&&typeof turn.assertHeld==='function'&&turn.signal&&typeof turn.runOwnedChild==='function','LOCAL_METADATA_ROOT_CALLBACK_REQUIRED');
  assertPins(root);
  const {rehearsal,live,pins}=await source(root,caseId);
@@ -131,24 +151,29 @@ async function createMetadataReader({root,turn,caseId},batch){
   'isolation',current_setting('transaction_isolation'),'noRoleSwitch',current_user=session_user)::text;`;
  const referenceInput='begin isolation level repeatable read read only;\n'+guard+'\n'+peerSql+'\n'+canonicalSql+'\nrollback;\n';
  const built=batch?compileNativeBatch({input:referenceInput,canonicalSql},await import(pathToFileURL(path.join(root,'scripts/cloudtms-managed-release-sql.mjs')).href),live.boundBackgroundSnapshotFieldsSql()):null;
- const input=built?.input??referenceInput;
+ const claimBuilt=eligible?compileEligibleClaimBatch({referenceInput,referenceCanonicalSql:canonicalSql,backgroundFields:live.boundBackgroundSnapshotFieldsSql(),managed:await import(pathToFileURL(path.join(root,'scripts/cloudtms-managed-release-sql.mjs')).href),phase:'BEFORE'}):null;
+ const input=claimBuilt?.input??built?.input??referenceInput;
  // The exact canonical query including its terminal delimiter occurs once.
  check(referenceInput.split(canonicalSql).length===2,'LOCAL_METADATA_CANONICAL_EMBED_REFUSED');
+ const managedClaim=eligible?await import(pathToFileURL(path.join(root,'scripts/cloudtms-managed-release-sql.mjs')).href):null;
  let phase='BEFORE',beforePeer,beforeSnapshot;
  const afterProgram=({transaction,observations},before=beforeSnapshot)=>{
   live.validateFixtureObservations(transaction,observations,[0]);
   check(observations[0].rows.length===0&&transaction.backendPid!==turn.identity.backendPid,'LOCAL_METADATA_EMPTY_NATIVE_B_REQUIRED');
   const fixtureSql=live.freshFixtureProofSql(transaction,observations,before);
   check(Buffer.byteLength(fixtureSql)<16384,'LOCAL_METADATA_CONTROL_SQL_BOUND');
-  const afterInput=input.slice(0,-'rollback;\n'.length)+fixtureSql+'\nrollback;\n';
-  check((batch?afterInput.startsWith(input.slice(0,-'rollback;\n'.length))&&afterInput.indexOf(fixtureSql)>afterInput.indexOf(built.finalQuery):afterInput.split(canonicalSql).length===2&&afterInput.indexOf(fixtureSql)>afterInput.indexOf(canonicalSql)),'LOCAL_METADATA_CANONICAL_ORDER_REFUSED');
-  return {input:afterInput,fixtureSql};
+  const afterBuilt=eligible?compileEligibleClaimBatch({referenceInput,referenceCanonicalSql:canonicalSql,backgroundFields:live.boundBackgroundSnapshotFieldsSql(),managed:managedClaim,phase:'AFTER',cut:nativeCut}):null;
+  const selectedInput=afterBuilt?.input??input;
+  const afterInput=selectedInput.slice(0,-'rollback;\n'.length)+fixtureSql+'\nrollback;\n';
+  check((batch?afterInput.startsWith(selectedInput.slice(0,-'rollback;\n'.length))&&afterInput.indexOf(fixtureSql)>afterInput.indexOf((afterBuilt??built).finalQuery):afterInput.split(canonicalSql).length===2&&afterInput.indexOf(fixtureSql)>afterInput.indexOf(canonicalSql)),'LOCAL_METADATA_CANONICAL_ORDER_REFUSED');
+  return {input:afterInput,fixtureSql,...eligible?{claimBuilt:afterBuilt}:{}};
  };
  const read=async(wanted,args)=>{
   check(phase===wanted,'LOCAL_METADATA_PHASE_REFUSED');phase='RUNNING';assertPins(root);
   let program;
   try{
-   program=wanted==='AFTER'?afterProgram(args):{input};
+   if(eligible&&wanted==='AFTER')check(nativeCut&&beforePacketIdentity&&!('before' in args)&&!('cut' in args)&&!('mode' in args),'LOCAL_METADATA_CLAIM_PRIVATE_BEFORE_REQUIRED');
+   program=wanted==='AFTER'?afterProgram(args):{input,...eligible?{claimBuilt}:{}};
    const env=helpers.agencyChildEnvironment('healthroster_contact_qt_fixed_metadata');
    env.PGCLIENTENCODING='UTF8';env.PGCONNECT_TIMEOUT=String(LIMITS.connectSeconds);
    env.PGOPTIONS+=' -c default_transaction_read_only=on -c statement_timeout='+LIMITS.statementMilliseconds+' -c lock_timeout='+LIMITS.lockMilliseconds;
@@ -161,16 +186,25 @@ async function createMetadataReader({root,turn,caseId},batch){
    }
    check(s.physicalDatabase==='cloudtms_test_clone'&&s.identityTest===true&&s.customerKeyNull===true&&s.module==='LEGACY:1'
     &&s.applyingCount===0&&s.markerAbsent===true&&s.backgroundRows&&s.backgroundWriterRoutines&&Array.isArray(s.businessRelations),'LOCAL_METADATA_CANONICAL_IDENTITY_REFUSED');
-   assertPins(root);phase=wanted==='BEFORE'?'AFTER':'DONE';if(wanted==='BEFORE'){beforePeer=p;beforeSnapshot=s;}
-   return {...result,...batch?{transport:{...result.transport,referenceCanonicalSqlSha256:sha(canonicalSql),executedBatchInputSha256:sha(program.input),canonicalStatementExecuted:false,...wanted==='AFTER'?{fixtureNativeFrameOrdinal:4,fixtureLogicalFrameOrdinal:3}:{}}}:{},snapshot:{...s,marker,...wanted==='AFTER'?{connectedFresh:true}:{}},
+   if(eligible){check(!turn.signal.aborted,'LOCAL_METADATA_TURN_LOST');if(wanted==='BEFORE')nativeCut=copyNativeClaimCut(s);assertProjectedClaimFlags(s,wanted,nativeCut);}
+   assertPins(root);phase=wanted==='BEFORE'?'AFTER':'DONE';if(wanted==='BEFORE'){beforePeer=eligible?structuredClone(p):p;beforeSnapshot=eligible?structuredClone(s):s;}
+   const packet={...result,...batch?{transport:{...result.transport,referenceCanonicalSqlSha256:sha(canonicalSql),executedBatchInputSha256:sha(program.input),canonicalStatementExecuted:false,...wanted==='AFTER'?{fixtureNativeFrameOrdinal:4,fixtureLogicalFrameOrdinal:3}:{}}}:{},snapshot:{...s,marker,...wanted==='AFTER'?{connectedFresh:true}:{}},
     provenance:{phase:wanted,scope:SCOPE,canonicalSqlSha256:sha(canonicalSql),inputSha256:sha(program.input),...batch?{transport:'CONTACT_SAME_RR_NATIVE_BATCH_V1',referenceCanonicalSqlSha256:sha(canonicalSql),executedBatchInputSha256:sha(program.input),canonicalStatementExecuted:false}:{},...wanted==='AFTER'?{fixtureSqlSha256:sha(program.fixtureSql),fixtureSource:'UNCHANGED_CANONICAL_FRESH_FIXTURE_PROOF_C_AFTER_THIRD_FRAME'}:{},sourcePinsSha256:sha(JSON.stringify(expectedPins)),
      childClosed:true,route:'OWNER_SEND5B_FIXED_READ_ONLY_METADATA_NOT_PROPOSED_B_SQL',observeLiveBusiness:true,nativeQualification:'NOT_PROVED_BY_READER'}};
+   if(eligible){
+    const projected=program.claimBuilt,projection=projected.projection;
+    packet.provenance={...packet.provenance,canonicalSqlSha256:projection.projectionCanonicalSqlSha256,referenceCanonicalSqlSha256:projection.referenceCanonicalSqlSha256,claimProjection:projection};
+    packet.transport={...packet.transport,derivedClaimProjection:CLAIM_MODE,claimProjection:projection};
+    eligibleClaimFrames.set(packet,{owner,phase:wanted,beforePacket:beforePacketIdentity,caseId,turnSha256:sha(JSON.stringify(turn.identity)),referenceSha256:sha(canonicalSql),cutSha256:projection.cutSha256,binding:frameBinding(packet)});
+    if(wanted==='BEFORE')beforePacketIdentity=packet;
+   }
+   return packet;
   }catch(error){phase='FAILED';throw preserveMetadataDiagnostic(error,Error(/^LOCAL_METADATA_[A-Z_]+$/.test(error?.message??'')?error.message:'LOCAL_METADATA_READ_REFUSED'));}
  };
  return Object.freeze({before:()=>read('BEFORE'),after:args=>read('AFTER',args),
-  sourceDescriptor:Object.freeze({canonicalSqlSha256:sha(canonicalSql),inputSha256:sha(input),scope:SCOPE,limits:LIMITS,...batch?{batch:built.descriptor}:{}}),
+  sourceDescriptor:Object.freeze({canonicalSqlSha256:eligible?claimBuilt.projection.projectionCanonicalSqlSha256:sha(canonicalSql),inputSha256:sha(input),scope:SCOPE,limits:LIMITS,...batch?{batch:(claimBuilt??built).descriptor}:{},...eligible?{claimProjection:CLAIM_MODE,referenceCanonicalSqlSha256:sha(canonicalSql)}:{}}),
   // Pure source proof; no authority and no connection is created by inspection.
-  inspectSource:({transaction,observations,before}={})=>({input,canonicalSql,relations,...batch?{batch:built}:{},...transaction?{after:afterProgram({transaction,observations},before)}:{}})});
+  inspectSource:({transaction,observations,before}={})=>{check(!eligible||before===undefined,'LOCAL_METADATA_CLAIM_CALLER_BEFORE_REFUSED');return{input,canonicalSql:eligible?claimBuilt.canonicalSql:canonicalSql,relations,...batch?{batch:claimBuilt??built}:{},...eligible?{referenceCanonicalSql:canonicalSql}:{},...transaction?{after:afterProgram({transaction,observations},before)}:{}};}});
 }
 
 // Separate diagnostic state. It can never supply a snapshot or restoration proof.

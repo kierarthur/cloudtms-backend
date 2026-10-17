@@ -1,0 +1,7 @@
+{
+  "stagedObservedRootHEAD": "bb9786de3c4efa4327cbf01cc8da58f285657604",
+  "stagedReaderSha256": "649970e791827bae200a58190e6ace711979864346743337956d628c1d87d7db",
+  "historicalReaderSha256": "45d6079e1b6b38dbbd9e376c7c18eeeddc13007f50cc7b359c0f8929a5d88053",
+  "actualParentCommit": "3948d99a2f21093e19428fa3a3f8de97517be5b2",
+  "approvedAuditPlanFullInverseSha256": "1fe93fdf9ed240bd92373b1d8abe989359721763f44c9940b25e78ceff229ebc"
+}
