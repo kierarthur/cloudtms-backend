@@ -1,0 +1,80 @@
+{
+  "version": "KEPT_ENTRY_F23_ROOT_MOUNT_V1",
+  "sourceCommit": "50181d4a68c8fff234cc882de1e1a09a75186116",
+  "runtimeSourceCheckpoint": "24c57e6c7af4a8fb07d5e3126ab9ac76e9448560",
+  "rootInputCommit": "548208ac8d3d8c3f32f56f1c1174242d276467b1",
+  "gateHunks": 4,
+  "fullGateReverse": true,
+  "inputGateSha256": "20cd8fbdce5112988c853384bdd374d7660640a752a53d23414237a414b5d578",
+  "outputGateSha256": "4f3f73b57b51ece357091ca612c4ca4abe9c33b6f69cf290f81552238580acb1",
+  "moduleSha256": "e567a11b4399dcec4040d44ee01d6d009dd181121edb01927cd38c97061d1fa7",
+  "classificationSha256": "6309ea0cadd0d2cd3e98537c145cd8bb49aef984d74bbfe0f11075f54982a874",
+  "scopedPhysicalInputs": 19,
+  "rawConstructOccurrences": 94,
+  "utilityCorrection": "LITERAL_SQL_CALLBACK_REVERSE_REGRESSION_13_CASES",
+  "fullGate": "NOT_RUN",
+  "native": "NOT_RUN",
+  "peer": "REQUIRED_BEFORE_RELEASE",
+  "copiedFiles": [
+    {
+      "path": "docs/healthroster-build/proposals/kept-entry-f23-classification-20261017/AST_PROOF.json",
+      "sha256": "b33a7897d708ee40a5ec8d59b0cb781d31e5e518160d4508af2a3f5f117f80b2",
+      "bytes": 2435
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-entry-f23-classification-20261017/CENSUS.json",
+      "sha256": "5aad8f9e65820026a515fbda43ae19b7c5f2d4fdf1ff7e67cdde0cac3ff46b16",
+      "bytes": 3329
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-entry-f23-classification-20261017/CLASSIFICATION.json",
+      "sha256": "6309ea0cadd0d2cd3e98537c145cd8bb49aef984d74bbfe0f11075f54982a874",
+      "bytes": 158349
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-entry-f23-classification-20261017/GATE_EDITS.json",
+      "sha256": "ab513bc7deb8a6f21e2e6ca64bfd8002adf54759885da6b844b6506287b5f9da",
+      "bytes": 4694
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-entry-f23-classification-20261017/ORIGINAL_ALLOWANCE_TRANSFER.json",
+      "sha256": "1704a008f6938ea94d0d6d49e60fd557d0a08507e71452063c894d50424b1091",
+      "bytes": 7387
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-entry-f23-classification-20261017/README.md",
+      "sha256": "ade295a1306e6c08119b51c29f8eadc5e888592a18d49626fc791fd10cb410da",
+      "bytes": 9007
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-entry-f23-classification-20261017/TEST_RESULTS.json",
+      "sha256": "97c45b59239fd69cf24a3b96bcb4dc4dfc2379584143b555f838cdef272cec7f",
+      "bytes": 2815
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-entry-f23-classification-20261017/ast-proof.py",
+      "sha256": "5925afbd17ca9dbcb79632d072c8348c02895f4684bb9a153883cc12671b4395",
+      "bytes": 2015
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-entry-f23-classification-20261017/build-gate-hunks.mjs",
+      "sha256": "ff54cf0ad43a117bca0e7f87ba2b863f02af5acd47831f7f411ee89d2b19659c",
+      "bytes": 3755
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-entry-f23-classification-20261017/build-review.mjs",
+      "sha256": "46c4acd8e481f4dbca639a1d14c459e319a9fda074cb18c8bed03a14159eb171",
+      "bytes": 6398
+    },
+    {
+      "path": "docs/healthroster-build/proposals/kept-entry-f23-classification-20261017/test.mjs",
+      "sha256": "e3b113b5806669fc69ebce6ec33acf58b8b86f9493491f715c68897cc98953f1",
+      "bytes": 9806
+    },
+    {
+      "path": "scripts/healthroster-kept-entry-type-review.mjs",
+      "sha256": "e567a11b4399dcec4040d44ee01d6d009dd181121edb01927cd38c97061d1fa7",
+      "bytes": 10383
+    }
+  ]
+}

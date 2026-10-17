@@ -1,3 +1,4 @@
+import {createReviewedKeptEntryClassifier} from './healthroster-kept-entry-type-review.mjs';
 import {reviewedSourceClassifierDelegates} from './healthroster-source-classifier-delegation-review.mjs';
 import {reviewedSource13Hazards} from './healthroster-source13-finite-review.mjs';
 import {reviewedPrebodyDynamicHazards} from './healthroster-prebody-dynamic-review.mjs';
@@ -5,7 +6,7 @@ import {reviewedJoinedNonDynamicHazards} from './healthroster-joined-nondynamic-
 import {reviewedHealthDynamicHazards} from './healthroster-dynamic-source-review.mjs';
 import {reviewedHealthAggregateHazards} from './healthroster-aggregate-type-review.mjs';
 import {reviewedHealthUuidHazards} from './healthroster-uuid-cardinality-review.mjs';
-import {reviewedHealthRowtypeHazards} from './healthroster-rowtype-type-review.mjs';
+import {reviewedHealthRowtypeHazards,provesSingleTableTuple} from './healthroster-rowtype-type-review.mjs';
 import {reviewedContactFiniteHazards} from './healthroster-contact-finite-review.mjs';
 import {createHash} from 'node:crypto';
 // F-23 source-only release checks. No database, fixture or runtime execution.
@@ -16,6 +17,17 @@ import { repoRoot, inventory } from './cloudtms-db-release-lib.mjs';
 import { scanManagedSql, readManagedClosure } from './cloudtms-managed-release-sql.mjs';
 import { changedSourcePaths, routineDefinitions, definerInventory, verifyFinalDefiners } from './bpay-next-final-definers.mjs';
 import { assertContactClaimBoundary,isContactClaimNativeAcl,CONTACT_CLAIM_CORE_PATH,CONTACT_CLAIM_BRIDGE_PATH,CONTACT_CLAIM_ROOT,CONTACT_CLAIM_CORE_SIGNATURE,CONTACT_CLAIM_MIGRATION,contactClaimMigrationCompanionFor } from './healthroster-contact-claim-boundary.mjs';
+
+const reviewedKeptEntryHazards=createReviewedKeptEntryClassifier(repoRoot,{
+  tupleProof:provesSingleTableTuple,hazardCensus:specialConstructViolations,
+  classifyPrior:(source,file,initial=new Map())=>{
+    const violations=specialConstructViolations(source,file),parts=executableParts(source,file);
+    let result=new Map(initial);
+    for(const review of [reviewedHealthRowtypeHazards,reviewedHealthUuidHazards,reviewedHealthAggregateHazards,reviewedJoinedNonDynamicHazards,reviewedHealthDynamicHazards])
+      result=review(source,file,result,violations,parts);
+    return result;
+  }
+});
 
 export const FROZEN_BASE='a6f7423eb71e6e7cd173e705c2290e5408a1d077';
 const FOUNDATION_RECONCILED='3c91e5e6ce35b5833a5c218b77b741261eeebafa';
@@ -2519,7 +2531,7 @@ export function verifyBpayNextSourceGates(){
           const isReadyReader=routineDefinitions(text,file).includes(readyReaderSignature);
           assertSpecialConstructs(text,file,baselineHazards,isReadyReader?readyPrefixColumns:new Map());
         }
-      } else assertSpecialConstructs(source,file,reviewedSource13Hazards(source,file,reviewedPrebodyDynamicHazards(source,file,reviewedJoinedNonDynamicHazards(source,file,reviewedHealthDynamicHazards(source,file,file===projectionFile?projectionHazards:file===earlyFenceFile?earlyFenceHazards:file===dr15OldFile?dr15OldHazards:reviewedHealthAggregateHazards(source,file,reviewedHealthUuidHazards(source,file,reviewedHealthRowtypeHazards(source,file,sortedStoredCreditHazards(source,file,firstInstallIncomingHazards(source,file,reviewedContactFiniteHazards(source,file,baselineHazards,specialConstructViolations(source,file),executableParts(source,file)))),specialConstructViolations(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)));assertFrozenAuthority(source,file,authorityPolicy,baseSources.get(file)??'');}
+      } else assertSpecialConstructs(source,file,reviewedKeptEntryHazards(source,file,reviewedSource13Hazards(source,file,reviewedPrebodyDynamicHazards(source,file,reviewedJoinedNonDynamicHazards(source,file,reviewedHealthDynamicHazards(source,file,file===projectionFile?projectionHazards:file===earlyFenceFile?earlyFenceHazards:file===dr15OldFile?dr15OldHazards:reviewedHealthAggregateHazards(source,file,reviewedHealthUuidHazards(source,file,reviewedHealthRowtypeHazards(source,file,sortedStoredCreditHazards(source,file,firstInstallIncomingHazards(source,file,reviewedContactFiniteHazards(source,file,baselineHazards,specialConstructViolations(source,file),executableParts(source,file)))),specialConstructViolations(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)));assertFrozenAuthority(source,file,authorityPolicy,baseSources.get(file)??'');}
       catch(error){sourceFailures.push(error.message);}
     }
   }

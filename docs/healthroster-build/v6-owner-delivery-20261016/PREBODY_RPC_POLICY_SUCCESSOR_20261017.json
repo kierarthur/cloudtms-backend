@@ -1,0 +1,35 @@
+{
+  "version": "PREBODY_REVIEWED_RPC_POLICY_SUCCESSOR_V1",
+  "sourceCheckpoint": "548208ac8d3d8c3f32f56f1c1174242d276467b1",
+  "target": "scripts/healthroster-prebody-dynamic-review.mjs",
+  "inputSha256": "55f3eb1bbb747f5377d7128b8506e6ed10ff8d3c4067943700065e19a33aebdc",
+  "outputSha256": "079ea08052ad96600ee0f9bdfee70dbeccaa8d85acb8eaf51483a1be5e5f99c1",
+  "hunks": [
+    {
+      "before": "function load(root){",
+      "after": "// The separately reviewed 16Oct RPC reload tail changed one unrelated replay\n// pin. Reverse only that exact whole-file successor for the original prebody\n// compiler review; the four immutable migration packets remain checked below.\nexport function prebodyDependencySource(input,value){\n const source=canonical(value);\n const prior='069e6d1d2361c6c8026b193116db565d40503b9a2e338ddb75c4b1dadb15d415';\n if(input.file!=='scripts/cloudtms-managed-execution-policy.mjs'||input.sha256!==prior||digest(source)===prior)return source;\n if(digest(source)!=='ba1ed5d23cdd639e814c7e009bfa07502dd633511e9e0be265d2a8486fa495d1')fail('BOUND_SOURCE_CHANGED');\n const before=\"['repeatable/28092026_1234_stage2_hosted_final_authority_reassert_v1.sql','4b918f87f5c0e5878b1b338b8f0db1e3aa130375439d15734a2f7f41cd277f53','SOURCE_REASSERT']\";\n const after=\"['repeatable/28092026_1234_stage2_hosted_final_authority_reassert_v1.sql','3b276d4fe9cdd614aa10d5779c299f233ffae59e792b47e155a89a831e8d923c','SOURCE_REASSERT']\";\n if(source.split(after).length!==2)fail('BOUND_SOURCE_CHANGED');\n const reversed=source.replace(after,()=>before);\n if(digest(reversed)!==prior)fail('BOUND_SOURCE_CHANGED');return reversed;\n}\nfunction load(root){"
+    },
+    {
+      "before": "digest(canonical(value))!==input.sha256",
+      "after": "digest(prebodyDependencySource(input,value))!==input.sha256"
+    }
+  ],
+  "completeReverseByteEquality": true,
+  "originalReviewUnchanged": true,
+  "originalBoundInputs": 95,
+  "transition": {
+    "file": "scripts/cloudtms-managed-execution-policy.mjs",
+    "priorSha256": "069e6d1d2361c6c8026b193116db565d40503b9a2e338ddb75c4b1dadb15d415",
+    "currentSha256": "ba1ed5d23cdd639e814c7e009bfa07502dd633511e9e0be265d2a8486fa495d1",
+    "scope": "ONE_EXACT_REVIEWED_UNRELATED_REPLAY_PIN_ONLY",
+    "receipt": "docs/healthroster-build/v6-owner-delivery-20261016/RPC_RELOAD_EXECUTION_PIN_SUCCESSOR_20261017.json"
+  },
+  "offlineTests": {
+    "passed": 19,
+    "failed": 0,
+    "allOriginalPacketComparisonsAndNegativeCasesRetained": true,
+    "temporaryFilesPhysicallyD": true
+  },
+  "native": "NOT_RUN",
+  "peer": "REQUIRED_BEFORE_RELEASE"
+}

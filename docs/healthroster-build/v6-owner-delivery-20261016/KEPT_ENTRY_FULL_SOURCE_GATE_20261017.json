@@ -1,0 +1,25 @@
+{
+  "status": "PASS_SOURCE_ONLY",
+  "round": 2,
+  "result": {
+    "frozenFiles": 7,
+    "frozenTriggers": 18,
+    "frozenTables": 45,
+    "protectedSignatures": 24,
+    "sqlSources": 2103,
+    "rpcRoots": 74,
+    "routineWorkSignatures": 183,
+    "typedTransportSignatures": 41
+  },
+  "elapsedMs": 144102,
+  "gateSha256": "4f3f73b57b51ece357091ca612c4ca4abe9c33b6f69cf290f81552238580acb1",
+  "moduleSha256": "e567a11b4399dcec4040d44ee01d6d009dd181121edb01927cd38c97061d1fa7",
+  "prebodyBridgeSha256": "079ea08052ad96600ee0f9bdfee70dbeccaa8d85acb8eaf51483a1be5e5f99c1",
+  "scopedConstructTests": 13,
+  "prebodyAndVerifierTests": 19,
+  "physicalInputs": 19,
+  "constructOccurrences": 94,
+  "sourceWrites": 0,
+  "native": "NOT_RUN",
+  "release": "NOT_RUN"
+}

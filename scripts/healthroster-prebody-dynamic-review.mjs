@@ -11,6 +11,20 @@ export const reviewSha256='69d2b3aee092e78e36386642a8fbf65df406d5fc9f5d8e6a6d42b
 const targets=new Set(['supabase/migrations/13102026_1430_weekly_source_invoice_money_origins.sql','supabase/migrations/14102026_0400_healthroster_protected_source_capability.sql']);
 const fail=code=>{throw Error('HEALTHROSTER_PREBODY_DYNAMIC_'+code);};
 const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
+// The separately reviewed 16Oct RPC reload tail changed one unrelated replay
+// pin. Reverse only that exact whole-file successor for the original prebody
+// compiler review; the four immutable migration packets remain checked below.
+export function prebodyDependencySource(input,value){
+ const source=canonical(value);
+ const prior='069e6d1d2361c6c8026b193116db565d40503b9a2e338ddb75c4b1dadb15d415';
+ if(input.file!=='scripts/cloudtms-managed-execution-policy.mjs'||input.sha256!==prior||digest(source)===prior)return source;
+ if(digest(source)!=='ba1ed5d23cdd639e814c7e009bfa07502dd633511e9e0be265d2a8486fa495d1')fail('BOUND_SOURCE_CHANGED');
+ const before="['repeatable/28092026_1234_stage2_hosted_final_authority_reassert_v1.sql','4b918f87f5c0e5878b1b338b8f0db1e3aa130375439d15734a2f7f41cd277f53','SOURCE_REASSERT']";
+ const after="['repeatable/28092026_1234_stage2_hosted_final_authority_reassert_v1.sql','3b276d4fe9cdd614aa10d5779c299f233ffae59e792b47e155a89a831e8d923c','SOURCE_REASSERT']";
+ if(source.split(after).length!==2)fail('BOUND_SOURCE_CHANGED');
+ const reversed=source.replace(after,()=>before);
+ if(digest(reversed)!==prior)fail('BOUND_SOURCE_CHANGED');return reversed;
+}
 function load(root){
  const read=file=>fs.readFileSync(path.join(root,file)),bytes=read(reviewPath);
  if(digest(bytes)!==reviewSha256)fail('REVIEW_CHANGED');const review=JSON.parse(bytes);
@@ -19,7 +33,7 @@ function load(root){
   ||review.sourceConstructionOnly!==true||review.points!==4||review.files.length!==2
   ||review.files.reduce((n,f)=>n+f.points.length,0)!==4||review.databaseCalls!==0)fail('REVIEW_SCOPE_CHANGED');
  for(const input of review.dependencies){const value=read(input.file);
-  if(digest(canonical(value))!==input.sha256||(input.preservedRawSha256&&digest(value)!==input.preservedRawSha256))fail('BOUND_SOURCE_CHANGED');
+  if(digest(prebodyDependencySource(input,value))!==input.sha256||(input.preservedRawSha256&&digest(value)!==input.preservedRawSha256))fail('BOUND_SOURCE_CHANGED');
  }
  // Detect stale critical exports after an on-disk implementation replacement.
  for(const [file,fn]of[['scripts/cloudtms-managed-release.mjs',compileManagedUnit],['scripts/cloudtms-managed-release.mjs',unitCheckpointSql],['scripts/cloudtms-managed-release.mjs',migrationLedgerSql],['scripts/healthroster-install1-full-rehearsal.mjs',compiledAtomicRehearsalUnit],['scripts/cloudtms-db-release-lib.mjs',mapExecutableSqlSource]])

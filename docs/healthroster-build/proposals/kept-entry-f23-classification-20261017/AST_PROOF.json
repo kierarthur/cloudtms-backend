@@ -1,0 +1,123 @@
+{
+  "parser": "pglast v7.20",
+  "PostgresGrammar": "17.7",
+  "replayExpression": "v_audit.after_json->'result'||jsonb_build_object('idempotent_replay',true)",
+  "replayParse": "JSONB result extraction is the left operand of JSONB concatenation; boolean object is the right operand",
+  "replayAst": {
+    "kind": "AEXPR_OP",
+    "name": [
+      {
+        "String": {
+          "sval": "||"
+        }
+      }
+    ],
+    "lexpr": {
+      "A_Expr": {
+        "kind": "AEXPR_OP",
+        "name": [
+          {
+            "String": {
+              "sval": "->"
+            }
+          }
+        ],
+        "lexpr": {
+          "ColumnRef": {
+            "fields": [
+              {
+                "String": {
+                  "sval": "v_audit"
+                }
+              },
+              {
+                "String": {
+                  "sval": "after_json"
+                }
+              }
+            ],
+            "location": 7
+          }
+        },
+        "rexpr": {
+          "A_Const": {
+            "sval": {
+              "sval": "result"
+            },
+            "location": 27
+          }
+        },
+        "location": 25
+      }
+    },
+    "rexpr": {
+      "FuncCall": {
+        "funcname": [
+          {
+            "String": {
+              "sval": "jsonb_build_object"
+            }
+          }
+        ],
+        "args": [
+          {
+            "A_Const": {
+              "sval": {
+                "sval": "idempotent_replay"
+              },
+              "location": 56
+            }
+          },
+          {
+            "A_Const": {
+              "boolval": {
+                "boolval": true
+              },
+              "location": 76
+            }
+          }
+        ],
+        "funcformat": "COERCE_EXPLICIT_CALL",
+        "location": 37
+      }
+    },
+    "location": 35
+  },
+  "nativeDecisionColumns": [
+    {
+      "name": "id",
+      "type": "uuid"
+    },
+    {
+      "name": "work_event_id",
+      "type": "uuid"
+    },
+    {
+      "name": "decision",
+      "type": "text"
+    },
+    {
+      "name": "reason",
+      "type": "text"
+    },
+    {
+      "name": "credit_invoice_line_id",
+      "type": "uuid"
+    },
+    {
+      "name": "facts_fingerprint",
+      "type": "bytea"
+    },
+    {
+      "name": "actor_user_id",
+      "type": "uuid"
+    },
+    {
+      "name": "created_at_utc",
+      "type": "timestamptz"
+    }
+  ],
+  "native": "NOT_RUN",
+  "catalogue": "NOT_RUN",
+  "databaseCalls": 0
+}

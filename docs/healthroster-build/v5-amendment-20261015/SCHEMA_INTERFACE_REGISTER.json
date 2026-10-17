@@ -7022,5 +7022,22 @@
     "api": "NOT_RUN",
     "browser": "NOT_RUN",
     "original92ObjectsUnchanged": true
+  },
+  "kept_entry_f23_source_continuation_20261017": {
+    "status": "PASS_FULL_SOURCE_GATE_NATIVE_UNSEALED",
+    "classificationSourceCommit": "50181d4a68c8fff234cc882de1e1a09a75186116",
+    "physicalInputs": 19,
+    "constructOccurrences": 94,
+    "scopedConstructTests": 13,
+    "prebodyAndVerifierTests": 19,
+    "fullSourceGateReceipt": "docs/healthroster-build/v6-owner-delivery-20261016/KEPT_ENTRY_FULL_SOURCE_GATE_R2_20261017.json",
+    "preservedPriorHold": "docs/healthroster-build/v6-owner-delivery-20261016/KEPT_ENTRY_FULL_SOURCE_GATE_R1_HOLD_20261017.json",
+    "prebodySuccessorReceipt": "docs/healthroster-build/v6-owner-delivery-20261016/PREBODY_RPC_POLICY_SUCCESSOR_20261017.json",
+    "original95DependencyPinsPreserved": true,
+    "onlyExactReviewedReplayPolicySuccessorReversed": true,
+    "original92ObjectsUnchanged": true,
+    "native": "NOT_RUN",
+    "install2": "NOT_INSTALLED",
+    "finalPartB": "NOT_RUN"
   }
 }

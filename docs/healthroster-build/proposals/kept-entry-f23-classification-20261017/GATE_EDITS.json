@@ -1,0 +1,35 @@
+{
+  "version": "FINITE_KEPT_ENTRY_F23_GATE_RECIPE_V1",
+  "integrationCheckpoint": "24c57e6c7af4a8fb07d5e3126ab9ac76e9448560",
+  "target": "scripts/bpay-next-source-gates.mjs",
+  "inputSha256": "20cd8fbdce5112988c853384bdd374d7660640a752a53d23414237a414b5d578",
+  "outputSha256": "4f3f73b57b51ece357091ca612c4ca4abe9c33b6f69cf290f81552238580acb1",
+  "hunks": [
+    {
+      "before": "import {reviewedSourceClassifierDelegates} from './healthroster-source-classifier-delegation-review.mjs';",
+      "after": "import {createReviewedKeptEntryClassifier} from './healthroster-kept-entry-type-review.mjs';\nimport {reviewedSourceClassifierDelegates} from './healthroster-source-classifier-delegation-review.mjs';",
+      "purpose": "Add one finite source classifier."
+    },
+    {
+      "before": "import {reviewedHealthRowtypeHazards} from './healthroster-rowtype-type-review.mjs';",
+      "after": "import {reviewedHealthRowtypeHazards,provesSingleTableTuple} from './healthroster-rowtype-type-review.mjs';",
+      "purpose": "Reuse the actual original same-table tuple proof."
+    },
+    {
+      "before": "export const FROZEN_BASE=",
+      "after": "const reviewedKeptEntryHazards=createReviewedKeptEntryClassifier(repoRoot,{\n  tupleProof:provesSingleTableTuple,hazardCensus:specialConstructViolations,\n  classifyPrior:(source,file,initial=new Map())=>{\n    const violations=specialConstructViolations(source,file),parts=executableParts(source,file);\n    let result=new Map(initial);\n    for(const review of [reviewedHealthRowtypeHazards,reviewedHealthUuidHazards,reviewedHealthAggregateHazards,reviewedJoinedNonDynamicHazards,reviewedHealthDynamicHazards])\n      result=review(source,file,result,violations,parts);\n    return result;\n  }\n});\n\nexport const FROZEN_BASE=",
+      "purpose": "Retain original exact statement/type evidence through complete owner reverses; no new prior allowance."
+    },
+    {
+      "before": "assertSpecialConstructs(source,file,reviewedSource13Hazards(source,file,reviewedPrebodyDynamicHazards(source,file,reviewedJoinedNonDynamicHazards(source,file,reviewedHealthDynamicHazards(source,file,file===projectionFile?projectionHazards:file===earlyFenceFile?earlyFenceHazards:file===dr15OldFile?dr15OldHazards:reviewedHealthAggregateHazards(source,file,reviewedHealthUuidHazards(source,file,reviewedHealthRowtypeHazards(source,file,sortedStoredCreditHazards(source,file,firstInstallIncomingHazards(source,file,reviewedContactFiniteHazards(source,file,baselineHazards,specialConstructViolations(source,file),executableParts(source,file)))),specialConstructViolations(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)))",
+      "after": "assertSpecialConstructs(source,file,reviewedKeptEntryHazards(source,file,reviewedSource13Hazards(source,file,reviewedPrebodyDynamicHazards(source,file,reviewedJoinedNonDynamicHazards(source,file,reviewedHealthDynamicHazards(source,file,file===projectionFile?projectionHazards:file===earlyFenceFile?earlyFenceHazards:file===dr15OldFile?dr15OldHazards:reviewedHealthAggregateHazards(source,file,reviewedHealthUuidHazards(source,file,reviewedHealthRowtypeHazards(source,file,sortedStoredCreditHazards(source,file,firstInstallIncomingHazards(source,file,reviewedContactFiniteHazards(source,file,baselineHazards,specialConstructViolations(source,file),executableParts(source,file)))),specialConstructViolations(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)),specialConstructViolations(source,file),executableParts(source,file)))",
+      "purpose": "Wrap only the existing type/construction allowance map, leaving all other gates and reviews intact."
+    }
+  ],
+  "fullReverseByteEquality": true,
+  "syntax": "PASS_NODE_CHECK_ONLY",
+  "fullGateRun": false,
+  "native": "NOT_RUN",
+  "newModule": "scripts/healthroster-kept-entry-type-review.mjs",
+  "newReview": "docs/healthroster-build/proposals/kept-entry-f23-classification-20261017/CLASSIFICATION.json"
+}
