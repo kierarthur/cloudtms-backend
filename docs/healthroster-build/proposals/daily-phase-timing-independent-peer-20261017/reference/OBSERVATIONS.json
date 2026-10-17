@@ -1,0 +1,36 @@
+{
+  "version": "DAILY_GENUINE_S0_R4_PUBLIC_PHASE_LATENCY_V1",
+  "reportCommit": "4d5873f820b764681d5fc36ec689cde6e5882ee8",
+  "observedOutcome": "FIXTURE_FRESH_NATIVE_CLOCK_REQUIRED",
+  "originalFreshnessMs": 30000,
+  "timestampsUtc": {
+    "mainObserved": "2026-10-17T11:37:21.989674Z",
+    "freshObserved": "2026-10-17T11:37:25.713402Z",
+    "resultFile": "2026-10-17T11:37:28.292Z",
+    "beforeQualificationCommit": "2026-10-17T11:37:29Z",
+    "entryBindingFile": "2026-10-17T11:37:41.885Z",
+    "closedEntry": "2026-10-17T11:37:43.195Z",
+    "setupCommit": "2026-10-17T11:37:49Z",
+    "closedSubmit": "2026-10-17T11:38:05.879Z"
+  },
+  "timestampQualification": "Root supplied exact native/file/control timestamps; public Git commit timestamps were independently read and have whole-second resolution. Closed files were independently read only by exact safe names. No PRIVATE_BINDING/state content was accessed.",
+  "measuredCurrentPublicSourceMs": {
+    "sourcePreflightMetadataOnly": 1234,
+    "reviewedExecutionSourceIncludingRepeatedPreflight": 1714,
+    "complete133ReviewedImageOnly": 334.65,
+    "fiveCommittedEntryEvidenceFilesTotal": 702.2,
+    "ownedDirectoryAclChild": 317,
+    "approvedAuthDirectoryAclChild": 295
+  },
+  "measurementQualification": "Separate read-only measurements outside A, not a timed reproduction of R4. State presence/type/ignore and protected-directory ACL metadata only were explicitly authorised. No state/binding contents/hash/copy, browser/operator child, IPC or native call. Native A-probe/IPC and root tool/poll/push durations are NOT_MEASURED.",
+  "estimatedEntryLocalChecksMs": 3782.2,
+  "estimateQualification": "Two measured preflights plus two measured directory ACL children plus five committed entry evidence reads; excludes actual A probes, child startup and root orchestration. This sum is not an observed actual phase duration and does not include the multiplied beforePhase source callback below.",
+  "beforePhaseSourceStandaloneMs": [1395,1479],
+  "namedSourceCallbacksThroughEntry": ["s0-stage-root-before_saved","s0-stage-before-entry","before-owned-child","daily-genuine-S0-entry-begin","daily-genuine-S0-entry-end","after-owned-child"],
+  "namedSourceCallbacksBeforeSubmitFirstFreshness": ["s0-stage-root-setup_committed","s0-stage-before-submit","before-owned-child","daily-genuine-S0-submit-begin"],
+  "submitFailureCleanupCallbacks": ["daily-genuine-S0-submit-end","after-owned-child"],
+  "callbackQualification": "Actual original withSharedRehearsalTurn calls beforePhase after EVERY named ownership assertion, including remote control checks. Coordinator beforePhase reruns complete source(sourceCommit), measured twice outside A with no state access. Six such callbacks through entry contribute roughly8.6s standalone source work in addition to local checks; four occur before submit first checks freshness. No ownership/callback execution may be skipped or cached across calls. Initial unmultiplied estimate was incomplete and is corrected here.",
+  "sourceRuntimeChanged": false,
+  "freshnessChanged": false,
+  "attemptOrFixtureClaimed": false
+}

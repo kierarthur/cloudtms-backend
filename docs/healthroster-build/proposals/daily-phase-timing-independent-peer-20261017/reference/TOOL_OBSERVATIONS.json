@@ -1,0 +1,35 @@
+{
+  "version": "DAILY_GENUINE_CONTROLLED_TOOL_STDIO_OBSERVATIONS_V1",
+  "nativeAuthBrowserPrivateData": "NOT_ACCESSED",
+  "emptyZeroYieldProbe": {
+    "execRequestedYieldMs": 1000,
+    "execObservedWaitMs": 10010,
+    "emptyPollRequestedYieldMs": 0,
+    "emptyPollObservedWaitMs": 5010,
+    "newOutput": false,
+    "finalObservedExitCode": 0
+  },
+  "powershellPipelineRedirectionProbe": {
+    "nonemptyControlObservedWaitMs": 253,
+    "publicFilePollTimeoutMs": 5057,
+    "outcome": "HOLD",
+    "readyObservedLater": true,
+    "finalObservedExitCode": 1,
+    "cause": "NOT_ESTABLISHED"
+  },
+  "cmdNativeHandleRedirectionProbe": {
+    "singleContinuousToolScript": true,
+    "startupObservedWaitMs": 10009,
+    "nonemptyControlRequestedYieldMs": 0,
+    "nonemptyControlObservedWaitMs": 252,
+    "nonemptyControlWallMs": 354,
+    "publicFilePollObservedWaitMs": 530,
+    "publicFilePollWallMs": 753,
+    "publicReaderInternalMs": 3,
+    "actualClosedReadyObserved": true,
+    "normalQuitWallMs": 120,
+    "finalObservedExitCode": 0,
+    "qualification": "CONTROLLED_NONDB_STDIO_ONLY_NOT_GENUINE_S0"
+  },
+  "interpretation": "An empty yield0 poll retains a five-second tool wait. A nonempty actual command plus native cmd stdout handle redirection and a bounded short-lived public progress reader avoided that floor in the controlled run. This does not qualify a genuine S0 actor/native/fixture stage. Original coordinator checks and original PTY controls must remain intact. Startup wait occurs before the future native BEFORE clock."
+}
