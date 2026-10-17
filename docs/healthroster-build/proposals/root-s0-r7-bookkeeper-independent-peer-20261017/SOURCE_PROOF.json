@@ -1,0 +1,41 @@
+{
+  "rootHead": "5abe62f50c11970069c99459c222587e499ef0b6",
+  "verdict": "PASS",
+  "wholeRawForwardAndInverse": true,
+  "editOccurrences": 5,
+  "fields": [
+    {
+      "path": "docs/healthroster-build/proposals/daily-genuine-root-s0-r7-bookkeeper-20261017.mjs",
+      "bytes": 6436,
+      "sha256": "3110c1442d58e7d5bd8fedfde9633fba43a70efd96a32dac692599232c0bcc3d",
+      "savedIndexHeadHistoricalEqual": true
+    },
+    {
+      "path": "docs/healthroster-build/proposals/daily-genuine-root-s0-r6-bookkeeper-20261017.mjs",
+      "bytes": 6302,
+      "sha256": "0c277dd04a09bc4eb663cba7fe621185233428cfa63e5ebdc38468b09f4ae7df",
+      "savedIndexHeadHistoricalEqual": true
+    },
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_S0_R7_BOOKKEEPER_FULL_FORWARD_20261017.json",
+      "bytes": 1869,
+      "sha256": "b84bff154fccc9c8e023799b132068e91800ba570a92c231fd42eb8e66dbe77d",
+      "savedIndexHeadHistoricalEqual": true
+    },
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_S0_R7_ROOT_EXECUTION_PLAN_20261017.json",
+      "bytes": 8822,
+      "sha256": "6bd95bcc8de29db662f819a4cc5c3bdc85b3cc94099337a17e070fd874c6ecbe",
+      "savedIndexHeadHistoricalEqual": true
+    },
+    {
+      "path": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_GENUINE_S0_EFFECT_ADMISSION_20261017.json",
+      "bytes": 869,
+      "sha256": "b273951f2a3719e72b193fab4e3e82bd81b1ffbf91bac03aba9322dd272a452e",
+      "savedIndexHeadHistoricalEqual": true,
+      "historicalCommit": "24805aff1cf148b0cb3eefc47cbf04e2b67cac29",
+      "bytesNotCopied": true
+    }
+  ],
+  "execution": "No module import, bookkeeper, native reader, Git mutation, actual outpath or private state access"
+}

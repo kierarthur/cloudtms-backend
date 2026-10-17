@@ -1,0 +1,15 @@
+{
+  "verdict": "ACCEPT_BOUNDED_SOURCE_ONLY",
+  "sourceChecks": {
+    "completeForwardInverse": "PASS",
+    "fiveSavedIndexHeadHistoricalBindings": "PASS",
+    "sourceSyntax": "PASS"
+  },
+  "controlledCases": 12,
+  "controlledCasesPassed": 12,
+  "bookkeeperExecuted": false,
+  "nativeCalls": 0,
+  "privateStateAccess": false,
+  "futureFreshnessOrPerformance": "NOT_PROVED",
+  "model": "Exact captured tail/predicate only; closed synthetic buffers/callbacks, no actual Git execution"
+}

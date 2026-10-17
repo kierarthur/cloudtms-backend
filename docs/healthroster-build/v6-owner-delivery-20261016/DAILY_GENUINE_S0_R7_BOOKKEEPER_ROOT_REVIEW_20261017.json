@@ -1,0 +1,33 @@
+{
+  "version": "DAILY_GENUINE_S0_R7_BOOKKEEPER_ROOT_REVIEW_V1",
+  "rootParent": "5abe62f50c11970069c99459c222587e499ef0b6",
+  "packs": [
+    {
+      "folder": "docs/healthroster-build/proposals/root-s0-r7-bookkeeper-independent-peer-20261017",
+      "commit": "ca105fb8125fe4777eeaaabeba0e967a6b28ee41",
+      "files": 9,
+      "manifestSha256": "579f0a0cdca77a91aee7d098e4e2173eb44a43ba5f78a13a216e2302a51af8f3"
+    },
+    {
+      "folder": "docs/healthroster-build/proposals/s1-normal-producer-effect-review-guidance-20261017",
+      "commit": "881360faa0ec92b866fd3a703a400f14a596c25d",
+      "files": 3,
+      "manifestSha256": "a5bd0a2d153ab704321a9d10a61072ef39c099b1279a4240b5e29ad1c904f986"
+    }
+  ],
+  "verdict": "ACCEPT_EXACT_R7_PUBLICATION_ORDER_FOR_ONE_NEW_S0_TURN",
+  "sourceSha256": "3110c1442d58e7d5bd8fedfde9633fba43a70efd96a32dac692599232c0bcc3d",
+  "wholeR6Inverse": true,
+  "independentTests": 12,
+  "rootReplay": "PASS",
+  "before": "Exact owned local commit; not a remote-publication claim.",
+  "setup": "Push includes prior BEFORE and current manifest commits, fresh exact remote proof before success/control and any submit.",
+  "after": "Normal exact commit/push/remote proof.",
+  "guardChanges": "Only exact R6 effect parent/hash and R7 evidence labels; all original input/actor/identity/11scope/fresh30/older180/control/caps preserved.",
+  "S1Memo": "Reuse existing ordinary D9 callback contracts with actual bindings, preserve named Bank ownership; not a new financial gate or actual effect decision.",
+  "actualR7": "NOT_RUN",
+  "nativeCapsChanged": false,
+  "ReportFixedK4": "8d2ef953c927ad5bc2a5787b8da6a3891565a8e3",
+  "install2": "NOT_INSTALLED",
+  "finalCritics": "NOT_RUN"
+}

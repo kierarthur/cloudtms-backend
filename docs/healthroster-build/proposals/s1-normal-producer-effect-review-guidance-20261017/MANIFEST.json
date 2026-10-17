@@ -1,0 +1,15 @@
+{
+  "version": "S1_EFFECT_GUIDANCE_MEMO_FREEZE_V1",
+  "files": [
+    {
+      "file": "MEMO.md",
+      "bytes": 8270,
+      "sha256": "9259c8f2997ff1194694dd99e318b0554cc3cb4b1a47fa0bd26cb11de9e43c5f"
+    },
+    {
+      "file": "SOURCES.json",
+      "bytes": 1949,
+      "sha256": "eaa0ad00e2f8781c3d76c4f4324a5c84e8ded3a3aba8548c36d5a03c522bf8f7"
+    }
+  ]
+}

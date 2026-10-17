@@ -1,0 +1,37 @@
+{
+  "version": "S1_EXISTING_NORMAL_PRODUCER_EFFECT_GUIDANCE_V1",
+  "sourceOnly": true,
+  "native": "NOT_RUN",
+  "sources": [
+    {
+      "path": "D:/Development/GitHub/cloudtms-backend/codex_outputs/claude-stage2-continuation-20260925/SEND_5_TO_HEALTHROSTER_BUILD_STAGE_NONSTOP.md",
+      "bytes": 7802,
+      "sha256": "62174e646395f01c199558ebc8f5bb1e04839c0127ab182e08fb207edd9bed91"
+    },
+    {
+      "path": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/docs/healthroster-build/proposals/daily-health-s1-scoped-effects-observer-20261017/SOURCE_EFFECT_MAP.md",
+      "bytes": 6152,
+      "sha256": "76a14138d5655e07197669177e33283321d8088bf237ebc331631b8f3f78fb7e"
+    },
+    {
+      "path": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/docs/healthroster-build/proposals/daily-health-s1-scoped-effects-observer-20261017/SOURCE_METADATA.json",
+      "bytes": 111800,
+      "sha256": "8010fd638ed4ce5f003e507e8eb98b085c3b56532e0256d2230c34e2c1b42e3c"
+    },
+    {
+      "path": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/docs/healthroster-build/v6-owner-delivery-20261016/GENUINE_CLIENT_NATIVE_SOURCE_IDENTITY_20261017.json",
+      "bytes": 703,
+      "sha256": "24083c4747f29c1f77d67a5035e5e38f2cedcfa1063d86ce1a0e33ff0e88bd2c"
+    },
+    {
+      "path": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/docs/healthroster-build/proposals/daily-health-genuine-staged-operator-20261017/native-read.mjs",
+      "bytes": 18744,
+      "sha256": "b8449f6bc901f41c2d058c6618b11bab70337579133fd99360c6988eb820cf07"
+    },
+    {
+      "path": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/supabase/repeatable/22092026_1052_weekly_source_operation_local_validation_v1.sql",
+      "bytes": 150995,
+      "sha256": "5044b7649c7cb594f57321a78c2ad535d86688e62ef1eff44ae6701ac0b9d8e7"
+    }
+  ]
+}

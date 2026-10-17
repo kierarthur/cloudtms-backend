@@ -1,0 +1,33 @@
+{
+  "version": "R7_ROOT_BOOKKEEPER_EXACT_PARENT_FORWARD_V1",
+  "parentFile": "docs/healthroster-build/proposals/daily-genuine-root-s0-r6-bookkeeper-20261017.mjs",
+  "parentSha256": "0c277dd04a09bc4eb663cba7fe621185233428cfa63e5ebdc38468b09f4ae7df",
+  "file": "docs/healthroster-build/proposals/daily-genuine-root-s0-r7-bookkeeper-20261017.mjs",
+  "bytes": 6436,
+  "sha256": "3110c1442d58e7d5bd8fedfde9633fba43a70efd96a32dac692599232c0bcc3d",
+  "edits": [
+    {
+      "before": "DAILY_GENUINE_S0_R6_",
+      "after": "DAILY_GENUINE_S0_R7_",
+      "expected": 2
+    },
+    {
+      "before": "4e72e9f72bb8888b15cd51edd947242aa9e25789957e67b4455b0c8d5d4f6bfd",
+      "after": "b273951f2a3719e72b193fab4e3e82bd81b1ffbf91bac03aba9322dd272a452e",
+      "expected": 1
+    },
+    {
+      "before": "ccdf098eb7720f282ee1309ad95dc42a26927652",
+      "after": "24805aff1cf148b0cb3eefc47cbf04e2b67cac29",
+      "expected": 1
+    },
+    {
+      "before": "g(i,'push','origin','HEAD:refs/heads/codex/healthroster-install2-14102026');\nconst commit=g(i,'rev-parse','HEAD').toString().trim();if(g(i,'ls-remote','origin','refs/heads/codex/healthroster-install2-14102026').toString().split(/\\s/)[0]!==commit)throw Error('REMOTE');",
+      "after": "const commit=g(i,'rev-parse','HEAD').toString().trim();\n// BEFORE is committed locally; SETUP pushes both actual commits and proves the exact remote before any submit.\nif(phase!=='BEFORE'){g(i,'push','origin','HEAD:refs/heads/codex/healthroster-install2-14102026');if(g(i,'ls-remote','origin','refs/heads/codex/healthroster-install2-14102026').toString().split(/\\s/)[0]!==commit)throw Error('REMOTE');}",
+      "expected": 1
+    }
+  ],
+  "wholeInverse": true,
+  "sqlOrFreshnessCapsChanged": false,
+  "beforeBusinessPublication": "Actual BEFORE commit plus actual SETUP manifest commit are pushed and remote-equal before any submit."
+}
