@@ -1,0 +1,13 @@
+      // Client Hospitals
+      {
+        const chList = matchPath(p, '/api/clients/:client_id/hospitals');
+        if (chList && req.method === 'GET')    return handleListHospitals(env, req, chList.client_id);
+        if (chList && req.method === 'POST')   return handleCreateHospital(env, req, chList.client_id);
+
+        const chOne = matchPath(p, '/api/clients/:client_id/hospitals/:hospital_id');
+        if (chOne && req.method === 'GET')     return handleGetHospital(env, req, chOne.client_id, chOne.hospital_id);
+        if (chOne && (req.method === 'PATCH' || req.method === 'PUT'))
+                                               return handleUpdateHospital(env, req, chOne.client_id, chOne.hospital_id);
+        if (chOne && req.method === 'DELETE')  return handleDeleteHospital(env, req, chOne.client_id, chOne.hospital_id);
+      }
+

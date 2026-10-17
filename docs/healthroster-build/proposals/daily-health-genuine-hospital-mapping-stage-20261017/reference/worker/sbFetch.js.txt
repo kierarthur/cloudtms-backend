@@ -1,0 +1,70 @@
+async function sbFetch(env, url, third, fourth) {
+  let includeCount = false;
+  let init = {};
+
+  if (typeof third === 'boolean') {
+    includeCount = third;
+  } else if (third && typeof third === 'object') {
+    const { preferExactCount, ...rest } = third;
+    if (typeof preferExactCount === 'boolean') includeCount = preferExactCount;
+    init = { ...rest };
+  }
+
+  if (fourth && typeof fourth === 'object') {
+    init = { ...init, ...fourth };
+  }
+
+  const requestedTimeoutMs = Number.isFinite(Number(init.timeoutMs)) && Number(init.timeoutMs) > 0
+    ? Math.trunc(Number(init.timeoutMs))
+    : null;
+  const callerSignal = init.signal;
+  const controller = requestedTimeoutMs && !callerSignal ? new AbortController() : null;
+  const timeoutHandle = controller
+    ? setTimeout(() => {
+        try { controller.abort(new Error(`Supabase fetch timed out after ${requestedTimeoutMs}ms`)); } catch {}
+      }, requestedTimeoutMs)
+    : null;
+  delete init.timeoutMs;
+  if (controller) init.signal = controller.signal;
+
+  const callerPrefer = init.headers && (init.headers.Prefer || init.headers['Prefer']);
+  const headers = {
+    ...sbHeaders(env),
+    ...(callerPrefer ? {} : (includeCount ? { Prefer: 'count=exact' } : {})),
+    ...(init.headers || {})
+  };
+
+  let res;
+  let text;
+  try {
+    res = await fetch(url, { ...init, headers });
+    text = await res.text();
+  } catch (error) {
+    if (controller?.signal.aborted) {
+      const timeoutError = new Error(`Supabase fetch timed out after ${requestedTimeoutMs}ms`);
+      timeoutError.status = 408;
+      timeoutError.code = 'SUPABASE_FETCH_TIMEOUT';
+      throw timeoutError;
+    }
+    throw error;
+  } finally {
+    if (timeoutHandle) clearTimeout(timeoutHandle);
+  }
+
+  let json;
+  try { json = text ? JSON.parse(text) : null; } catch { json = null; }
+
+  if (!res.ok) throw new Error(`Supabase fetch failed ${res.status}: ${text}`);
+
+  let rows;
+  if (Array.isArray(json)) rows = json;
+  else if (json === null) rows = [];
+  else if (typeof json === 'object' && Array.isArray(json.rows)) rows = json.rows;
+  else rows = [json];
+
+  const cr = res.headers.get('content-range');
+  const m = cr && /\/(\d+)$/.exec(cr);
+  const total = m ? parseInt(m[1], 10) : undefined;
+
+  return { rows, total };
+}

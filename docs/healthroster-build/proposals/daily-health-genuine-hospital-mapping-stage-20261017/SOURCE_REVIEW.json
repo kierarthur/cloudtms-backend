@@ -1,0 +1,29 @@
+{
+  "version": "DAILY_GENUINE_S1A_SOURCE_QUALIFICATION_V1",
+  "sourceParent": "c276aa49eb4db86ff42e184011a09bf2b59f253e",
+  "currentCheckpoint": "c276aa49eb4db86ff42e184011a09bf2b59f253e",
+  "publishedBuildCommit": "f743b81fe537830d81b1de93ec4f9cb0331532a7",
+  "functionsRawPublishedEqual": 8,
+  "routeRawPublishedEqual": true,
+  "originalRecipePreserved": {
+    "commit": "ad02698589fa28b1a73af26390fad7cf4c0466f9",
+    "file": "docs/healthroster-build/proposals/daily-health-genuine-fixture-recipe-20261017/RECIPE.json",
+    "sha256": "f910e657771b8530f10c3a73527fede7c837dfd90f11945ed023e188f27a658c",
+    "preserved": true
+  },
+  "actualOwnerOrder": {
+    "signature": "public.trg_tsfin_client_hospitals_wakeup()",
+    "physical": "supabase/repeatable/05012026_fix_trg_tsfin_client_hospitals_wakeup.sql",
+    "managedStatementSha256": "062b8b3f9a150471b11a7d7f5f1899fc26d608a9cb05ca8d5f0f038544761c0a",
+    "bytes": 1784,
+    "executionRoot": "supabase/repeatable/05012026_fix_trg_tsfin_client_hospitals_wakeup.sql"
+  },
+  "sourceTests": 8,
+  "triggerPredicateVectors": 9,
+  "nativeCatalogue": "NOT_OBSERVED_HERE",
+  "nativeCompilation": "NOT_PROVED",
+  "nativeExecution": "NOT_RUN",
+  "setupRowsCreated": 0,
+  "bankingBodiesSelected": 0,
+  "runtimeTargets": []
+}
