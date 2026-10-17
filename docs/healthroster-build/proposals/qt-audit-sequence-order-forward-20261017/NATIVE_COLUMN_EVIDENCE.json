@@ -1,0 +1,41 @@
+{
+  "source": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/.codex-tmp/s1-fixed-catalogue-20261017-6ca7110c/CATALOGUE.json",
+  "sourceSha256": "2e2d87b82e23e4b729fa64c64f6c15437a832a10cb20c60e82b3b1cb7c106e36",
+  "sourceVersion": "ROOT_S1_FIXED_READ_ONLY_CATALOGUE_CAPTURE_V1",
+  "capturedAt": "2026-10-17 14:19:55 UTC",
+  "columns": [
+    {
+      "column": "event_sequence_is_authoritative",
+      "schema": "public",
+      "ordinal": 15,
+      "identity": null,
+      "not_null": true,
+      "relation": "audit_events",
+      "collation": null,
+      "data_type": "boolean",
+      "generated": null,
+      "compression": null,
+      "has_default": true,
+      "statistics_target": null,
+      "default_expression": "true"
+    },
+    {
+      "column": "event_sequence",
+      "schema": "public",
+      "ordinal": 16,
+      "identity": "a",
+      "not_null": true,
+      "relation": "audit_events",
+      "collation": null,
+      "data_type": "bigint",
+      "generated": null,
+      "compression": null,
+      "has_default": false,
+      "statistics_target": null,
+      "default_expression": null
+    }
+  ],
+  "nativeIndexObservationAvailable": false,
+  "requestedIndexCount": 0,
+  "sourceNotInvocation": true
+}

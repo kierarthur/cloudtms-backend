@@ -1,0 +1,51 @@
+{
+  "version": "QT_SEQUENCE_ORDER_PG17_SOURCE_PROOF_V1",
+  "postgresql": [
+    17,
+    7
+  ],
+  "pglast": "v7.20",
+  "completePlAstInverseExcludingSourcePositions": true,
+  "wholeRawInverse": true,
+  "onlyDigestAstDelta": "string_agg aggregate ordering: whole-row MD5 -> actual a.event_sequence",
+  "completeRowHashArgumentUnchanged": true,
+  "delimiterOuterMd5CoalesceAndNoFilterUnchanged": true,
+  "twoFreshLocalDigestQueries": 2,
+  "metadataGuardBeforeFixtures": true,
+  "metadataRelations": [
+    "pg_catalog.pg_am",
+    "pg_catalog.pg_attribute",
+    "pg_catalog.pg_class",
+    "pg_catalog.pg_index",
+    "pg_catalog.pg_namespace"
+  ],
+  "metadataAliasVariableConflicts": 0,
+  "counterexamples": [
+    "filter",
+    "partial row",
+    "distinct",
+    "delimiter",
+    "order UUID",
+    "limit",
+    "float order",
+    "outer hash"
+  ],
+  "programmes": {
+    "CONTACT_CONSTRUCTORS_V1": 21,
+    "QT_ADMIN_CONTROLS_V1": 51
+  },
+  "inputs": {
+    "CONTACT_CONSTRUCTORS_V1": {
+      "sql": 34,
+      "verification_sql": 4
+    },
+    "QT_ADMIN_CONTROLS_V1": {
+      "sql": 64,
+      "verification_sql": 4
+    }
+  },
+  "digestEncodingChanged": true,
+  "nativePerformance": "NOT_PROVED",
+  "SQLExecuted": false,
+  "native": "NOT_RUN"
+}

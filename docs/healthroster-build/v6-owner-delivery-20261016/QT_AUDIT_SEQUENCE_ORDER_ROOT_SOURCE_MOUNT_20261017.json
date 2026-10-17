@@ -1,0 +1,54 @@
+{
+  "version": "QT_AUDIT_SEQUENCE_ORDER_ROOT_SOURCE_MOUNT_V1",
+  "parent": "37c1455d8e48764c89b79d4f3346f66a174d58b0",
+  "sourceManifestSha256": "1d38f602cfbf82f30141b809d12c5d3e94e94cf637fe881e27deff3e61b38f27",
+  "review": "Root read complete QT assertions and forward; independent Report ACCEPT_BOUNDED_SOURCE_ONLY with same15tests/fullPG17 proof.",
+  "rootTests": 15,
+  "rootPg17AstProof": "PASS whole raw/PL/SQL inverse, complete row/delimiter/outer MD5/coalesce/no filter, metadata guard before fixtures, eight valid SQL counterexamples.",
+  "sourceIntegrityBeforeEdit": "PASS427migrations1098repeatables",
+  "targets": [
+    {
+      "target": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/qt-assertions.sql",
+      "parent": "parent/qt-assertions.sql",
+      "payload": "payload/qt-assertions.sql",
+      "beforeBytes": 12100,
+      "beforeSha256": "11f720baf63f49a6f6e309d5ad4c42c67c63ebed691a216171ef12364c4adfe3",
+      "bytes": 13942,
+      "sha256": "b1b03dac5ae2b066a5de499f9c493efbc3827302b2bb81707c83e088f1505d48"
+    },
+    {
+      "target": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/PROGRAMMES.json",
+      "parent": "parent/PROGRAMMES.json",
+      "payload": "payload/PROGRAMMES.json",
+      "beforeBytes": 59010,
+      "beforeSha256": "c404d285214cc634f1e2c6441442faf992a2e709b229a72225ccc62b69ea9c23",
+      "bytes": 60871,
+      "sha256": "c98db008ec087f94fd2aa7d07e7192020fec4b9f563d39e94ffeda1e27f43be7"
+    },
+    {
+      "target": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/OFFLINE_INPUTS.json",
+      "parent": "parent/OFFLINE_INPUTS.json",
+      "payload": "payload/OFFLINE_INPUTS.json",
+      "beforeBytes": 113753,
+      "beforeSha256": "b9329b866e3c1af1d1fffd54602b6978ab6ef9993dfa942fbecf3446096387aa",
+      "bytes": 115614,
+      "sha256": "51915dabd2235f9babde18175f02841baa79e564a39ae65c9fdd322dc547b484"
+    },
+    {
+      "target": "docs/healthroster-build/proposals/contact-qt-positive-native-proposal-20261017/MANIFEST.json",
+      "parent": "parent/MANIFEST.json",
+      "payload": "payload/MANIFEST.json",
+      "beforeBytes": 8530,
+      "beforeSha256": "67b15a656f213dc13c7e4e21456bb3665c17829e6243f0fe1ca6274ba871d8f4",
+      "bytes": 8530,
+      "sha256": "5b037c48b246e25e6efe2fd4841c54f2cb198d0a3d0093b63edbde6ac5a55577"
+    }
+  ],
+  "unchangedAdapterRows": 48,
+  "digestEncoding": "Both freshly computed local fingerprints now use actual unique nonnull bigint sequence order; no stored old fingerprint compatibility asserted.",
+  "nativeIndexBinding": "QT_AUDIT_EVENT_SEQUENCE_NATIVE_INDEX_BINDING_20261017.json",
+  "capsAndRestorationChecks": "UNCHANGED",
+  "actualNativeCandidate": "NOT_RUN",
+  "performance": "NOT_PROVED",
+  "install2": "NOT_INSTALLED"
+}

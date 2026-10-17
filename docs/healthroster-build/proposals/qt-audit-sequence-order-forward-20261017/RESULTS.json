@@ -1,0 +1,19 @@
+{
+  "version": "QT_SEQUENCE_ORDER_SOURCE_RESULTS_V1",
+  "tests": 15,
+  "pass": 15,
+  "fail": 0,
+  "wholeRuntimeInverses": 4,
+  "unchangedAdapterRows": 48,
+  "postgresqlParser": [
+    17,
+    7
+  ],
+  "validSqlCounterexamples": 8,
+  "digestEncodingChanged": true,
+  "nativeIndexMetadataSuppliedByRoot": true,
+  "authorNativeRun": false,
+  "SQLExecuted": false,
+  "performance": "NOT_PROVED",
+  "rootEdits": false
+}
