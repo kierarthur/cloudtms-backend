@@ -1,0 +1,17 @@
+{
+  "version": "SOURCE_PURE_NATIVE_DEPENDENCY_READONLY_V1",
+  "databaseTarget": "agency_test",
+  "authenticated": true,
+  "readOnly": true,
+  "matched": 1,
+  "identityArguments": "p_value jsonb, p_allowed_keys text[]",
+  "name": "private.weekly_exceptional_json_keys_exact_v1",
+  "rawNativeDefinitionSha256": "bb36d7e2d71abd7b9c0dfba29936d85edca54c8101591fd113e11d3ab7cf9189",
+  "rawNativeDefinitionBytes": 429,
+  "completeNativeBodyEqualsSealedSource": true,
+  "nativeBodySha256": "c1e23ad8f8102e5b7b996bb448838441cb8920e23b64c69d46007d515b618063",
+  "lineEndings": "LF_ONLY",
+  "nativeExecution": "NOT_RUN",
+  "sourceAssessmentCommit": "906702364cb51429a31afa083d1297c422a5c735",
+  "sharedLockTaken": false
+}

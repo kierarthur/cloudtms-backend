@@ -1,0 +1,47 @@
+{
+  "actualNativeOwner": "private.timesheet_contract_move_scope_v1(uuid,boolean)",
+  "parentPath": "docs/healthroster-build/proposals/contract-preview-current-health-20261017/inputs/private__timesheet_contract_move_scope_v1.sqlinc",
+  "parentSha256": "2d3eb8da4dcdf329225bb0f8eaa96dd4df8a9466304d0d52fc48ab88960c0cad",
+  "outputSha256": "c1eb191fba3e1f7357c2d90a7681ba40fc0df1af7e3132398c57d0010fe89f8c",
+  "finiteReplacements": [
+    {
+      "before": "create or replace function private.timesheet_contract_move_scope_v1(p_operation_id uuid,p_lock boolean)\nreturns jsonb language plpgsql volatile security definer set search_path='pg_catalog','public','private','pg_temp'\nas $function$\n",
+      "after": "",
+      "beforeOffset": 0,
+      "afterOffset": 0,
+      "occurrences": 1
+    },
+    {
+      "before": "declare o private.timesheet_contract_move_operations%rowtype; c public.contracts%rowtype;",
+      "after": "declare p_lock constant boolean:=true; c public.contracts%rowtype;",
+      "beforeOffset": 0,
+      "afterOffset": 0,
+      "occurrences": 1
+    },
+    {
+      "before": " select v.* into o from private.timesheet_contract_move_operations v where v.id=p_operation_id;\n",
+      "after": "",
+      "beforeOffset": 379,
+      "afterOffset": 379,
+      "occurrences": 1
+    },
+    {
+      "before": " return result||jsonb_build_object('scope_sha256',encode(private.timesheet_contract_move_row_hash_v1(result),'hex'));",
+      "after": " before_scope:=result||jsonb_build_object('scope_sha256',encode(private.timesheet_contract_move_row_hash_v1(result),'hex'));",
+      "beforeOffset": 9370,
+      "afterOffset": 9370,
+      "occurrences": 1
+    },
+    {
+      "before": "$function$;\n",
+      "after": "",
+      "beforeOffset": 9500,
+      "afterOffset": 9500,
+      "occurrences": 1
+    }
+  ],
+  "fullCurrentOwnerReverse": true,
+  "p_lock": "CONSTANT_TRUE",
+  "transientOperationRecord": "EXISTING_NATIVE_ROWTYPE_NO_INSERT",
+  "native": "NOT_RUN"
+}

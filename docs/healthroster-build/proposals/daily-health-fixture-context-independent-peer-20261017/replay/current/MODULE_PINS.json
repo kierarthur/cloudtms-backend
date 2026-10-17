@@ -1,0 +1,234 @@
+{
+  "mode": "current",
+  "commit": "3cbc4585be761479de4854ae1caa621a0186ad8e",
+  "modules": [
+    {
+      "path": "scripts/bpay-next-source-gates.mjs",
+      "sha256": "0ea663b95c457f4f06b403aa4928f42a0993dfecafdc495a6fa1915713d931f8",
+      "commit": "3cbc4585be761479de4854ae1caa621a0186ad8e"
+    },
+    {
+      "path": "scripts/healthroster-same-separate-type-review.mjs",
+      "sha256": "897df1661b265921f960c107f5189470475866ad8311aec358b15f8841391259",
+      "commit": "3cbc4585be761479de4854ae1caa621a0186ad8e"
+    },
+    {
+      "path": "scripts/healthroster-source-read-type-review.mjs",
+      "sha256": "03504c269e29432de19dc82a93c62b221489b42ac6e62c2c95f6e6bedd149d2f",
+      "commit": "3cbc4585be761479de4854ae1caa621a0186ad8e"
+    },
+    {
+      "path": "scripts/healthroster-later-keep-type-review.mjs",
+      "sha256": "27f947a0810d730142d2157d9da7910f1f256957e283a7320a9326bffa830f4e",
+      "commit": "3cbc4585be761479de4854ae1caa621a0186ad8e"
+    },
+    {
+      "path": "scripts/cloudtms-managed-release-sql.mjs",
+      "sha256": "ff391fccf7f690d4d476e935870d740667e4dfd92b972bfd5d7d80b1b3bb912b",
+      "commit": "3cbc4585be761479de4854ae1caa621a0186ad8e"
+    },
+    {
+      "path": "scripts/healthroster-kept-entry-type-review.mjs",
+      "sha256": "e567a11b4399dcec4040d44ee01d6d009dd181121edb01927cd38c97061d1fa7",
+      "commit": "3cbc4585be761479de4854ae1caa621a0186ad8e"
+    },
+    {
+      "path": "scripts/healthroster-source-classifier-delegation-review.mjs",
+      "sha256": "df301590ae3f8e44b782e8e667c70ce6688d2717768ee59598e117493a0f4555",
+      "commit": "3cbc4585be761479de4854ae1caa621a0186ad8e"
+    },
+    {
+      "path": "scripts/cloudtms-db-release-lib.mjs",
+      "sha256": "22b3a5cd4ab5ca93f59f891c03187a6f5214e6f4bb99381e203700c52b413bbf",
+      "commit": "3cbc4585be761479de4854ae1caa621a0186ad8e"
+    },
+    {
+      "path": "scripts/cloudtms-managed-psql.mjs",
+      "sha256": "70e7f4e28c2a4208dd665af2e67e0a429228e66c52017e82d49b758aa3836e4d",
+      "commit": "3cbc4585be761479de4854ae1caa621a0186ad8e"
+    },
+    {
+      "path": "scripts/bpay-next-final-definers.mjs",
+      "sha256": "51ab7fd6d5c582ee7f4cab612502c4fc7ac11088cb1a996dd2cf1e6561468d09",
+      "commit": "3cbc4585be761479de4854ae1caa621a0186ad8e"
+    },
+    {
+      "path": "scripts/healthroster-source13-finite-review.mjs",
+      "sha256": "bd4facfcb6ec12458861e77a0ad861eae63bfead3a536c24be990f63d105d0ed",
+      "commit": "3cbc4585be761479de4854ae1caa621a0186ad8e"
+    },
+    {
+      "path": "scripts/healthroster-prebody-dynamic-review.mjs",
+      "sha256": "3504d0e858e1fdefe95edae2c86f14324944a96e1f27dc1a5caf097266898eef",
+      "commit": "3cbc4585be761479de4854ae1caa621a0186ad8e"
+    },
+    {
+      "path": "scripts/cloudtms-managed-release.mjs",
+      "sha256": "f56267cb889d24da4a605cc7795dba45b65ba1c7a208e885dd1c2b9fe2d2a7a8",
+      "commit": "3cbc4585be761479de4854ae1caa621a0186ad8e"
+    },
+    {
+      "path": "scripts/weekly-source-protected-release-qualification.mjs",
+      "sha256": "0e658eae30dd94363d160dc1193d71b0845ee86a812c2e53503336f743dc52c2",
+      "commit": "3cbc4585be761479de4854ae1caa621a0186ad8e"
+    },
+    {
+      "path": "scripts/weekly-source-protected-prerequisite-evidence.mjs",
+      "sha256": "42717a80f6d60598b99790106e1d9c4e182c1137f7039b97782017da189865cc",
+      "commit": "3cbc4585be761479de4854ae1caa621a0186ad8e"
+    },
+    {
+      "path": "scripts/weekly-source-protected-execution-tree.mjs",
+      "sha256": "ceffa9ec116e724e6bf854e069080b5f220425702d5b251ecd851c679d1adcf2",
+      "commit": "3cbc4585be761479de4854ae1caa621a0186ad8e"
+    },
+    {
+      "path": "scripts/weekly-source-protected-operational-evidence.mjs",
+      "sha256": "27ca60595eb85faed5b88035d854abaa309d24a8a4fec00b3f5c83da26a715d5",
+      "commit": "3cbc4585be761479de4854ae1caa621a0186ad8e"
+    },
+    {
+      "path": "scripts/weekly-source-activation-window-binding.mjs",
+      "sha256": "5e91b4df3bc5f963e5d4d870d71933daa3501468c18f651a7a3e1376d465acb2",
+      "commit": "3cbc4585be761479de4854ae1caa621a0186ad8e"
+    },
+    {
+      "path": "scripts/weekly-source-protected-test-setup-evidence.mjs",
+      "sha256": "12a4988d8d7626edc8748092b4780cdc881482be288e496f3f464533e959e610",
+      "commit": "3cbc4585be761479de4854ae1caa621a0186ad8e"
+    },
+    {
+      "path": "scripts/cloudtms-managed-execution-policy.mjs",
+      "sha256": "ba1ed5d23cdd639e814c7e009bfa07502dd633511e9e0be265d2a8486fa495d1",
+      "commit": "3cbc4585be761479de4854ae1caa621a0186ad8e"
+    },
+    {
+      "path": "scripts/weekly-source-reader-release.mjs",
+      "sha256": "b35b0d8698fbddecfc2b98f9226d5ecc88a076643366533822c3e3178b72e313",
+      "commit": "3cbc4585be761479de4854ae1caa621a0186ad8e"
+    },
+    {
+      "path": "scripts/healthroster-contact-claim-boundary.mjs",
+      "sha256": "505abc1c41cf7adc21aa16c4c7f5f42d6678a58818cd694d992d3d0271fbff0d",
+      "commit": "3cbc4585be761479de4854ae1caa621a0186ad8e"
+    },
+    {
+      "path": "scripts/healthroster-money-predecessor-boundary.mjs",
+      "sha256": "3c49e8aa9e128dfb331d282551c17cc2e12528075ff33866347e51eb2328dbc6",
+      "commit": "3cbc4585be761479de4854ae1caa621a0186ad8e"
+    },
+    {
+      "path": "scripts/healthroster-capability-predecessor-boundary.mjs",
+      "sha256": "e24e16cd1bd0cd8afe28b7e697a5fd7ec0c03a4edeb0e458ca81e1eecd47bbc3",
+      "commit": "3cbc4585be761479de4854ae1caa621a0186ad8e"
+    },
+    {
+      "path": "scripts/healthroster-install1-full-rehearsal.mjs",
+      "sha256": "af2b6b591a8d6c251ad08507130bd2cf0cc9861d966055174e511de9c4102754",
+      "commit": "3cbc4585be761479de4854ae1caa621a0186ad8e"
+    },
+    {
+      "path": "scripts/healthroster-full-rehearsal-protocol.mjs",
+      "sha256": "53c301664b449168b34803ca995eedcfd4cf90df1533c6d78086637df6488550",
+      "commit": "3cbc4585be761479de4854ae1caa621a0186ad8e"
+    },
+    {
+      "path": "scripts/healthroster-live-test-restoration.mjs",
+      "sha256": "fb4ffa42acf7cf319cdcb45a233babdb9720bb1bc73e4cb1f6ddcd3be696a4a6",
+      "commit": "3cbc4585be761479de4854ae1caa621a0186ad8e"
+    },
+    {
+      "path": "scripts/healthroster-turn-control.mjs",
+      "sha256": "ae6aa38307faf3fdc7a1c1a0fe20ff6aab3589c420c5bfd5642566e3a0c23ad8",
+      "commit": "3cbc4585be761479de4854ae1caa621a0186ad8e"
+    },
+    {
+      "path": "scripts/healthroster-install1-verifier-census.mjs",
+      "sha256": "742635a7ed15dfb190d77dda9063fd49315ec3390f573982bc461bfd8f1e862c",
+      "commit": "3cbc4585be761479de4854ae1caa621a0186ad8e"
+    },
+    {
+      "path": "scripts/healthroster-install2-native-gate.mjs",
+      "sha256": "ec3c2eca5b648fdf2996dbeb3c116e39ef37fdc54d1e896cfb4489682cbad9be",
+      "commit": "3cbc4585be761479de4854ae1caa621a0186ad8e"
+    },
+    {
+      "path": "scripts/healthroster-reviewed-managed-envelope.mjs",
+      "sha256": "53b92b41b522851a68126447f88d11862974e70895c829e9e79b1877ea86c19b",
+      "commit": "3cbc4585be761479de4854ae1caa621a0186ad8e"
+    },
+    {
+      "path": "scripts/healthroster-f5-post-verified-gate.mjs",
+      "sha256": "dfd1454e057c27e6693a012aef107382f9bc0479322fd0e3ae09b35bb19e99a3",
+      "commit": "3cbc4585be761479de4854ae1caa621a0186ad8e"
+    },
+    {
+      "path": "scripts/weekly-source-post-verified-evidence-controller.mjs",
+      "sha256": "7c0342fe85df257a28b19f19158f98123bb03d4bb574f913d341fdaac80fd853",
+      "commit": "3cbc4585be761479de4854ae1caa621a0186ad8e"
+    },
+    {
+      "path": "scripts/weekly-source-native-fixture-participants.mjs",
+      "sha256": "8a9dec4e027a1967ca07b6aa69ded0156f25a9aca126bff3c7f4bac8ee94d696",
+      "commit": "3cbc4585be761479de4854ae1caa621a0186ad8e"
+    },
+    {
+      "path": "scripts/weekly-source-off-rule-setup-evidence.mjs",
+      "sha256": "5b0392bcd30c0b9b55692c3793a444bb7591aa89a77d22cea3fbb5c0128eb5e8",
+      "commit": "3cbc4585be761479de4854ae1caa621a0186ad8e"
+    },
+    {
+      "path": "scripts/weekly-source-protected-partial-native-evidence.mjs",
+      "sha256": "1f9fb134a93453a5d9bbe569730573c9fc3d68b0232a7f4bf92218a3624d2e42",
+      "commit": "3cbc4585be761479de4854ae1caa621a0186ad8e"
+    },
+    {
+      "path": "scripts/weekly-source-protected-probe-native-evidence.mjs",
+      "sha256": "5f02d8129c762b8b29f52c2b97cd7f9f2c5b58dded38bf8b3a0c9c73e0e2a0a2",
+      "commit": "3cbc4585be761479de4854ae1caa621a0186ad8e"
+    },
+    {
+      "path": "scripts/weekly-source-protected-activation-probe-evidence.mjs",
+      "sha256": "8e224faba6dcf6991a50953983165a7176a0d16e741753cec87c90cc08ef335c",
+      "commit": "3cbc4585be761479de4854ae1caa621a0186ad8e"
+    },
+    {
+      "path": "scripts/healthroster-f5-synthetic-fixture.mjs",
+      "sha256": "d9223bcfc5448b9d01636463d60c42312bdd2107ade9881f08d70cfcc9380a66",
+      "commit": "3cbc4585be761479de4854ae1caa621a0186ad8e"
+    },
+    {
+      "path": "scripts/healthroster-joined-nondynamic-review.mjs",
+      "sha256": "24bfb353bef9b1ea7808df8f75ff9d633a43fb2f5f5c4d29425abdf9ba6d9b28",
+      "commit": "3cbc4585be761479de4854ae1caa621a0186ad8e"
+    },
+    {
+      "path": "scripts/healthroster-dynamic-source-review.mjs",
+      "sha256": "18937e1bad9001d36a7f81ae6e102cb1664e33c1ef6b8dce9ea5c810df047ec5",
+      "commit": "3cbc4585be761479de4854ae1caa621a0186ad8e"
+    },
+    {
+      "path": "scripts/healthroster-aggregate-type-review.mjs",
+      "sha256": "af2a6248ea188b3ed1d4ce5b8dd418e9cf8898b10f3117ee91fb6e726c4dc7e8",
+      "commit": "3cbc4585be761479de4854ae1caa621a0186ad8e"
+    },
+    {
+      "path": "scripts/healthroster-uuid-cardinality-review.mjs",
+      "sha256": "8630b73db11b949906bc261175a4d0efda19de838d8a3f65d62296968fd4c6aa",
+      "commit": "3cbc4585be761479de4854ae1caa621a0186ad8e"
+    },
+    {
+      "path": "scripts/healthroster-rowtype-type-review.mjs",
+      "sha256": "fe380ca1c44803f8dad5b04aa0779e025cbdd8ff4c7104356835e5be739496e3",
+      "commit": "3cbc4585be761479de4854ae1caa621a0186ad8e"
+    },
+    {
+      "path": "scripts/healthroster-contact-finite-review.mjs",
+      "sha256": "bd40ff7fc3b22851b0525ea245bb67231b74e42cb52f6fd797018acc3437695b",
+      "commit": "3cbc4585be761479de4854ae1caa621a0186ad8e"
+    }
+  ],
+  "native": "NOT_RUN",
+  "rootWrites": 0,
+  "referenceWrites": 0
+}

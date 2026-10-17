@@ -1,0 +1,72 @@
+{
+  "checkpoint": "3cbc4585be761479de4854ae1caa621a0186ad8e",
+  "actualScriptPins": [
+    {
+      "path": "scripts/cloudtms-managed-release-sql.mjs",
+      "sha256": "ff391fccf7f690d4d476e935870d740667e4dfd92b972bfd5d7d80b1b3bb912b",
+      "commit": "3cbc4585be761479de4854ae1caa621a0186ad8e"
+    },
+    {
+      "path": "scripts/bpay-next-final-definers.mjs",
+      "sha256": "51ab7fd6d5c582ee7f4cab612502c4fc7ac11088cb1a996dd2cf1e6561468d09",
+      "commit": "3cbc4585be761479de4854ae1caa621a0186ad8e"
+    },
+    {
+      "path": "scripts/cloudtms-db-release-lib.mjs",
+      "sha256": "22b3a5cd4ab5ca93f59f891c03187a6f5214e6f4bb99381e203700c52b413bbf",
+      "commit": "3cbc4585be761479de4854ae1caa621a0186ad8e"
+    }
+  ],
+  "beforeInventory": {
+    "migrations": 426,
+    "repeatables": 1095
+  },
+  "candidateInventory": {
+    "migrations": 426,
+    "repeatables": 1096
+  },
+  "positive": {
+    "selectedRoots": [
+      "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority_v1.sql",
+      "supabase/repeatable/17102026_0910_nhsp_v6_daily_role_identity_v1.sql"
+    ],
+    "verification": {
+      "signatures": 3037,
+      "registered": 1650,
+      "roots": 1096,
+      "pendingRoots": [
+        "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority_v1.sql",
+        "supabase/repeatable/17102026_0910_nhsp_v6_daily_role_identity_v1.sql"
+      ]
+    },
+    "candidateInventory": {
+      "migrations": 426,
+      "repeatables": 1096
+    },
+    "candidateClosure": [
+      "supabase/repeatable/17102026_0910_nhsp_v6_daily_role_identity_v1.sql",
+      "supabase/repeatable/17102026_0910_nhsp_v6_daily_role_identity/01_complete_context.sqlinc",
+      "supabase/repeatable/17102026_0910_nhsp_v6_daily_role_identity/99_acl.sqlinc"
+    ]
+  },
+  "negativeCases": [
+    {
+      "name": "STALE_REGISTRY",
+      "refusal": "BPAY_NEXT_FINAL_DEFINER_ORDER: private.daily_rate_correction_context_v1(uuid,uuid,boolean)"
+    },
+    {
+      "name": "MISSING_COMPLETE_NATIVE_OWNER",
+      "refusal": "NO_UNPINNED_OR_EXCLUDED_SOURCE supabase/repeatable/17102026_0910_nhsp_v6_daily_role_identity/01_complete_context.sqlinc"
+    }
+  ],
+  "preservedDailyChains": 6,
+  "allOtherManagedChainsPreserved": true,
+  "payloadCount": 6,
+  "caseInsensitiveSqlSuffixes": true,
+  "actualCloseAndVerify": "PASS",
+  "opaqueWholeInventoryOnly": true,
+  "noUnpinnedSnapshotFallback": true,
+  "rootWrites": 0,
+  "dbConnections": 0,
+  "native": "NOT_RUN"
+}

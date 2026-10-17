@@ -1,0 +1,21 @@
+{
+  "version": "DAILY_ROLE_ROOT_TESTS_V1",
+  "status": "PASS",
+  "roleCommit": "1d00a57a1cf292f2a0c6cf8c17898d1e13204d31",
+  "peerCommit": "2b86412de4cc74a9bd6b31aa9c7dc336c067e6d5",
+  "results": [
+    {
+      "entry": "test.mjs",
+      "exit": 0,
+      "stdout": "{\"frozenEqualWritesSuppressed\":0}\n✔ complete native0858 body and whole original source parent reverse exactly (56.5606ms)\n✔ only case representation changes; every other complete native guard remains literal (0.561ms)\n✔ actual canonical Worker accepts native lowercase/mixed-case physical role and preserves uppercase financial vocabulary (0.4786ms)\n✔ different roles, nulls and adversarial strings retain fail-closed DISTINCT semantics (0.3678ms)\n✔ JSON edits restore both whole parents; all unrelated chains including six0248 stay identical (147.4492ms)\n✔ both arrays append one verifier; protected genuine parent files are excluded from proposal edits (328.9072ms)\n✔ fresh owner keeps exact seven-row independent owner/ACL/role inventory and adds no service capability (4.2022ms)\n✔ all6 payload hashes exact; literal reverse rejects altered fragment and preserves replacement tokens (6.5648ms)\n✔ actual current F23 census remains zero without classifier or baseline changes (81.1605ms)\nℹ tests 9\nℹ suites 0\nℹ pass 9\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 631.1593",
+      "stderr": ""
+    },
+    {
+      "entry": "verify.mjs",
+      "exit": 0,
+      "stdout": "{\"checks\":88,\"findings\":0,\"actualRoleVectors\":14,\"native\":\"NOT_RUN\"}\n{\"frozenEqualWritesSuppressed\":4}",
+      "stderr": ""
+    }
+  ],
+  "native": "NOT_RUN"
+}

@@ -7304,5 +7304,28 @@
     "native": "NOT_RUN",
     "publicB051Success": "NOT_PROVIDED",
     "install2": "NOT_INSTALLED"
+  },
+  "daily_role_identity_source_continuation_20261017": {
+    "rootReceipt": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_ROLE_ROOT_MOUNT_20261017.json",
+    "authorCommit": "1d00a57a1cf292f2a0c6cf8c17898d1e13204d31",
+    "independentPeerCommit": "2b86412de4cc74a9bd6b31aa9c7dc336c067e6d5",
+    "sourceGate": "PASS_SOURCE_ONLY",
+    "sourceInventory": {
+      "migrations": 426,
+      "repeatables": 1096
+    },
+    "sqlSources": 2250,
+    "rpcRoots": 79,
+    "contextBodyHunks": 1,
+    "unchangedOriginal0858BodyPreserved": true,
+    "retainedSixDailyChains": 6,
+    "mandatoryCounts": [
+      182,
+      183
+    ],
+    "native": "NOT_RUN",
+    "fixture": "MANIFEST_ONLY_NOT_CREATED",
+    "SQLCollation": "NOT_PROVED",
+    "install2": "NOT_INSTALLED"
   }
 }

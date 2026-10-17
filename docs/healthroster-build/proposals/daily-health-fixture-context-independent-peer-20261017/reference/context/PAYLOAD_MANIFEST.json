@@ -1,0 +1,46 @@
+{
+  "sourceCommit": "dd338cecd355a077192a236770db26e15559180a",
+  "files": [
+    {
+      "target": "supabase/repeatable/17102026_0910_nhsp_v6_daily_role_identity_v1.sql",
+      "sourcePath": "payload/supabase/repeatable/17102026_0910_nhsp_v6_daily_role_identity_v1.sql",
+      "sha256": "869be3d8ff7f6635c9ca81c6805558e1de8d1f1de60c0d21342b0dfbfac39ea0",
+      "bytes": 244
+    },
+    {
+      "target": "supabase/repeatable/17102026_0910_nhsp_v6_daily_role_identity/01_complete_context.sqlinc",
+      "sourcePath": "payload/supabase/repeatable/17102026_0910_nhsp_v6_daily_role_identity/01_complete_context.sqlinc",
+      "sha256": "032153eb7425c21c1f7bbe0fe6abd29689fe6ba8fb0d154e8e6476a11d26c7d6",
+      "bytes": 8650
+    },
+    {
+      "target": "supabase/repeatable/17102026_0910_nhsp_v6_daily_role_identity/99_acl.sqlinc",
+      "sourcePath": "payload/supabase/repeatable/17102026_0910_nhsp_v6_daily_role_identity/99_acl.sqlinc",
+      "sha256": "f0477a93e05e9fa6960d64df4628c17421ce1e80d661067febec3c5fa0e6f3c4",
+      "bytes": 288
+    },
+    {
+      "target": "supabase/verification/17102026_0910_daily_role_identity_security.sql",
+      "sourcePath": "payload/supabase/verification/17102026_0910_daily_role_identity_security.sql",
+      "sha256": "888fcbcb73c5222f3756e1428130a67fe7a06f56b544d3a17c92cc46795b9852",
+      "bytes": 2886
+    },
+    {
+      "target": "docs/bpay-next/final-definer-closures.json",
+      "sourcePath": "payload/docs/bpay-next/final-definer-closures.json",
+      "sha256": "a69fda2fcd96e0000087c895835f7a95fe9b9ca2ed4a3b81157874817db2379d",
+      "bytes": 1737560
+    },
+    {
+      "target": "supabase/release/current-release.json",
+      "sourcePath": "payload/supabase/release/current-release.json",
+      "sha256": "2df4d8cc4eee218f73130ca65504915591a14cecbae24b2db170ffacde9d9b2e",
+      "bytes": 36340
+    }
+  ],
+  "newMigrations": 0,
+  "newRepeatables": 1,
+  "changedSignatures": 1,
+  "newSignatures": 0,
+  "native": "NOT_RUN"
+}

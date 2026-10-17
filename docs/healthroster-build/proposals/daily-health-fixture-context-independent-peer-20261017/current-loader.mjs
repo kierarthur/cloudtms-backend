@@ -1,0 +1,14 @@
+import fs from'node:fs';import path from'node:path';import assert from'node:assert/strict';import{spawnSync}from'node:child_process';import{pathToFileURL}from'node:url';import{here,repo,write,sha}from'./capture.mjs';
+const proof=JSON.parse(fs.readFileSync(path.join(here,'CURRENT_METADATA_REBASE.json')));assert.equal(proof.baseHEAD,'3cbc4585be761479de4854ae1caa621a0186ad8e');assert.equal(proof.status,'REVIEW_ONLY_EXACT_COMMITTED_CURRENT_PARENT');
+let source=fs.readFileSync(path.join(here,'reference/context/loader-check.mjs'),'utf8');const edits=[];
+const replace=(before,after,count=1)=>{assert.equal(source.split(before).length-1,count);source=source.replaceAll(before,after);edits.push({before,after,count});};
+replace('const here=path.dirname(fileURLToPath(import.meta.url))','const here='+JSON.stringify(path.join(here,'reference/context')));
+replace("checkpoint='dd338cecd355a077192a236770db26e15559180a'","checkpoint='3cbc4585be761479de4854ae1caa621a0186ad8e'");
+replace('assert.equal(baseInventory.migrations.length,425)','assert.equal(baseInventory.migrations.length,426)');
+replace('assert.equal(baseInventory.repeatables.length,1093)','assert.equal(baseInventory.repeatables.length,1095)');
+replace('{migrations:425,repeatables:1094}','{migrations:426,repeatables:1096}');
+replace('beforeInventory:{migrations:425,repeatables:1093}','beforeInventory:{migrations:426,repeatables:1095}');
+replace('before:[425,1093],candidate:[425,1094]','before:[426,1095],candidate:[426,1096]');
+write('replay/current/loader-check.mjs',source);write('CURRENT_LOADER_OPERATIONAL_EDITS.json',{sourceSha256:sha(fs.readFileSync(path.join(here,'reference/context/loader-check.mjs'))),adaptedSha256:sha(source),edits,currentMetadataReviewOnly:true,sqlBodyEdits:0});
+const result=spawnSync(process.execPath,['--import',pathToFileURL(path.join(here,'replay-hooks.mjs')).href,path.join(here,'replay/current/loader-check.mjs')],{cwd:repo,env:{...process.env,DAILY_PEER_MODE:'current'},encoding:'utf8',maxBuffer:4e6,windowsHide:true});
+write('replay/current/loader.stdout.txt',result.stdout);write('replay/current/loader.stderr.txt',result.stderr);assert.equal(result.status,0,result.stderr+'\n'+result.stdout);console.log(result.stdout.trim());

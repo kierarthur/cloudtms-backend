@@ -1,0 +1,3 @@
+-- Same existing owner-only private authority. No role expansion.
+alter function private.daily_rate_correction_context_v1(uuid,uuid,boolean) owner to postgres;
+revoke all on function private.daily_rate_correction_context_v1(uuid,uuid,boolean) from PUBLIC,anon,authenticated,service_role;

@@ -1,0 +1,62 @@
+{
+  "peerCommit": "769451ba8e0f2606843962bb9618f37ab5834b10",
+  "peerManifestSha256": "bdcf83afe91360534501015492a49ac121c70049600ba7487add086a81aef532",
+  "finding": "F1_IMMEDIATE_BUSINESS_FK_BEFORE_NATIVE_LOCKS",
+  "sourceTrace": {
+    "finding": "CONTRACT_PREVIEW_IMMEDIATE_FK_LOCK_UPGRADE",
+    "scope": "SOURCE_COUNTEREXAMPLE_NOT_NATIVE_REPRODUCTION",
+    "authorCommit": "2d1c81cf5a6939b8ab05d4b3d8db398037c13ed4",
+    "physicalSchemaSha256": "d46481d0cd53880041b126c554d34dccc39854ff3bf31ac98883f85949cc1d82",
+    "operationCandidateFk": "candidate_id uuid not null references public.candidates(id)",
+    "nativeOwner": "private.timesheet_contract_move_family_lock_v1(uuid)",
+    "nativeOwnerRawSha256": "8fc91c710e6ca1ddb26d814c3e02662ade9c769b40f084496a58459d3ea54888",
+    "waitGraph": [
+      {
+        "from": "PREVIEW_A",
+        "to": "PREVIEW_B",
+        "row": "public.candidates(actual same Candidate)",
+        "requested": "UPDATE",
+        "held": "KEY_SHARE"
+      },
+      {
+        "from": "PREVIEW_B",
+        "to": "PREVIEW_A",
+        "row": "public.candidates(actual same Candidate)",
+        "requested": "UPDATE",
+        "held": "KEY_SHARE"
+      }
+    ],
+    "conclusion": "HOLD_TEMPLATE20_CONCURRENCY_UNQUALIFIED",
+    "BankBodyAssumptions": 0,
+    "native": "NOT_RUN",
+    "requiredBoundary": "Acquire the complete actual native lock domain before any immediate business FK check; preserve exact replay and current native Bank-before-Health order, shared request mutex last. A future composition-local contract may express missing producer lock requirements, but no callable ABI or safe ordering is supplied here."
+  },
+  "familyLockSha256": "8fc91c710e6ca1ddb26d814c3e02662ade9c769b40f084496a58459d3ea54888",
+  "original43FilesUnchanged": true,
+  "native": "NOT_RUN",
+  "familyLock": {
+    "physical": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
+    "startLine": 5626,
+    "sha256": "8fc91c710e6ca1ddb26d814c3e02662ade9c769b40f084496a58459d3ea54888",
+    "bytes": 2224,
+    "registry": {
+      "signature": "private.timesheet_contract_move_family_lock_v1(uuid)",
+      "finalRoot": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql",
+      "finalPhysical": "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc",
+      "allowedPhysical": [
+        "supabase/repeatable/includes/nhsp_v6_health_review_context.sqlinc",
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority/01_final_functions.sqlinc"
+      ],
+      "predecessors": [
+        "supabase/repeatable/16102026_0713_nhsp_v6_06_integrated_move_source_composition_v1.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/16102026_0713_nhsp_v6_06_integrated_move_source_composition_v1.sql",
+        "supabase/repeatable/16102026_1003_nhsp_v6_candidate_native_authority_v1.sql"
+      ],
+      "owner": "Health V6 exact physical Contract composition; source-only, native qualification required",
+      "baselineSource": "00f25571ac7fb65f44351a52beced0710211138e",
+      "healthV6CandidateSourceReview": "docs/healthroster-build/v6-owner-delivery-20261016/CANDIDATE_NATIVE_SQL_SOURCE_INTEGRATION.json"
+    }
+  }
+}

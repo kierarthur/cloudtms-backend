@@ -1,0 +1,17 @@
+{
+  "version": "CONTRACT_PREVIEW_ROOT_F2_SOURCE_REVIEW_V1",
+  "reviewedCommit": "cf267f59d469df86fe0b1b3f172fb6e7ebc4e766",
+  "file": "docs/healthroster-build/proposals/contract-preview-preenrollment-lock-forward-20261017/fragments/21_scope_locked_from_native_owner.plpgsql",
+  "sourceSha256": "c1eb191fba3e1f7357c2d90a7681ba40fc0df1af7e3132398c57d0010fe89f8c",
+  "line": 5,
+  "id": "CONTRACT_PREVIEW_F2",
+  "priority": "P2",
+  "verdict": "HOLD_SOURCE_CORRECTION_REQUIRED",
+  "finding": "Initial native scope admission still reads FOUND after the SELECT that bound it was removed. A genuine unprovided prefix may leave FOUND=false independently of the prepared operation row.",
+  "requiredCorrection": "Bind missing/wrong prepared operation identity explicitly, preserve the original whole owner and all later query-bound FOUND checks, add actual guard-AST true/false FOUND cases and exact full inverse.",
+  "authorAcknowledged": true,
+  "primaryReference": "https://www.postgresql.org/docs/17/plpgsql-statements.html#PLPGSQL-STATEMENTS-DIAGNOSTICS",
+  "nativeReproduction": "NOT_RUN",
+  "runtimeMounted": false,
+  "ownerDecisionRequired": false
+}

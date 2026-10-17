@@ -22777,14 +22777,18 @@
     },
     {
       "signature": "private.daily_rate_correction_context_v1(uuid,uuid,boolean)",
-      "finalRoot": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority_v1.sql",
-      "finalPhysical": "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/01_context.sqlinc",
+      "finalRoot": "supabase/repeatable/17102026_0910_nhsp_v6_daily_role_identity_v1.sql",
+      "finalPhysical": "supabase/repeatable/17102026_0910_nhsp_v6_daily_role_identity/01_complete_context.sqlinc",
       "allowedPhysical": [
+        "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/01_context.sqlinc",
+        "supabase/repeatable/17102026_0910_nhsp_v6_daily_role_identity/01_complete_context.sqlinc"
+      ],
+      "predecessors": [
+        "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority_v1.sql",
         "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority/01_context.sqlinc"
       ],
-      "predecessors": [],
       "finalClosures": [
-        "supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority_v1.sql"
+        "supabase/repeatable/17102026_0910_nhsp_v6_daily_role_identity_v1.sql"
       ],
       "owner": "Health V6 exact complete Daily native authority; source-only, native financial/API/security qualification required",
       "baselineSource": "00f25571ac7fb65f44351a52beced0710211138e"

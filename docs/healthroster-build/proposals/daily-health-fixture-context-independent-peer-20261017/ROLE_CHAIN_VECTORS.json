@@ -1,0 +1,125 @@
+{
+  "vectors": [
+    {
+      "input": "RN",
+      "resolved": "RN",
+      "physical": "rn",
+      "candidateRole": "RN",
+      "derivedRole": "RN",
+      "sourceOnly": true
+    },
+    {
+      "input": " rn ",
+      "resolved": "RN",
+      "physical": "rn",
+      "candidateRole": "RN",
+      "derivedRole": "RN",
+      "sourceOnly": true
+    },
+    {
+      "input": "rMn",
+      "resolved": "RMN",
+      "physical": "rmn",
+      "candidateRole": "RMN",
+      "derivedRole": "RMN",
+      "sourceOnly": true
+    },
+    {
+      "input": "rGn",
+      "resolved": "RGN",
+      "physical": "rgn",
+      "candidateRole": "RGN",
+      "derivedRole": "RGN",
+      "sourceOnly": true
+    },
+    {
+      "input": "HCA",
+      "resolved": "HCA",
+      "physical": "hca",
+      "candidateRole": "HCA",
+      "derivedRole": "HCA",
+      "sourceOnly": true
+    },
+    {
+      "input": "ODP",
+      "resolved": "ODP",
+      "physical": "odp",
+      "candidateRole": "ODP",
+      "derivedRole": "ODP",
+      "sourceOnly": true
+    },
+    {
+      "input": "Health Care Assistant",
+      "resolved": "HEALTH CARE ASSISTANT",
+      "physical": "health care assistant",
+      "candidateRole": "HEALTH CARE ASSISTANT",
+      "derivedRole": "HEALTH CARE ASSISTANT",
+      "sourceOnly": true
+    },
+    {
+      "input": "health\tcare  assistant",
+      "resolved": "HEALTH CARE ASSISTANT",
+      "physical": "health care assistant",
+      "candidateRole": "HEALTH CARE ASSISTANT",
+      "derivedRole": "HEALTH CARE ASSISTANT",
+      "sourceOnly": true
+    },
+    {
+      "input": "Registered Nurse",
+      "resolved": "REGISTERED NURSE",
+      "physical": "registered nurse",
+      "candidateRole": "REGISTERED NURSE",
+      "derivedRole": "REGISTERED NURSE",
+      "sourceOnly": true
+    },
+    {
+      "input": "registered_nurse",
+      "resolved": "REGISTERED_NURSE",
+      "physical": "registered_nurse",
+      "candidateRole": "REGISTERED_NURSE",
+      "derivedRole": "REGISTERED_NURSE",
+      "sourceOnly": true
+    },
+    {
+      "input": "Support Worker",
+      "resolved": "SUPPORT WORKER",
+      "physical": "support worker",
+      "candidateRole": "SUPPORT WORKER",
+      "derivedRole": "SUPPORT WORKER",
+      "sourceOnly": true
+    },
+    {
+      "input": " Senior Nurse ",
+      "resolved": "SENIOR NURSE",
+      "physical": "senior nurse",
+      "candidateRole": "SENIOR NURSE",
+      "derivedRole": "SENIOR NURSE",
+      "sourceOnly": true
+    },
+    {
+      "input": "RN-MH",
+      "resolved": "RN-MH",
+      "physical": "rn-mh",
+      "candidateRole": "RN-MH",
+      "derivedRole": "RN-MH",
+      "sourceOnly": true
+    },
+    {
+      "input": "",
+      "resolved": null,
+      "physical": null,
+      "candidateRole": "",
+      "derivedRole": null,
+      "sourceOnly": true
+    }
+  ],
+  "actualManualNormalizers": {
+    "trim": "const trimStr = (v) => String(v == null ? '' : v).trim();",
+    "lower": "const lowerOrNull = (v) => {\n    const s = trimStr(v).toLowerCase();\n    return s || null;\n  };",
+    "norm": "const normRole = (v) => {\n    const s = trimStr(v).replace(/\\s+/g, ' ').trim();\n    return s ? s.toUpperCase() : null;\n  };"
+  },
+  "canonicalModuleSha256": "baa0df9bc653d0c4159a3401a903154444e17cfc3ea0c7b3bd30c5bdfae91942",
+  "aliasMap": false,
+  "SQLUpperRuntimeAndCollation": "NOT_PROVED",
+  "native": "NOT_RUN"
+}

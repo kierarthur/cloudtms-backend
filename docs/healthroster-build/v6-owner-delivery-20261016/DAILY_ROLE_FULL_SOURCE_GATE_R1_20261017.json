@@ -1,0 +1,17 @@
+{
+  "version": "DAILY_ROLE_FULL_ROOT_SOURCE_GATE_V1",
+  "status": "PASS_SOURCE_ONLY",
+  "result": {
+    "frozenFiles": 7,
+    "frozenTriggers": 18,
+    "frozenTables": 45,
+    "protectedSignatures": 24,
+    "sqlSources": 2250,
+    "rpcRoots": 79,
+    "routineWorkSignatures": 183,
+    "typedTransportSignatures": 41
+  },
+  "elapsedMilliseconds": 203704,
+  "native": "NOT_RUN",
+  "release": "NOT_RUN"
+}

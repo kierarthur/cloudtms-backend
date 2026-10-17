@@ -1,0 +1,282 @@
+{
+  "originalProposalCommit": "2d1c81cf5a6939b8ab05d4b3d8db398037c13ed4",
+  "peerFindingCommit": "769451ba8e0f2606843962bb9618f37ab5834b10",
+  "supersededSelectedSource": [
+    "docs/healthroster-build/proposals/contract-preview-current-health-20261017/templates/20_preview.sql.tmpl",
+    "docs/healthroster-build/proposals/contract-preview-current-health-20261017/OWNER_BLOCKS.json",
+    "docs/healthroster-build/proposals/contract-preview-current-health-20261017/assemble.py"
+  ],
+  "newSourceFiles": [
+    "templates/20_preview.sql.tmpl",
+    "fragments/21_locked_preview_enrollment.plpgsql",
+    "fragments/21_scope_locked_from_native_owner.plpgsql",
+    "OWNER_BLOCKS.json",
+    "assemble.py"
+  ],
+  "unchangedOriginalFiles": [
+    {
+      "path": "docs/healthroster-build/proposals/contract-preview-current-health-20261017/assemble.py",
+      "bytes": 5119,
+      "sha256": "7e48aace7f1d924bdb514721eccc84d049b5ba27577b1e34ced000cc6b641eee",
+      "commit": "2d1c81cf5a6939b8ab05d4b3d8db398037c13ed4"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/contract-preview-current-health-20261017/ASSEMBLY_STATE.json",
+      "bytes": 328,
+      "sha256": "ac1f03790ad0c0c60a484ff7e03a629d7b003690dfe805d3195ead6290d443b1",
+      "commit": "2d1c81cf5a6939b8ab05d4b3d8db398037c13ed4"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/contract-preview-current-health-20261017/AST_PROJECTION_VECTORS.json",
+      "bytes": 12199,
+      "sha256": "5a20e63535ce2f43e1d5498ec37b093fa62f5b730363cd46dd791f225864e112",
+      "commit": "2d1c81cf5a6939b8ab05d4b3d8db398037c13ed4"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/contract-preview-current-health-20261017/freeze.py",
+      "bytes": 4160,
+      "sha256": "dbe17615617fe51d37c456fdde37fc162c0a60358d1ba018753eabfe6dfbf653",
+      "commit": "2d1c81cf5a6939b8ab05d4b3d8db398037c13ed4"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/contract-preview-current-health-20261017/health/00_public_assert.sqlinc",
+      "bytes": 13058,
+      "sha256": "c1856f4f95badb81987b125126f177bbccde0cdbd2eca9b169ab466fd829ff33",
+      "commit": "2d1c81cf5a6939b8ab05d4b3d8db398037c13ed4"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/contract-preview-current-health-20261017/health/01_projection.sqlinc",
+      "bytes": 3477,
+      "sha256": "bf29e1a342b6556a611717a2c623c27b888c362b46bb690129ae0d9d4fff3414",
+      "commit": "2d1c81cf5a6939b8ab05d4b3d8db398037c13ed4"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/contract-preview-current-health-20261017/inputs/16102026_0159_nhsp_v6_01_physical_source_review_schema.sql",
+      "bytes": 40625,
+      "sha256": "d46481d0cd53880041b126c554d34dccc39854ff3bf31ac98883f85949cc1d82",
+      "commit": "2d1c81cf5a6939b8ab05d4b3d8db398037c13ed4"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/contract-preview-current-health-20261017/inputs/16102026_1003_nhsp_v6_native_pending_allocation.sql",
+      "bytes": 2542,
+      "sha256": "cf2f82f28ab0f1c96084235acff3ea8fc4245f82ba10cdf5960223b1c436ccec",
+      "commit": "2d1c81cf5a6939b8ab05d4b3d8db398037c13ed4"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/contract-preview-current-health-20261017/inputs/private__daily_rate_correction_public_assert_v1.sqlinc",
+      "bytes": 12601,
+      "sha256": "b0c2b80c7a497bd5f147e1bd58226e9cfa179a46ea721c1868876e51d7465eb2",
+      "commit": "2d1c81cf5a6939b8ab05d4b3d8db398037c13ed4"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/contract-preview-current-health-20261017/inputs/private__invoice_contract_move_billing_read_v1.sqlinc",
+      "bytes": 3567,
+      "sha256": "1b0e380ec57496746b5211b31de388a1de044e2a363f3b4b8aa6da5421a0653c",
+      "commit": "2d1c81cf5a6939b8ab05d4b3d8db398037c13ed4"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/contract-preview-current-health-20261017/inputs/private__invoice_contract_move_inspect_v1.sqlinc",
+      "bytes": 12478,
+      "sha256": "f5562be0473129dc72809658a86f2666f27e9644a8447ebb934cb95b3134a716",
+      "commit": "2d1c81cf5a6939b8ab05d4b3d8db398037c13ed4"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/contract-preview-current-health-20261017/inputs/private__invoice_contract_move_inspect_v1__3arg.sqlinc",
+      "bytes": 785,
+      "sha256": "df1637ed2b66419d05d67a66754e016eefe3e40b5078e8efb32cb46fab301735",
+      "commit": "2d1c81cf5a6939b8ab05d4b3d8db398037c13ed4"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/contract-preview-current-health-20261017/inputs/private__invoice_contract_move_preflight_v1.sqlinc",
+      "bytes": 2072,
+      "sha256": "c421f1dae7ce10c44805a1e3d9c06b11736af2f21b6830e4e401ea75adbef105",
+      "commit": "2d1c81cf5a6939b8ab05d4b3d8db398037c13ed4"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/contract-preview-current-health-20261017/inputs/private__timesheet_contract_current_placement_v1.sqlinc",
+      "bytes": 6657,
+      "sha256": "cbc671065fefa41025ce7b850b477206422221f33c186fa444a9264a33b1a7da",
+      "commit": "2d1c81cf5a6939b8ab05d4b3d8db398037c13ed4"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/contract-preview-current-health-20261017/inputs/private__timesheet_contract_move_commit_guard_v1.sqlinc",
+      "bytes": 1742,
+      "sha256": "c27f1641abc6acf86333c04280cbfe64553aec9fad91fde56b36478065f9ae47",
+      "commit": "2d1c81cf5a6939b8ab05d4b3d8db398037c13ed4"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/contract-preview-current-health-20261017/inputs/private__timesheet_contract_move_evidence_v1.sqlinc",
+      "bytes": 1985,
+      "sha256": "e1feb71fb092ccb530da39a772b0cd6ae0cf372c936d392d6b4c4c406cf39a85",
+      "commit": "2d1c81cf5a6939b8ab05d4b3d8db398037c13ed4"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/contract-preview-current-health-20261017/inputs/private__timesheet_contract_move_operation_guard_v1.sqlinc",
+      "bytes": 2286,
+      "sha256": "ab35e8b09bd4345854cd5315b1d372ac8fb71a264d73f023a0f500b2dd94b442",
+      "commit": "2d1c81cf5a6939b8ab05d4b3d8db398037c13ed4"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/contract-preview-current-health-20261017/inputs/private__timesheet_contract_move_reason_v1.sqlinc",
+      "bytes": 998,
+      "sha256": "a0a534c7dc57ea2f4f11cbc87e52b1a8d2f5669cea6ed6fe5027caa3a8afd1e3",
+      "commit": "2d1c81cf5a6939b8ab05d4b3d8db398037c13ed4"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/contract-preview-current-health-20261017/inputs/private__timesheet_contract_move_request_assert_v1.sqlinc",
+      "bytes": 2645,
+      "sha256": "9df8236e4eac5b7fac11c44b59af5e9e9c15b414c1d104aa72d6686de3bd52f7",
+      "commit": "2d1c81cf5a6939b8ab05d4b3d8db398037c13ed4"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/contract-preview-current-health-20261017/inputs/private__timesheet_contract_move_request_guard_v1.sqlinc",
+      "bytes": 492,
+      "sha256": "375e97545624ce641b784bf02728fd65b98e625416b561db5c00901aea3cb9ab",
+      "commit": "2d1c81cf5a6939b8ab05d4b3d8db398037c13ed4"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/contract-preview-current-health-20261017/inputs/private__timesheet_contract_move_request_hash_v1.sqlinc",
+      "bytes": 618,
+      "sha256": "04708a78550f44689651d68af02351cccb8e06b704e66921b55c6b4b76549e67",
+      "commit": "2d1c81cf5a6939b8ab05d4b3d8db398037c13ed4"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/contract-preview-current-health-20261017/inputs/private__timesheet_contract_move_review_members_v1.sqlinc",
+      "bytes": 2207,
+      "sha256": "21c6569bfdfa3c3ca09517160f8fc211c122df1968e60eaa825235a780d275d7",
+      "commit": "2d1c81cf5a6939b8ab05d4b3d8db398037c13ed4"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/contract-preview-current-health-20261017/inputs/private__timesheet_contract_move_scope_v1.sqlinc",
+      "bytes": 9857,
+      "sha256": "2d3eb8da4dcdf329225bb0f8eaa96dd4df8a9466304d0d52fc48ab88960c0cad",
+      "commit": "2d1c81cf5a6939b8ab05d4b3d8db398037c13ed4"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/contract-preview-current-health-20261017/inputs/private__timesheet_contract_move_stage_v1.sqlinc",
+      "bytes": 14274,
+      "sha256": "803af5a8918aa35dd0cd4c17db3610ee437059703b0bcb462ad408ba2110e81b",
+      "commit": "2d1c81cf5a6939b8ab05d4b3d8db398037c13ed4"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/contract-preview-current-health-20261017/inputs/private__timesheet_contract_native_pending_v1.sqlinc",
+      "bytes": 5167,
+      "sha256": "53fa48ae17e1b71fb0d756d76532ba8885e737ec058108fc3a50a2efb67d2a02",
+      "commit": "2d1c81cf5a6939b8ab05d4b3d8db398037c13ed4"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/contract-preview-current-health-20261017/inputs/private__timesheet_correction_entry_subject_v1.sqlinc",
+      "bytes": 9317,
+      "sha256": "da468d4d82a46ee36a953933adac9b6f8675203558dbe78df25cce9e5ffefc59",
+      "commit": "2d1c81cf5a6939b8ab05d4b3d8db398037c13ed4"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/contract-preview-current-health-20261017/inputs/public__timesheet_contract_move_accept_v1.sqlinc",
+      "bytes": 8727,
+      "sha256": "f31e18b1f51c318e75ac7379c0e750f09cf16ab76cdd00f0705e558ee0f1f004",
+      "commit": "2d1c81cf5a6939b8ab05d4b3d8db398037c13ed4"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/contract-preview-current-health-20261017/NATIVE_REQUIRED.md",
+      "bytes": 5431,
+      "sha256": "47cd8a3101c514227c7fe25a459e8fcea85839e99bc53cfcc5c1329dfa34045b",
+      "commit": "2d1c81cf5a6939b8ab05d4b3d8db398037c13ed4"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/contract-preview-current-health-20261017/offline-checks.py",
+      "bytes": 10579,
+      "sha256": "f66844ce95af0c894ab4b18a782f8e06027b99330e7f30be4f6d3ccf1c3aec08",
+      "commit": "2d1c81cf5a6939b8ab05d4b3d8db398037c13ed4"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/contract-preview-current-health-20261017/OFFLINE_RESULTS.json",
+      "bytes": 2630,
+      "sha256": "d1881fb2d284acdf043d11888d59887b1b27f9ad71f3b23cc77544fcae6e3c37",
+      "commit": "2d1c81cf5a6939b8ab05d4b3d8db398037c13ed4"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/contract-preview-current-health-20261017/one-time/00_admission.sqlinc",
+      "bytes": 856,
+      "sha256": "66bdd3d917dc7063c863f1c64c8d33f75425fa403b5f1f8d76b7636e22b68eb5",
+      "commit": "2d1c81cf5a6939b8ab05d4b3d8db398037c13ed4"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/contract-preview-current-health-20261017/OWNER_BLOCKS.json",
+      "bytes": 4657,
+      "sha256": "8a75d840ef7cee02594d415c36885c786893ea32c5fd6d9726081b435abbfad8",
+      "commit": "2d1c81cf5a6939b8ab05d4b3d8db398037c13ed4"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/contract-preview-current-health-20261017/protocol-vectors.mjs",
+      "bytes": 4191,
+      "sha256": "bd228023bc94be7ac9994d3a7ecf931b4f54a0afed35064f0991e7f8768d7ce6",
+      "commit": "2d1c81cf5a6939b8ab05d4b3d8db398037c13ed4"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/contract-preview-current-health-20261017/README.md",
+      "bytes": 11076,
+      "sha256": "acd0d171708629cae8722b14b8394a0e0be936e537f2ef8acc0f8d333956f2de",
+      "commit": "2d1c81cf5a6939b8ab05d4b3d8db398037c13ed4"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/contract-preview-current-health-20261017/reverse/complete_additive_reverse.sqlinc",
+      "bytes": 577,
+      "sha256": "0157a55f2d1717a81194fac2c1a8c6477d2dac4f4aea7df00c6855d7c479a5a8",
+      "commit": "2d1c81cf5a6939b8ab05d4b3d8db398037c13ed4"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/contract-preview-current-health-20261017/SOURCE_EXPECTATIONS.json",
+      "bytes": 2869,
+      "sha256": "13ffd90343997606304b5f751fce00d8bb74e19d57f7d6a0690e9fb709a03e85",
+      "commit": "2d1c81cf5a6939b8ab05d4b3d8db398037c13ed4"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/contract-preview-current-health-20261017/SOURCE_PINS.json",
+      "bytes": 18137,
+      "sha256": "cf24313e65f870f7a27f7b5ecf7df2006f5802cacca8ce331d17e9f877b0e9a3",
+      "commit": "2d1c81cf5a6939b8ab05d4b3d8db398037c13ed4"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/contract-preview-current-health-20261017/templates/10_preview_read.sql.tmpl",
+      "bytes": 8514,
+      "sha256": "18be8aec9be24d8c9010e149421b602c2854a1f6971de565f9c0d6f8904050ab",
+      "commit": "2d1c81cf5a6939b8ab05d4b3d8db398037c13ed4"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/contract-preview-current-health-20261017/templates/20_preview.sql.tmpl",
+      "bytes": 10427,
+      "sha256": "d5a1e843e2894a6ad1b5674f7dc735bb8d5b7c33f850cfe8d0b4df87399fea3c",
+      "commit": "2d1c81cf5a6939b8ab05d4b3d8db398037c13ed4"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/contract-preview-current-health-20261017/templates/30_current_result.sql.tmpl",
+      "bytes": 12906,
+      "sha256": "016b2df5e17c7c51375e9da3ee595917bc7bf34922241e5111ddb3f98e441fa1",
+      "commit": "2d1c81cf5a6939b8ab05d4b3d8db398037c13ed4"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/contract-preview-current-health-20261017/VALIDATOR_DERIVATION.json",
+      "bytes": 3022,
+      "sha256": "54c94e0a992f633f88c9c1bf3f1ec5abf76f413f2db54dd4ac61cba7828b4fea",
+      "commit": "2d1c81cf5a6939b8ab05d4b3d8db398037c13ed4"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/contract-preview-current-health-20261017/verification/99_owner_only.sqlinc",
+      "bytes": 2454,
+      "sha256": "9caa4e0e372af8f0406a4d476b94f187c28dbf9643c76fbb175ebd413176c971",
+      "commit": "2d1c81cf5a6939b8ab05d4b3d8db398037c13ed4"
+    },
+    {
+      "path": "docs/healthroster-build/proposals/contract-preview-current-health-20261017/MANIFEST.json",
+      "bytes": 20687,
+      "sha256": "b62c3ec3f98f1f6f323555fec09e87f680736aee1aaa4b17ea92c5885550218d",
+      "commit": "2d1c81cf5a6939b8ab05d4b3d8db398037c13ed4"
+    }
+  ],
+  "newCallableBankABIs": 0,
+  "newBindingSlots": 0,
+  "existingBindings": 4,
+  "unprovidedBindings": 4,
+  "runtimeEmission": "REFUSED",
+  "native": "NOT_RUN"
+}

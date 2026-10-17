@@ -1,0 +1,98 @@
+{
+  "version": "DAILY_ROLE_CURRENT_SOURCE_ROOT_MOUNT_V1",
+  "preMountCommit": "77b70db4c9c19eab2a473a6600f438fb3c5acc01",
+  "authorCommit": "1d00a57a1cf292f2a0c6cf8c17898d1e13204d31",
+  "recipeCommit": "ad02698589fa28b1a73af26390fad7cf4c0466f9",
+  "independentPeerCommit": "2b86412de4cc74a9bd6b31aa9c7dc336c067e6d5",
+  "capturedGitExactFiles": 116,
+  "runtimeTargets": 6,
+  "targets": [
+    {
+      "file": "supabase/repeatable/17102026_0910_nhsp_v6_daily_role_identity_v1.sql",
+      "inputSha256": null,
+      "outputSha256": "869be3d8ff7f6635c9ca81c6805558e1de8d1f1de60c0d21342b0dfbfac39ea0",
+      "bytes": 244
+    },
+    {
+      "file": "supabase/repeatable/17102026_0910_nhsp_v6_daily_role_identity/01_complete_context.sqlinc",
+      "inputSha256": null,
+      "outputSha256": "032153eb7425c21c1f7bbe0fe6abd29689fe6ba8fb0d154e8e6476a11d26c7d6",
+      "bytes": 8650
+    },
+    {
+      "file": "supabase/repeatable/17102026_0910_nhsp_v6_daily_role_identity/99_acl.sqlinc",
+      "inputSha256": null,
+      "outputSha256": "f0477a93e05e9fa6960d64df4628c17421ce1e80d661067febec3c5fa0e6f3c4",
+      "bytes": 288
+    },
+    {
+      "file": "supabase/verification/17102026_0910_daily_role_identity_security.sql",
+      "inputSha256": null,
+      "outputSha256": "888fcbcb73c5222f3756e1428130a67fe7a06f56b544d3a17c92cc46795b9852",
+      "bytes": 2886
+    },
+    {
+      "file": "docs/bpay-next/final-definer-closures.json",
+      "inputSha256": "d436e0a3512e7c29b85657f257100a5f6bbc44cc44bd4fcffada04a561e3cc39",
+      "outputSha256": "c10ac5fa3aafa9c2def791badd2b647bea2e980cd88a43af81c9a1cba7e7e00c",
+      "bytes": 1746259
+    },
+    {
+      "file": "supabase/release/current-release.json",
+      "inputSha256": "6f3a4b39d686f440c8488e2d8233b6a00ec4d8e3d67ef080e586ddf28a0156bd",
+      "outputSha256": "1396346c26872e318231f0815594b2efe206eac4180de7b3c9120f14be24726d",
+      "bytes": 36636
+    }
+  ],
+  "onlyExistingContextBodyHunks": 1,
+  "authoredLeafFraming": "EXACT_COMPLETE_DECLARATION_PLUS_ONE_FINAL_LF",
+  "completeOriginalBodyAndWholeMetadataInverses": true,
+  "retainedSourceChains": true,
+  "retainedSixDailyChains": 6,
+  "mandatoryBefore": [
+    181,
+    182
+  ],
+  "mandatoryAfter": [
+    182,
+    183
+  ],
+  "rootTests": {
+    "author": 9,
+    "independentSource": 88,
+    "actualRoleVectors": 14
+  },
+  "newMigrations": 0,
+  "expectedInventory": {
+    "migrations": 426,
+    "repeatables": 1096
+  },
+  "sourceGate": {
+    "receipt": "docs/healthroster-build/v6-owner-delivery-20261016/DAILY_ROLE_FULL_SOURCE_GATE_R1_20261017.json",
+    "version": "DAILY_ROLE_FULL_ROOT_SOURCE_GATE_V1",
+    "status": "PASS_SOURCE_ONLY",
+    "result": {
+      "frozenFiles": 7,
+      "frozenTriggers": 18,
+      "frozenTables": 45,
+      "protectedSignatures": 24,
+      "sqlSources": 2250,
+      "rpcRoots": 79,
+      "routineWorkSignatures": 183,
+      "typedTransportSignatures": 41
+    },
+    "elapsedMilliseconds": 203704,
+    "native": "NOT_RUN",
+    "release": "NOT_RUN"
+  },
+  "native": "NOT_RUN",
+  "fixture": "MANIFEST_ONLY_NOT_CREATED",
+  "installedAuthoriseEffects": "NOT_PROVED",
+  "SQLCollation": "NOT_PROVED",
+  "install2": "NOT_INSTALLED",
+  "sourceIntegrity": {
+    "status": "PASS",
+    "migrations": 426,
+    "repeatables": 1096
+  }
+}

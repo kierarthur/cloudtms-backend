@@ -1,0 +1,79 @@
+{
+  "commit": "fc302f15103102a87903bada1b61ad68dfd0cc05",
+  "wholeFileBytes": 8936781,
+  "wholeFileSha256": "1385684e3983f734b7570499edf6672b1cfe790542a5b468bed0b53a6f6cb76a",
+  "functions": [
+    {
+      "name": "createClientWithSettingsAtomic",
+      "file": "broker/src/index.js",
+      "commit": "fc302f15103102a87903bada1b61ad68dfd0cc05",
+      "startLine": 512,
+      "bytes": 1388,
+      "sha256": "8bacd300e3a39b2b0aa0e1d0807fc9075f30bd64b1a88d0e63d031bc91e9fb8d",
+      "sourceOutput": "health-producers/createClientWithSettingsAtomic.js",
+      "runtimeExecuted": false
+    },
+    {
+      "name": "handleCreateCandidate",
+      "file": "broker/src/index.js",
+      "commit": "fc302f15103102a87903bada1b61ad68dfd0cc05",
+      "startLine": 149557,
+      "bytes": 8415,
+      "sha256": "42642fcfbe70961b2b8276e875e75c69a673a15a3442a04fe3c2d4e6046b4231",
+      "sourceOutput": "health-producers/handleCreateCandidate.js",
+      "runtimeExecuted": false
+    },
+    {
+      "name": "handleUpsertClientRate",
+      "file": "broker/src/index.js",
+      "commit": "fc302f15103102a87903bada1b61ad68dfd0cc05",
+      "startLine": 158899,
+      "bytes": 7868,
+      "sha256": "5e6c7f3b1a5dc5302971c91d5cf80a5ea464e76b6119312e6ee9b981bc43d518",
+      "sourceOutput": "health-producers/handleUpsertClientRate.js",
+      "runtimeExecuted": false
+    },
+    {
+      "name": "handleTimesheetCreateManualDaily",
+      "file": "broker/src/index.js",
+      "commit": "fc302f15103102a87903bada1b61ad68dfd0cc05",
+      "startLine": 28622,
+      "bytes": 8574,
+      "sha256": "23cd9c38a20d43398756965210b4d47391eee94583ea61347d548c8d39344a77",
+      "sourceOutput": "health-producers/handleTimesheetCreateManualDaily.js",
+      "runtimeExecuted": false
+    },
+    {
+      "name": "saveAndRecalculateCanonicalDaily",
+      "file": "broker/src/index.js",
+      "commit": "fc302f15103102a87903bada1b61ad68dfd0cc05",
+      "startLine": 28054,
+      "bytes": 1915,
+      "sha256": "860f54d4fc2a807ddd77c17151e5c47f93541d6c20c4e28824c6ba936445409b",
+      "sourceOutput": "health-producers/saveAndRecalculateCanonicalDaily.js",
+      "runtimeExecuted": false
+    },
+    {
+      "name": "runTsfinWorkerOnce",
+      "file": "broker/src/index.js",
+      "commit": "fc302f15103102a87903bada1b61ad68dfd0cc05",
+      "startLine": 167170,
+      "bytes": 45081,
+      "sha256": "024d4352267936829914046f1b0ec3bb33cc9b053d9c39d35711606948ee50a9",
+      "sourceOutput": "health-producers/runTsfinWorkerOnce.js",
+      "runtimeExecuted": false
+    },
+    {
+      "name": "handleTimesheetAuthoriseGeneric",
+      "file": "broker/src/index.js",
+      "commit": "fc302f15103102a87903bada1b61ad68dfd0cc05",
+      "startLine": 168341,
+      "bytes": 58820,
+      "sha256": "339247fb62f9e6e61459fdeca2c46f6558245c108958469c111b8a0e2f01c38d",
+      "sourceOutput": "health-producers/handleTimesheetAuthoriseGeneric.js",
+      "runtimeExecuted": false
+    }
+  ],
+  "BankBodiesRead": 0,
+  "native": "NOT_RUN"
+}

@@ -1,0 +1,1 @@
+{"before":[426,1095],"candidate":[426,1096],"verification":{"signatures":3037,"registered":1650,"roots":1096,"pendingRoots":["supabase/repeatable/16102026_0858_nhsp_v6_daily_native_authority_v1.sql","supabase/repeatable/17102026_0910_nhsp_v6_daily_role_identity_v1.sql"]},"negatives":2,"daily":6,"native":"NOT_RUN"}

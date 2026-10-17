@@ -1,0 +1,18 @@
+{
+  "version": "SOURCE_PURE_NAMESPACE_READONLY_V1",
+  "rootRecordedAt": "2026-10-17T07:35:00.662Z",
+  "route": "mcp__cloudtms_miget_operations_kier_codex__miget_db_get_rpc_definition",
+  "schema": "private",
+  "name": "weekly_source_pay_decision_native_status_child_v1",
+  "identityFilter": null,
+  "response": {
+    "authenticated": true,
+    "read_only": true,
+    "database": "agency_test",
+    "matched": 0,
+    "definitions": []
+  },
+  "qualification": "READ_ONLY_CURRENT_METADATA_ONLY_RECHECK_NAME_WIDE_IN_ACTUAL_TRIAL",
+  "nativeExecution": "NOT_RUN",
+  "sharedLockTaken": false
+}

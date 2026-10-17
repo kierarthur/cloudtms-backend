@@ -1,0 +1,32 @@
+{
+  "version": "SOURCE_READ_PURE_FIRST_USE_EFFECT_ASSESSMENT_V1",
+  "files": [
+    {
+      "path": "ASSESSMENT.md",
+      "bytes": 4099,
+      "sha256": "1c2c56f4dee6eced4c6223be1aed98a340302318639402ac080983a757fdd0a6"
+    },
+    {
+      "path": "EFFECT_CLOSURE.json",
+      "bytes": 4248,
+      "sha256": "b93ce8dcc50a07b001bf18c94d66c057adf58f2c667f94a7bed22fb47b10bcc4"
+    },
+    {
+      "path": "inputs/weekly_exceptional_json_keys_exact_v1.sqlinc",
+      "bytes": 430,
+      "sha256": "88026e68c1aa4a13b954ec3ab1be3071f0d62329b5576bfa2a371bed01cddfb4"
+    },
+    {
+      "path": "inputs/weekly_source_pay_decision_native_status_child_v1.sqlinc",
+      "bytes": 12317,
+      "sha256": "ffae1fc04874e0b3590c89609f592b4ca33c6b95654a4272e0dd1cc8b6ffb30b"
+    },
+    {
+      "path": "verify.py",
+      "bytes": 1842,
+      "sha256": "74088e1542381cc886e788ef23b2ba9fc712aa5ec242e99edfb2da02e7cf1abd"
+    }
+  ],
+  "runtimeProgramAuthored": false,
+  "native": "NOT_RUN"
+}
