@@ -1,0 +1,22 @@
+{
+  "sourceCommit": "fe2366f44c1514f9074e4c1413b7043330a3f4d7",
+  "sourceManifestSha256": "4af20def35c5a76a0a6c5fd45c9d5c4694ccc992ba4e26dd439fb05230c5374c",
+  "command": "node <Physical>/contact-background-array-cse-forward-20261017/verify.mjs",
+  "caller": "D:/Development/GitHub/.codex-worktrees/healthroster-v2-money-build-13102026",
+  "observedToolSession": 69125,
+  "exitCode": 0,
+  "stdout": {
+    "targets": 54,
+    "payloadFiles": 5,
+    "wholeReverses": 5,
+    "unchanged": 49,
+    "tests": 43,
+    "stageAstCases": 2,
+    "astNegatives": 21,
+    "native": "NOT_RUN",
+    "restorationQualified": false
+  },
+  "rootHeadAtInitialInvocation": "NOT_CAPTURED",
+  "laterReplay": "HOLD_AFTER_APPROVED_MECHANICAL_SOURCE_MOUNT",
+  "native": "NOT_RUN"
+}
