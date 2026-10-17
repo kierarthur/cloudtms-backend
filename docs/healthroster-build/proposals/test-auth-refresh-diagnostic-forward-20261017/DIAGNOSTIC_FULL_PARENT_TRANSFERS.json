@@ -1,0 +1,118 @@
+{
+  "parentCommit": "da869d45d2ff88a0d7ae096838e060ea118dedee",
+  "files": [
+    {
+      "file": "run-auth-refresh.mjs",
+      "reference": "reference/r2-run-auth-refresh.mjs.txt",
+      "parentCommit": "da869d45d2ff88a0d7ae096838e060ea118dedee",
+      "beforeSha256": "70ecec9bb7f4d2b5e39edeb66f8a7cfdf5c0da9a3272fe6f702282d3b4b29bbc",
+      "afterSha256": "c28c1a45b7b9ea88c68be071aad86ec17038eb1d4e0dceb4ad3a604cdf5c92f1",
+      "hunks": [
+        {
+          "before": "test-auth-refresh-ps5-forward-20261017','AUTH_SOURCE_LOCATION_REQUIRED'",
+          "after": "test-auth-refresh-diagnostic-forward-20261017','AUTH_SOURCE_LOCATION_REQUIRED'"
+        },
+        {
+          "before": " // Presence, type and ignore metadata only. Parent never reads either private file.",
+          "after": " const routes=JSON.parse(fs.readFileSync(path.join(here,'STATIC_ROUTE_SOURCE.json'),'utf8'));\n check(sha(fs.readFileSync(path.join(FRONTEND,routes.file)))===routes.savedSha256\n  &&git(FRONTEND,['rev-parse',routes.commit+':'+routes.file]).toString().trim()===routes.gitBlob,'AUTH_STATIC_ROUTE_SOURCE_CHANGED');\n // Presence, type and ignore metadata only. Parent never reads either private file."
+        },
+        {
+          "before": "ownedDirectory:out,browserClosure:'SEE_CLOSED_CHILD_RESULT'};",
+          "after": "ownedDirectory:out,browserClosure:'SEE_CLOSED_CHILD_RESULT',diagnostic:result?.diagnostic??null};"
+        },
+        {
+          "before": "return {status:'AUTH_REFRESHED',statePath:state,browserClosed:true,sharedFrontendStateUntouched:true,",
+          "after": "return {status:'AUTH_REFRESHED',statePath:state,browserClosed:true,sharedFrontendStateUntouched:true,diagnostic:result.diagnostic,"
+        }
+      ]
+    },
+    {
+      "file": "forward/authenticate.mjs",
+      "reference": "reference/r2-forward-authenticate.mjs.txt",
+      "parentCommit": "da869d45d2ff88a0d7ae096838e060ea118dedee",
+      "beforeSha256": "c6211563a69da5605684c308917dfe06d5ed61579a2a1afa0b08d45218e46370",
+      "afterSha256": "2a44dcfc76aa9350678d0139e4ec1d7ff808d7a387052f24500a8dae83763b39",
+      "hunks": [
+        {
+          "before": "  const admitted=await admission(page);",
+          "after": "  const admitted=await admission(page);\n  network.recordAdmission(admitted);"
+        }
+      ]
+    },
+    {
+      "file": "worker.mjs",
+      "reference": "reference/r2-worker.mjs.txt",
+      "parentCommit": "da869d45d2ff88a0d7ae096838e060ea118dedee",
+      "beforeSha256": "40661ff677ab7387103f1a68d6da5352c7c9d0dfdb5a856bb169f4a0f97fbb7d",
+      "afterSha256": "f3cf58b68042cf10cfae648de50fa27b6c6fdcf71c7b166c931ec7e4fa4ca33c",
+      "hunks": [
+        {
+          "before": "version:'TEST_AUTH_REFRESH_PRIVATE_RESULT_V1'",
+          "after": "version:'TEST_AUTH_REFRESH_PRIVATE_RESULT_V2'"
+        },
+        {
+          "before": "browserClosed:closed,...network.summary()};",
+          "after": "browserClosed:closed,...network.summary(),diagnostic:network.diagnostics()};"
+        }
+      ]
+    },
+    {
+      "file": "policy.mjs",
+      "reference": "reference/r2-policy.mjs.txt",
+      "parentCommit": "da869d45d2ff88a0d7ae096838e060ea118dedee",
+      "beforeSha256": "d72eee8fc975a806a4d0cbbf9ecbbbca6d076897de5a5ef215a1b8cf8fe420e3",
+      "afterSha256": "91335abd77f5439be911c45e4558a5b52387c3833a7144d15054f8fe77b7f0e8",
+      "hunks": [
+        {
+          "before": "export function closedResult(value){",
+          "after": "export const diagnosticLabels=new Set(['NONE','STATIC_CHANGES_PING','STATIC_USER_GRID_PREFS','OTHER_NORMAL_BACKEND','MULTIPLE']);\nexport const diagnosticMethods=new Set(['NONE','POST','PATCH','PUT','DELETE','OTHER','MULTIPLE']);\nconst exactKeys=(v,keys)=>v&&typeof v==='object'&&!Array.isArray(v)&&JSON.stringify(Object.keys(v).sort())===JSON.stringify([...keys].sort());\nexport function blockedWriteLabel(url){\n let u;try{u=new URL(url);}catch{return 'OTHER_NORMAL_BACKEND';}\n // Static source literals only. Never retain or emit URL/query/body/identifiers.\n if(u.origin===BACK&&u.pathname==='/api/changes/ping')return 'STATIC_CHANGES_PING';\n if(u.origin===BACK&&u.pathname==='/api/users/me/grid-prefs')return 'STATIC_USER_GRID_PREFS';\n return 'OTHER_NORMAL_BACKEND';\n}\nexport function closedAdmission(value){\n check(exactKeys(value,['meStatus','actorUuid','admin','workspaceStatus','contract','queries']),'AUTH_CLOSED_RESULT_REQUIRED');\n for(const key of ['meStatus','workspaceStatus'])check(Number.isSafeInteger(value[key])&&value[key]>=0&&value[key]<=599,'AUTH_CLOSED_RESULT_REQUIRED');\n for(const key of ['actorUuid','admin','contract','queries'])check(typeof value[key]==='boolean','AUTH_CLOSED_RESULT_REQUIRED');\n return {meStatus:value.meStatus,actorUuid:value.actorUuid,admin:value.admin,workspaceStatus:value.workspaceStatus,contract:value.contract,queries:value.queries};\n}\nexport function closedDiagnostic(value){\n check(exactKeys(value,['phase','admission','blockedWriteLabel','blockedWriteMethod']),'AUTH_CLOSED_RESULT_REQUIRED');\n const admission=value.admission===null?null:closedAdmission(value.admission);\n check(value.phase===(admission===null?'BEFORE_EXPLICIT_ADMISSION':'EXPLICIT_ADMISSION_RETURNED')\n  &&diagnosticLabels.has(value.blockedWriteLabel)&&diagnosticMethods.has(value.blockedWriteMethod),'AUTH_CLOSED_RESULT_REQUIRED');\n check((value.blockedWriteLabel==='NONE')===(value.blockedWriteMethod==='NONE'),'AUTH_CLOSED_RESULT_REQUIRED');\n return {phase:value.phase,admission,blockedWriteLabel:value.blockedWriteLabel,blockedWriteMethod:value.blockedWriteMethod};\n}\nexport function closedResult(value){"
+        },
+        {
+          "before": "'status','version','blockedReadRequests'];",
+          "after": "'status','version','blockedReadRequests','diagnostic'];"
+        },
+        {
+          "before": "value.version==='TEST_AUTH_REFRESH_PRIVATE_RESULT_V1'",
+          "after": "value.version==='TEST_AUTH_REFRESH_PRIVATE_RESULT_V2'"
+        },
+        {
+          "before": " return value;\n}\nexport function networkGuard(){",
+          "after": " closedDiagnostic(value.diagnostic);\n return value;\n}\nexport function networkGuard(){"
+        },
+        {
+          "before": " const counts={};let violation=false,total=0;",
+          "after": " const counts={};let violation=false,total=0,admission=null,writeLabel='NONE',writeMethod='NONE';"
+        },
+        {
+          "before": "   if(kind==='FORBIDDEN_WRITE'||kind==='REFUSED')violation=true;",
+          "after": "   if(kind==='FORBIDDEN_WRITE'||kind==='REFUSED')violation=true;\n   if(kind==='FORBIDDEN_WRITE'){\n    const label=blockedWriteLabel(url),verb=['POST','PATCH','PUT','DELETE'].includes(method)?method:'OTHER';\n    writeLabel=writeLabel==='NONE'||writeLabel===label?label:'MULTIPLE';\n    writeMethod=writeMethod==='NONE'||writeMethod===verb?verb:'MULTIPLE';\n   }"
+        },
+        {
+          "before": "  assertAdmission(){check(!violation&&counts.LOGIN===1,'AUTH_NETWORK_BOUNDARY_HELD');},",
+          "after": "  assertAdmission(){check(!violation&&counts.LOGIN===1,'AUTH_NETWORK_BOUNDARY_HELD');},\n  recordAdmission(value){admission=closedAdmission(value);},\n  diagnostics(){return closedDiagnostic({phase:admission===null?'BEFORE_EXPLICIT_ADMISSION':'EXPLICIT_ADMISSION_RETURNED',admission,blockedWriteLabel:writeLabel,blockedWriteMethod:writeMethod});},"
+        }
+      ]
+    },
+    {
+      "file": "test.mjs",
+      "reference": "reference/r2-test.mjs.txt",
+      "parentCommit": "da869d45d2ff88a0d7ae096838e060ea118dedee",
+      "beforeSha256": "e696f5188bfdf08da5af0ec75fa15896dbc5020cf82f088c0e8a8674387ee5ea",
+      "afterSha256": "830d34c063566b593cedf676ba2ff8073576bdfdcb0bf5aea7b5c8e8a719a6df",
+      "hunks": [
+        {
+          "before": "version:'TEST_AUTH_REFRESH_PRIVATE_RESULT_V1'",
+          "after": "version:'TEST_AUTH_REFRESH_PRIVATE_RESULT_V2'"
+        },
+        {
+          "before": "loginRequests:1,refreshRequests:0,blockedReadRequests:0,forbiddenWriteRequests:0,refusedRequests:0};",
+          "after": "loginRequests:1,refreshRequests:0,blockedReadRequests:0,forbiddenWriteRequests:0,refusedRequests:0,diagnostic:{phase:'BEFORE_EXPLICIT_ADMISSION',admission:null,blockedWriteLabel:'NONE',blockedWriteMethod:'NONE'}};"
+        },
+        {
+          "before": " const network={assertAdmission:()=>{",
+          "after": " const network={recordAdmission:()=>{},assertAdmission:()=>{"
+        }
+      ]
+    }
+  ]
+}

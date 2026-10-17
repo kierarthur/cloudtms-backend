@@ -1,0 +1,17 @@
+{
+  "status": "PASS_SOURCE_ONLY",
+  "inheritedPublicChecks": 88,
+  "inheritedFiniteForwardChecks": 86,
+  "diagnosticChecksBeforeManifest": 90,
+  "protocolTests": 15,
+  "oldNewRouteCapDecisions": 550,
+  "completeParentReversals": 5,
+  "runtimeParentReversals": 4,
+  "actualR2BlockedMethodOrRoute": "NOT_IDENTIFIED_BY_COUNTERS",
+  "auth": "NOT_RUN",
+  "browser": "NOT_RUN",
+  "network": "NOT_RUN",
+  "aclMutation": "NOT_RUN",
+  "privateContentsRead": false,
+  "stateExport": "NOT_RUN"
+}
