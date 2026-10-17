@@ -1,0 +1,75 @@
+{
+  "actualLoader": {
+    "path": "scripts/cloudtms-managed-release-sql.mjs",
+    "sha256": "ff391fccf7f690d4d476e935870d740667e4dfd92b972bfd5d7d80b1b3bb912b"
+  },
+  "roots": [
+    {
+      "root": "supabase/repeatable/17102026_0722_weekly_source_current_read_health_v1.sql",
+      "closureSha256": "29047daf66dc9b4bc916ad2439fbde200a675e6311552d43a64aaba96f75d465",
+      "files": [
+        "supabase/repeatable/17102026_0722_weekly_source_current_read_health_v1.sql",
+        "supabase/repeatable/17102026_0722_weekly_source_current_read_health/01_native_status_child.sqlinc",
+        "supabase/repeatable/17102026_0722_weekly_source_current_read_health/02_current_read_access.sqlinc",
+        "supabase/repeatable/17102026_0722_weekly_source_current_read_health/03_complete_native_gate.sqlinc",
+        "supabase/repeatable/17102026_0722_weekly_source_current_read_health/04_complete_internal_source_read.sqlinc",
+        "supabase/repeatable/17102026_0722_weekly_source_current_read_health/05_complete_internal_service_read.sqlinc",
+        "supabase/repeatable/17102026_0722_weekly_source_current_read_health/06_complete_public_source_accept_read.sqlinc",
+        "supabase/repeatable/17102026_0722_weekly_source_current_read_health/98_complete_current_classification.sqlinc",
+        "supabase/repeatable/17102026_0722_weekly_source_current_read_health/99_acl.sqlinc"
+      ],
+      "declarations": [
+        "private.weekly_source_pay_decision_native_status_child_v1(jsonb,uuid,uuid,uuid,uuid)",
+        "private.weekly_source_pay_decision_read_access_v1(uuid,uuid,uuid)",
+        "private.weekly_source_pay_decision_native_normal_gate_v1(uuid,uuid,uuid,text)",
+        "private.weekly_source_pay_decision_read_source_v1(uuid,uuid,uuid)",
+        "public.weekly_source_pay_decision_read_source_v1(jsonb)",
+        "public.weekly_source_pay_decision_accept_v1(jsonb)",
+        "private._weekly_source_acl_table_contract_v1()",
+        "private._weekly_source_acl_lifecycle_column_contract_v1()",
+        "private._weekly_source_acl_private_helper_contract_v1()",
+        "private._weekly_source_acl_service_rpc_contract_v1()",
+        "private._weekly_source_immutable_record_guard_v1()",
+        "private._weekly_source_immutable_fact_guard_v1()"
+      ]
+    },
+    {
+      "root": "supabase/repeatable/17102026_0741_weekly_source_complete_classification_v1.sql",
+      "closureSha256": "ee6e1980d831755668511c8868ebb9b5f7fc53f8bd38db7410687a27fe09fe70",
+      "files": [
+        "supabase/repeatable/17102026_0741_weekly_source_complete_classification_v1.sql",
+        "supabase/repeatable/17102026_0741_weekly_source_complete_classification/01_complete_current_classification.sqlinc",
+        "supabase/repeatable/17102026_0741_weekly_source_complete_classification/99_exact_acl.sqlinc"
+      ],
+      "declarations": [
+        "private._weekly_source_acl_table_contract_v1()",
+        "private._weekly_source_acl_lifecycle_column_contract_v1()",
+        "private._weekly_source_acl_private_helper_contract_v1()",
+        "private._weekly_source_acl_service_rpc_contract_v1()",
+        "private._weekly_source_immutable_record_guard_v1()",
+        "private._weekly_source_immutable_fact_guard_v1()"
+      ]
+    }
+  ],
+  "distinctFinalHealthSignatures": 12,
+  "registeredFinalOwnersMatched": 12,
+  "missingNewChildRefused": true,
+  "filesRead": [
+    "supabase/repeatable/17102026_0722_weekly_source_current_read_health_v1.sql",
+    "supabase/repeatable/17102026_0722_weekly_source_current_read_health/01_native_status_child.sqlinc",
+    "supabase/repeatable/17102026_0722_weekly_source_current_read_health/02_current_read_access.sqlinc",
+    "supabase/repeatable/17102026_0722_weekly_source_current_read_health/03_complete_native_gate.sqlinc",
+    "supabase/repeatable/17102026_0722_weekly_source_current_read_health/04_complete_internal_source_read.sqlinc",
+    "supabase/repeatable/17102026_0722_weekly_source_current_read_health/05_complete_internal_service_read.sqlinc",
+    "supabase/repeatable/17102026_0722_weekly_source_current_read_health/06_complete_public_source_accept_read.sqlinc",
+    "supabase/repeatable/17102026_0722_weekly_source_current_read_health/98_complete_current_classification.sqlinc",
+    "supabase/repeatable/17102026_0722_weekly_source_current_read_health/99_acl.sqlinc",
+    "supabase/repeatable/17102026_0741_weekly_source_complete_classification_v1.sql",
+    "supabase/repeatable/17102026_0741_weekly_source_complete_classification/01_complete_current_classification.sqlinc",
+    "supabase/repeatable/17102026_0741_weekly_source_complete_classification/99_exact_acl.sqlinc"
+  ],
+  "BankBodyReads": 0,
+  "globalDefinerInventory": "ROOT_OWNED_NOT_RERUN",
+  "native": "NOT_RUN",
+  "dbConnections": 0
+}

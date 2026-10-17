@@ -1,0 +1,40 @@
+{
+  "integrationParent": "84738fe4057d9d693ccd723eb1835106f1091f57",
+  "requiredPackets": [
+    [
+      "source-current-read-health-successor-20261017",
+      "083f144b3fa1658fc9296c9fd7f8bd4afcd20f6f"
+    ],
+    [
+      "source-complete-classification-current-successor-20261017",
+      "3f01b8f1782175c3f2be3b167b296a478e3a042a"
+    ],
+    [
+      "source-read-identity-portability-forward-20261017",
+      "39dc0664b56a110a08d75351e379e04c6ae155e2"
+    ]
+  ],
+  "files": [
+    {
+      "target": "scripts/healthroster-source-read-type-review.mjs",
+      "sourcePath": "payload/scripts/healthroster-source-read-type-review.mjs",
+      "bytes": 5814,
+      "sha256": "03504c269e29432de19dc82a93c62b221489b42ac6e62c2c95f6e6bedd149d2f",
+      "existingParentSha256": null,
+      "newFileMustBeAbsent": true
+    },
+    {
+      "target": "scripts/bpay-next-source-gates.mjs",
+      "sourcePath": "payload/scripts/bpay-next-source-gates.mjs",
+      "bytes": 283554,
+      "sha256": "0ea663b95c457f4f06b403aa4928f42a0993dfecafdc495a6fa1915713d931f8",
+      "existingParentSha256": "0ae982224fda89dc77d6f6bd606acdaa6a37ccf126db01b87d5134f4612f2dda",
+      "newFileMustBeAbsent": false
+    }
+  ],
+  "runtimeSqlChanges": 0,
+  "gateHunks": 3,
+  "proofPath": "docs/healthroster-build/proposals/source-current-read-peer-f23-20261017/CLASSIFICATION.json",
+  "proofSha256": "7aa875bf450b81be3d945182c67398c4134f3cb325ab88ff2aa089ac99f2a399",
+  "native": "NOT_RUN"
+}

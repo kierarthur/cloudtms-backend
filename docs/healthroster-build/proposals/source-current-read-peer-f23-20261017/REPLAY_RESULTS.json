@@ -1,0 +1,45 @@
+{
+  "results": [
+    {
+      "packet": "source-read-identity-portability-forward-20261017",
+      "file": "tests.mjs",
+      "status": 0,
+      "stdout": "{\"passed\":56,\"native\":\"NOT_RUN\",\"API\":\"NOT_RUN\"}"
+    },
+    {
+      "packet": "source-read-identity-portability-forward-20261017",
+      "file": "source-tests.mjs",
+      "status": 0,
+      "stdout": "{\"passed\":7,\"native\":\"NOT_RUN\"}"
+    },
+    {
+      "packet": "source-read-identity-portability-forward-20261017",
+      "file": "run-regressions.mjs",
+      "status": 0,
+      "stdout": "{\"passed\":224,\"failed\":0,\"native\":\"NOT_RUN\"}"
+    },
+    {
+      "packet": "source-read-identity-portability-forward-20261017",
+      "file": "portability-tests.mjs",
+      "status": 0,
+      "stdout": "{\"originalFailureReproduced\":true,\"forwardPassed\":224,\"rootWrites\":0,\"native\":\"NOT_RUN\"}"
+    },
+    {
+      "packet": "source-current-read-health-successor-20261017",
+      "file": "source-tests.mjs",
+      "status": 0,
+      "stdout": "{\"passed\":19,\"native\":\"NOT_RUN\"}"
+    },
+    {
+      "packet": "source-complete-classification-current-successor-20261017",
+      "file": "tests.mjs",
+      "status": 0,
+      "stdout": "{\"passed\":10,\"failed\":0,\"native\":\"NOT_RUN\"}"
+    }
+  ],
+  "frozenWrites": 0,
+  "receiptWrites": "OWN_REPORT_REPLAYED_ONLY",
+  "networkCalls": 0,
+  "dbConnections": 0,
+  "native": "NOT_RUN"
+}

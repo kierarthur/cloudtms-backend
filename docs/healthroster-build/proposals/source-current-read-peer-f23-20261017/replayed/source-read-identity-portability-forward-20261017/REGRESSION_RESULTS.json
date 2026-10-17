@@ -1,0 +1,41 @@
+{
+  "passed": 224,
+  "failed": 0,
+  "files": [
+    {
+      "file": "tests/weekly-source/source-pay-decision-worker.test.mjs",
+      "commit": "af933e3e611a0b83d361a185bfda269cb6543bc8",
+      "sha256": "df47674dba2d44fc1c08840a001474ead211ce4294e73d6ab4f7a46f04f4b164"
+    },
+    {
+      "file": "tests/weekly-source/source-pay-decision-request.test.mjs",
+      "commit": "af933e3e611a0b83d361a185bfda269cb6543bc8",
+      "sha256": "f8c7a039338b77c26a98ee3652bf3835e120ea3b27f6537d7fd947f119921e99"
+    },
+    {
+      "file": "tests/weekly-source/source-pay-decision-preparation.test.mjs",
+      "commit": "af933e3e611a0b83d361a185bfda269cb6543bc8",
+      "sha256": "eb126d1c49ccdb7e37305e5a03ff0d234a6174d747817ca993257423097a0470"
+    },
+    {
+      "file": "tests/weekly-source/source-native-contract.test.mjs",
+      "commit": "af933e3e611a0b83d361a185bfda269cb6543bc8",
+      "sha256": "f9922eec4daa01c8dafcd4e5a2a171fc791b390fa32d2e67f112247441a19912"
+    },
+    {
+      "file": "tests/weekly-source/source-native-economic.test.mjs",
+      "commit": "af933e3e611a0b83d361a185bfda269cb6543bc8",
+      "sha256": "529144c267f5b60f754929fcb859fb29fcd9f94eafd1beacd6d486e8a755cad3"
+    },
+    {
+      "file": "tests/weekly-source/source-native-snapshot.test.mjs",
+      "commit": "af933e3e611a0b83d361a185bfda269cb6543bc8",
+      "sha256": "db010e84fd88625a1d58f537cf2b7d67edebb9eaf7f3f9fd0da0b66c1424276e"
+    }
+  ],
+  "scope": "UNCHANGED_GIT_PINNED_TESTS_WITH_CANDIDATE_HEALTH_MODULES_AND_IN_MEMORY_RPC_FIXTURES",
+  "unrelatedBankingFence": "TEST_ONLY_THROW_IF_CALLED_NO_BANK_BODY_READ",
+  "native": "NOT_RUN",
+  "API": "NOT_RUN",
+  "dbConnections": 0
+}
