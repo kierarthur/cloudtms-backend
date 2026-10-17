@@ -1,0 +1,41 @@
+{
+  "version": "DAILY_GENUINE_B2_S0_ACTUAL_AUTH_HOLD_V1",
+  "sourceCommit": "b7694b8b727084fb749c8b015285ae3c74e76f09",
+  "rootSource": "1f91895a78dd213ae8088937e4839b4db33b7424",
+  "sourceAdmission": {
+    "status": "B2_S0_PUBLIC_SOURCE_ADMITTED",
+    "configSha256": "93461382a42709b2116746c1fb458d6d8e002235e0528aeaac920834ea5fd961"
+  },
+  "status": "HOLD",
+  "code": "FIXTURE_CURRENT_ME401",
+  "nativeCalls": 0,
+  "businessRequests": 0,
+  "browserClosed": true,
+  "childExitCode": 1,
+  "sharedTurn": {
+    "takenAt": "2026-10-17T17:45:22.053Z",
+    "releasedAt": "2026-10-17T17:45:40.503Z",
+    "explicitUnlockConfirmed": true,
+    "connectionClosed": true,
+    "proved": false,
+    "key": [
+      20261013,
+      1
+    ]
+  },
+  "publicEvidence": [
+    {
+      "file": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\.codex-tmp\\daily-genuine-progress-20261017-96ac94fcfa7c4aabb8aee2962107ba85\\PROGRESS.jsonl",
+      "bytes": 428,
+      "sha256": "2d9e04f080ac2729356fa732709b6c0e4e4bdd53dc1738ea7085c353bb861100",
+      "text": "{\"status\":\"HOLD\",\"code\":\"S0_STAGE_PHASE_REFUSED\",\"ownedDirectory\":\"D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/.codex-tmp/daily-genuine-stages-20261017-b59083bda3a084391a5053245bb559c3\",\"stage\":\"S0\",\"businessRequests\":0,\"sourceCommit\":\"b7694b8b727084fb749c8b015285ae3c74e76f09\",\"qualifiedPrefix\":\"READ_ACTUAL_CLOSED_CHILD_RECORDS_NO_SYNTHETIC_VERDICT\",\"sharedTurn\":\"SEE_ORIGINAL_SEND7_RELEASE_RECORD\"}\n"
+    },
+    {
+      "file": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\.codex-tmp\\daily-genuine-stages-20261017-b59083bda3a084391a5053245bb559c3\\CLOSED_bind_S0_681129fc63871961.json",
+      "bytes": 98,
+      "sha256": "0ff2ae539aae8c6c59e7e94a0f07342c48a5672b2d658f1e950d4c65544885be",
+      "text": "{\"status\":\"HOLD\",\"code\":\"FIXTURE_CURRENT_ME401\",\"phase\":\"bind\",\"stage\":\"S0\",\"browserClosed\":true}\n"
+    }
+  ],
+  "disposition": "Preserved genuine before-native authentication refusal. Fresh child-owned authentication and reviewed real-source binding are required. Earlier S0R9 and R10 history unchanged; no new S0 qualification, prefix or business plan published."
+}

@@ -1,0 +1,76 @@
+{
+  "version": "QT_COST_BRIDGE_ACTUAL_LOCAL_TRANSPORT_V1",
+  "status": "LOCAL_TRANSPORT_PASS_ONLY",
+  "scope": "LOCAL_PROTOTYPE_SHAPE_FIXTURES_ONLY_NOT_DATABASE_EVIDENCE",
+  "launch": {
+    "chunk_id": "1bb144",
+    "wall_time_seconds": 10.0144648,
+    "session_id": 64456,
+    "original_token_count": 4,
+    "output": "\u001b[?9001h\u001b[?1004h"
+  },
+  "pending": {
+    "chunk_id": "a2d499",
+    "wall_time_seconds": 1.000916,
+    "session_id": 64456,
+    "original_token_count": 17,
+    "output": "{\"status\":\"COST_CAPTURED_PENDING_RELEASE\",\"ownedDirectory\":\"D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/.codex-tmp/qt-audit-cost1000-20261017-c5266999308f4f2caaa499eca61ccdda\",\"inputFile\":\"INPUT.json\",\"nativeResultFile\":\"NATIVE_RESULT.json\",\"remainingWorkMs\":96739,\"holderStartedAt\":\"2026-10-17T17:39:55.280Z\",\"compatibility\":\"ROOT_REVIEW_REQUIRED\",\"businessScope\":\"NOT_RUN\",\"mode\":\"SCAN_PROJECT\"}\n"
+  },
+  "summary": {
+    "chunk_id": "b16b0b",
+    "wall_time_seconds": 0.0000291,
+    "exit_code": 0,
+    "original_token_count": 7,
+    "output": "{\"status\":\"COST_CAPTURED_OWN_TURN_RELEASED\",\"ownedDirectory\":\"D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/.codex-tmp/qt-audit-cost1000-20261017-c5266999308f4f2caaa499eca61ccdda\",\"businessScope\":\"NOT_RUN\",\"compatibility\":\"ROOT_REVIEW_REQUIRED_NOT_QUALIFIED\"}\n"
+  },
+  "evidence": {
+    "transport": "ACTUAL_REDIRECTED_CHILD_STDOUT",
+    "progressFile": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/.codex-tmp/qt-cost-native-cmd-20261017-1bf93f9b391a48a384578df2eb54f8f7/PROGRESS.jsonl",
+    "rawPtyResponses": [
+      {
+        "chunk_id": "a2d499",
+        "wall_time_seconds": 1.000916,
+        "session_id": 64456,
+        "original_token_count": 17,
+        "output": "\u001b[?25l\u001b[2J\u001b[m\u001b[HRESULT_READY\r\n\u001b]0;C:\\Windows\\system32\\cmd.exe\u0007\u001b[?25h"
+      },
+      {
+        "chunk_id": "b16b0b",
+        "wall_time_seconds": 0.0000291,
+        "exit_code": 0,
+        "original_token_count": 7,
+        "output": "RELEASE\r\n\u001b[?9001l\u001b[?1004l"
+      }
+    ],
+    "progressReads": [
+      {
+        "version": "QT_COST_REDIRECTED_PROGRESS_V1",
+        "nonce": "1bf93f9b391a48a384578df2eb54f8f7",
+        "offset": 412,
+        "prefixSha256": "d75aa53c41b3437d0167a1ed1923d004806b899e45a7ce81dc869bc538f15b8b",
+        "fileId": "1852511126:1970324839787087:1792258795211786400",
+        "delta": "{\"status\":\"COST_INPUT_READY\",\"ownedDirectory\":\"D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/.codex-tmp/qt-audit-cost1000-20261017-c5266999308f4f2caaa499eca61ccdda\",\"inputFile\":\"INPUT.json\",\"nativeResultFile\":\"NATIVE_RESULT.json\",\"remainingWorkMs\":120000,\"holderStartedAt\":\"2026-10-17T17:39:55.280Z\",\"compatibility\":\"ROOT_REVIEW_REQUIRED\",\"businessScope\":\"NOT_RUN\",\"mode\":\"SCAN_PROJECT\"}\n"
+      },
+      {
+        "version": "QT_COST_REDIRECTED_PROGRESS_V1",
+        "nonce": "1bf93f9b391a48a384578df2eb54f8f7",
+        "offset": 836,
+        "prefixSha256": "b6cdbc387246cc3299de03ee73120d1ff3e990efa82d06b4f43f20e3adcbba28",
+        "fileId": "1852511126:1970324839787087:1792258795211786400",
+        "delta": "{\"status\":\"COST_CAPTURED_PENDING_RELEASE\",\"ownedDirectory\":\"D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/.codex-tmp/qt-audit-cost1000-20261017-c5266999308f4f2caaa499eca61ccdda\",\"inputFile\":\"INPUT.json\",\"nativeResultFile\":\"NATIVE_RESULT.json\",\"remainingWorkMs\":96739,\"holderStartedAt\":\"2026-10-17T17:39:55.280Z\",\"compatibility\":\"ROOT_REVIEW_REQUIRED\",\"businessScope\":\"NOT_RUN\",\"mode\":\"SCAN_PROJECT\"}\n"
+      },
+      {
+        "version": "QT_COST_REDIRECTED_PROGRESS_V1",
+        "nonce": "1bf93f9b391a48a384578df2eb54f8f7",
+        "offset": 1120,
+        "prefixSha256": "3b40a5b155263a59edcd93f72e0ae21bfaad300862700c78a195f4b12f262d2c",
+        "fileId": "1852511126:1970324839787087:1792258795211786400",
+        "delta": "{\"status\":\"COST_CAPTURED_OWN_TURN_RELEASED\",\"ownedDirectory\":\"D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/.codex-tmp/qt-audit-cost1000-20261017-c5266999308f4f2caaa499eca61ccdda\",\"businessScope\":\"NOT_RUN\",\"compatibility\":\"ROOT_REVIEW_REQUIRED_NOT_QUALIFIED\"}\n"
+      }
+    ]
+  },
+  "nativeCalls": 0,
+  "sharedLocksTaken": 0,
+  "auth": false,
+  "qtAcceptance": "NOT_RUN"
+}
