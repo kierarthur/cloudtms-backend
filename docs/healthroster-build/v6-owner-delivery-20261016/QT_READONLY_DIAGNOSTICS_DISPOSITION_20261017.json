@@ -1,0 +1,73 @@
+{
+  "version": "QT_ACTUAL_READONLY_DIAGNOSTICS_DISPOSITION_V1",
+  "executionCommit": "3948d99a2f21093e19428fa3a3f8de97517be5b2",
+  "actualCommittedSourceAdmission": {
+    "status": "PASS",
+    "watchedInputs": 63,
+    "programmeStatements": 56
+  },
+  "artifacts": [
+    {
+      "source": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\.codex-tmp\\contact-qt-audit-bag-plan-20261017-c9a4f3102f254a6a91f9828417710a51\\SUMMARY.json",
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/QT_EXACT_AUDIT_PLAN_ACTUAL_20261017.json",
+      "bytes": 5588,
+      "sha256": "ac03edfb0f69b7684ce028ada25570243f8b110ae65938816bc521a13163bb82"
+    },
+    {
+      "source": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\.codex-tmp\\contact-qt-positive-native-20261017-background-cost-c06808f177fc4e8797538e99106efa6b\\COMPONENT_RESULT.json",
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/QT_BACKGROUND_COMPONENT_ACTUAL_20261017.json",
+      "bytes": 3537,
+      "sha256": "396c9306575cc299bae9500de9f9a70fe1cf6c5c7bc1a9d58d73a06f23b6be7d"
+    },
+    {
+      "source": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\.codex-tmp\\contact-qt-positive-native-20261017-background-cost-c06808f177fc4e8797538e99106efa6b\\DIAGNOSTIC_SUMMARY.json",
+      "target": "docs/healthroster-build/v6-owner-delivery-20261016/QT_BACKGROUND_COMPONENT_TURN_SUMMARY_20261017.json",
+      "bytes": 1830,
+      "sha256": "a37329b11bf1ecff516146ff8324e24f8391a7c8ba20eb83b6f461cba89ffc98"
+    }
+  ],
+  "turns": [
+    {
+      "chat": "HealthRoster",
+      "task": "CONTACT_QT_FIXED_AUDIT_BAG_PLAN_ONLY",
+      "status": "RELEASED",
+      "takenAt": "2026-10-17T19:36:10.601Z",
+      "releasedAt": "2026-10-17T19:36:15.015Z",
+      "explicitUnlockConfirmed": true,
+      "connectionClosed": true,
+      "proved": true,
+      "key": [
+        20261013,
+        1
+      ]
+    },
+    {
+      "chat": "HealthRoster",
+      "task": "CONTACT_QT_CANONICAL_COMPONENT_COST_V1",
+      "status": "RELEASED",
+      "takenAt": "2026-10-17T19:37:59.514Z",
+      "releasedAt": "2026-10-17T19:38:12.719Z",
+      "explicitUnlockConfirmed": true,
+      "connectionClosed": true,
+      "proved": true,
+      "key": [
+        20261013,
+        1
+      ]
+    }
+  ],
+  "auditPlan": "Five complete estimated nodes: serial Seq Scan and Sort feeding plain aggregates. Estimated1207404 rows; no measured spill/memory/server runtime/cause.",
+  "backgroundComponent": {
+    "nativeCounts": [
+      "75105",
+      "20"
+    ],
+    "componentCallHostElapsedMs": 11289,
+    "queryCompletionHostSpanMs": 8982,
+    "qualification": "Original full background-array component digest only; not full C, before/after equality, B execution, performance improvement or restoration."
+  },
+  "noBusinessFixturesOrPost": true,
+  "capsUnchanged": true,
+  "install2": "NOT_INSTALLED",
+  "finalCritics": "NOT_RUN"
+}

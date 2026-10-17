@@ -1,0 +1,193 @@
+{
+  "status": "FIXED_AUDIT_BAG_PLANS_CAPTURED_OWN_TURN_RELEASED_NOT_RESTORATION",
+  "peer": {
+    "database": "cloudtms_test_clone",
+    "readOnly": true,
+    "holderPid": 304678,
+    "isolation": "repeatable read",
+    "readerPid": 304680,
+    "databaseOid": 324139,
+    "noRoleSwitch": true
+  },
+  "plan": {
+    "version": "CONTACT_EXACT_AUDIT_BAG_FULL_ESTIMATED_PLAN_V1",
+    "nodeCount": 5,
+    "nodes": [
+      {
+        "ordinal": 1,
+        "parent": null,
+        "nodeType": "Aggregate",
+        "startupCost": 280617.17,
+        "totalCost": 280617.19,
+        "estimatedRows": 1,
+        "estimatedWidth": 32,
+        "parallelAware": false,
+        "asyncCapable": false,
+        "strategy": "Plain",
+        "partialMode": "Simple"
+      },
+      {
+        "ordinal": 2,
+        "parent": 1,
+        "nodeType": "Sort",
+        "startupCost": 280617.16,
+        "totalCost": 280617.16,
+        "estimatedRows": 1,
+        "estimatedWidth": 72,
+        "parallelAware": false,
+        "asyncCapable": false,
+        "parentRelationship": "Outer",
+        "sortKeyCount": 1
+      },
+      {
+        "ordinal": 3,
+        "parent": 2,
+        "nodeType": "Aggregate",
+        "startupCost": 280617.13,
+        "totalCost": 280617.15,
+        "estimatedRows": 1,
+        "estimatedWidth": 72,
+        "parallelAware": false,
+        "asyncCapable": false,
+        "strategy": "Plain",
+        "partialMode": "Simple",
+        "parentRelationship": "Outer"
+      },
+      {
+        "ordinal": 4,
+        "parent": 3,
+        "nodeType": "Sort",
+        "startupCost": 271561.6,
+        "totalCost": 274580.11,
+        "estimatedRows": 1207404,
+        "estimatedWidth": 32,
+        "parallelAware": false,
+        "asyncCapable": false,
+        "parentRelationship": "Outer",
+        "sortKeyCount": 1
+      },
+      {
+        "ordinal": 5,
+        "parent": 4,
+        "nodeType": "Seq Scan",
+        "startupCost": 0,
+        "totalCost": 132672.1,
+        "estimatedRows": 1207404,
+        "estimatedWidth": 32,
+        "parallelAware": false,
+        "asyncCapable": false,
+        "parentRelationship": "Outer",
+        "relationOrdinal": 1
+      }
+    ],
+    "allNodesRetained": true,
+    "rawExpressionsPersisted": false,
+    "rawPlanPersisted": false,
+    "actualRowsOrTimings": false,
+    "actualSpillOrPeakMemory": false,
+    "restorationQualified": false
+  },
+  "progress": {
+    "version": "CONTACT_EXACT_AUDIT_BAG_PLAN_PROGRESS_V1",
+    "childClosed": true,
+    "completed": [
+      {
+        "ordinal": 1,
+        "completion": "BEGIN_COMPLETE",
+        "receivedAt": "2026-10-17T19:36:13.387Z"
+      },
+      {
+        "ordinal": 2,
+        "completion": "GUARD_COMPLETE",
+        "receivedAt": "2026-10-17T19:36:13.449Z"
+      },
+      {
+        "ordinal": 3,
+        "completion": "PEER_COMPLETE",
+        "receivedAt": "2026-10-17T19:36:13.482Z"
+      },
+      {
+        "ordinal": 4,
+        "completion": "SEARCH_PATH_COMPLETE",
+        "receivedAt": "2026-10-17T19:36:13.505Z"
+      },
+      {
+        "ordinal": 5,
+        "completion": "EXPLAIN_COMPLETE",
+        "receivedAt": "2026-10-17T19:36:13.543Z"
+      },
+      {
+        "ordinal": 6,
+        "completion": "ROLLBACK_COMPLETE",
+        "receivedAt": "2026-10-17T19:36:13.570Z"
+      }
+    ],
+    "nextUnconfirmedOrdinal": null,
+    "actualRowsOrTimings": false,
+    "restorationQualified": false
+  },
+  "source": {
+    "version": "CONTACT_EXACT_EXECUTED_AUDIT_BAG_ESTIMATED_PLAN_V1",
+    "executedBatchInputSha256": "ec19d14dc4b5562703e255534dbf544d82f714f23b6f0dacee0277f238dd138a",
+    "executedAuditBagSha256": "f5729765fdf3acfaf96ce915b59e342cbd3e5201bd5a06e3b2f5bfdf2dc9663f",
+    "explainStatementSha256": "2a8a5e29d51562e1f6dc0ef87e151e9ff9eb52fb9e14ab690a57161f3fa46f57",
+    "diagnosticInputSha256": "7a32ee3188922f11cc2446bc5c0d70bf4587d83b4af68562808e6b99adbc3796",
+    "canonicalReferenceExecuted": false,
+    "auditQueryExecuted": false,
+    "analyze": false,
+    "statements": 6,
+    "fullCanonicalSnapshotRead": false,
+    "completeMapsPersisted": false,
+    "restorationQualified": false
+  },
+  "childClosed": true,
+  "transport": {
+    "stdoutBytes": 3186,
+    "frameCount": 7
+  },
+  "noBDispatched": true,
+  "noFixture": true,
+  "completeMapsPersisted": false,
+  "restorationQualified": false,
+  "elapsedMilliseconds": 3689.9248000000002,
+  "workBudgetMilliseconds": 120000,
+  "wholeBudgetMilliseconds": 180000,
+  "sourceGates": [
+    {
+      "phase": "INITIAL_SOURCE",
+      "startedAt": "2026-10-17T19:36:07.815Z",
+      "finishedAt": "2026-10-17T19:36:08.535Z",
+      "elapsedMilliseconds": 720.8734999999999,
+      "completed": true
+    },
+    {
+      "phase": "before-work",
+      "startedAt": "2026-10-17T19:36:10.693Z",
+      "finishedAt": "2026-10-17T19:36:11.330Z",
+      "elapsedMilliseconds": 637.7892999999999,
+      "completed": true
+    },
+    {
+      "phase": "before-fixed-read-only-metadata",
+      "startedAt": "2026-10-17T19:36:12.356Z",
+      "finishedAt": "2026-10-17T19:36:13.068Z",
+      "elapsedMilliseconds": 712.6896999999999,
+      "completed": true
+    },
+    {
+      "phase": "after-fixed-read-only-metadata",
+      "startedAt": "2026-10-17T19:36:13.609Z",
+      "finishedAt": "2026-10-17T19:36:14.256Z",
+      "elapsedMilliseconds": 647.4007000000001,
+      "completed": true
+    },
+    {
+      "phase": "callback-complete",
+      "startedAt": "2026-10-17T19:36:14.304Z",
+      "finishedAt": "2026-10-17T19:36:14.982Z",
+      "elapsedMilliseconds": 678.1796999999997,
+      "completed": true
+    }
+  ],
+  "ownTurnExplicitlyReleasedAndClosed": true
+}

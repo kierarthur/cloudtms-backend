@@ -1,0 +1,45 @@
+{
+  "status": "FIXED_COMPONENT_COMPLETED_NO_RESTORATION_VERDICT",
+  "caseId": "QT_ADMIN_CONTROLS_V1",
+  "component": "BACKGROUND",
+  "source": {
+    "version": "CONTACT_FIXED_COMPONENT_SOURCE_V1",
+    "canonicalSqlSha256": "6568718145d827052eef39f1989b722d6c5ec3880133c4aa86f462a5b4c29b93",
+    "originalInputSha256": "d8c14b51223d85df181f080c4638ec9da1c3215885d2ab99a29f55c0189f6a91",
+    "componentQuerySha256": {
+      "AUDIT": "b81e7dcf5d7d67390ec4c3df1f49205f3e6c26cc5b1e980a9e8ff1dfdde922fd",
+      "CATALOGUE": "b8e2879e440d787e1359fab95e6ce8f55c8f73c9bb7349f119fda39f43038fea",
+      "BACKGROUND": "64ac4537fa0fd343f9a6084621c3d7d6dbc293ba4b480c2750d055c994d9f5d2"
+    },
+    "componentInputSha256": {
+      "AUDIT": "113cfcb4f69b95542336175e76f35daf815cbde29948f220c9d987ee059a54a2",
+      "CATALOGUE": "d5ff64f77d6d8b205cf8a3ca15baaf5c982918cc21252bcdcea990f36bc09b98",
+      "BACKGROUND": "0cd964ded747a3a4af5c39fb6fd1ad60a3f0712a449504f9d162fd98cada4efb"
+    },
+    "statementsPerComponent": 6,
+    "fullCanonicalSnapshotRead": false,
+    "componentOnly": true,
+    "restorationQualified": false,
+    "limits": {
+      "stdoutBytes": 67108864,
+      "stderrBytes": 16384,
+      "connectSeconds": 10,
+      "statementMilliseconds": 45000,
+      "lockMilliseconds": 2000,
+      "childMilliseconds": 70000,
+      "terminateGraceMilliseconds": 2000,
+      "closeGraceMilliseconds": 3000
+    }
+  },
+  "timing": {
+    "sequenceStartedAt": "2026-10-17T19:38:00.267Z",
+    "sourceBuildStartedAt": "2026-10-17T19:38:00.268Z",
+    "sourceBuildFinishedAt": "2026-10-17T19:38:00.755Z",
+    "componentStartedAt": "2026-10-17T19:38:00.755Z",
+    "componentReturnedAt": "2026-10-17T19:38:12.044Z"
+  },
+  "fullCanonicalSnapshotInvoked": false,
+  "mcpDispatched": false,
+  "fixturesAttempted": false,
+  "restorationQualified": false
+}
