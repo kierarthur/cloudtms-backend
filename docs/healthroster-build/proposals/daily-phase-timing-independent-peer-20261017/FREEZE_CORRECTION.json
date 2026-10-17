@@ -1,0 +1,5 @@
+{
+  "supersededPeerCommit": "4d1d3f7a83343555d920380b40fb28f831c0f91b",
+  "oldManifestSha256": "d822be37736be7ec3e1523a2d196603daccf2a2c260509b2c6c9e3bbf2fdf250",
+  "correction": "Include captured reference/MANIFEST.json; original predicate wrongly excluded every basename MANIFEST.json. Source and review verdict unchanged. Earlier commit retained."
+}

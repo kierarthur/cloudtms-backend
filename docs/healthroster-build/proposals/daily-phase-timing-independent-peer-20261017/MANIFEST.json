@@ -7,9 +7,19 @@
       "sha256": "eab6b1a9a8eac3da0a5cb2ce2850fd2afa4837db7176d5d2452edc82cb3e1719"
     },
     {
+      "file": "FREEZE_CORRECTION.json",
+      "bytes": 358,
+      "sha256": "0391889cb3533be029427976bb13a2194404a78e9a48417a46dbb9a62a5256c2"
+    },
+    {
       "file": "README.md",
       "bytes": 2215,
       "sha256": "c7ab3d7d5e91be849e0c8aeb420fcf67cdd991d66d459fb71d9960fa8c065575"
+    },
+    {
+      "file": "reference/MANIFEST.json",
+      "bytes": 1672,
+      "sha256": "e306354196c52aee8675d122b05821df071ced962c3345de0b5e97c86b40e4ac"
     },
     {
       "file": "reference/measure.mjs",
