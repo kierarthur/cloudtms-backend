@@ -1,0 +1,12 @@
+{
+  "source": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/.codex-tmp/contact-qt-positive-native-20261017-constructors-r1/HOLD.json",
+  "sha256": "a7c90c29508a215e0a9a85163db8cd6441762895e6961e7a3b6bc459ae2965ed",
+  "savedRawCopy": true,
+  "gitBackingNotAsserted": true,
+  "cause": "UNKNOWN_STDERR_DISCARDED",
+  "rootReportedScope": "C_BEFORE_STOPPED_BEFORE_READY_INPUT_MCP_B_MARKER_DDL_FIXTURES",
+  "rootReportedOwnUnlockAndCloseAt": "2026-10-17T08:58:22.259Z",
+  "rootReportedProved": false,
+  "notIndependentlyNativeObservedHere": true,
+  "nativeTrialByThisAuthor": "NOT_RUN"
+}
