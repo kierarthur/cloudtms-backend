@@ -1,0 +1,16 @@
+alter function private.daily_rate_correction_health_financial_projection_assert_v1(jsonb,boolean) owner to postgres;
+revoke all on function private.daily_rate_correction_health_financial_projection_assert_v1(jsonb,boolean) from PUBLIC,anon,authenticated,service_role;
+alter function private.daily_rate_correction_health_invoice_effect_v1(jsonb) owner to postgres;
+revoke all on function private.daily_rate_correction_health_invoice_effect_v1(jsonb) from PUBLIC,anon,authenticated,service_role;
+alter function private.daily_rate_correction_health_actions_assert_v1(jsonb) owner to postgres;
+revoke all on function private.daily_rate_correction_health_actions_assert_v1(jsonb) from PUBLIC,anon,authenticated,service_role;
+alter function private.daily_rate_correction_health_review_enroll_v1(jsonb) owner to postgres;
+revoke all on function private.daily_rate_correction_health_review_enroll_v1(jsonb) from PUBLIC,anon,authenticated,service_role;
+alter function private.daily_rate_correction_health_revision_apply_v1(jsonb) owner to postgres;
+revoke all on function private.daily_rate_correction_health_revision_apply_v1(jsonb) from PUBLIC,anon,authenticated,service_role;
+alter function private.daily_rate_correction_review_v1(jsonb) owner to postgres;
+revoke all on function private.daily_rate_correction_review_v1(jsonb) from PUBLIC,anon,authenticated,service_role;
+alter function private.daily_rate_correction_accept_v1(jsonb) owner to postgres;
+revoke all on function private.daily_rate_correction_accept_v1(jsonb) from PUBLIC,anon,authenticated,service_role;
+alter function private.daily_rate_correction_result_v1(uuid,uuid) owner to postgres;
+revoke all on function private.daily_rate_correction_result_v1(uuid,uuid) from PUBLIC,anon,authenticated,service_role;
