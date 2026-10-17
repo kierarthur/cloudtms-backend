@@ -1,0 +1,91 @@
+{
+  "version": "CONTRACT_PREVIEW_HEALTH_PREENROLLMENT_LOCK_FORWARD_V1",
+  "status": "HEALTH_F1_CHOREOGRAPHY_CORRECTED_GENUINE_NATIVE_COMPOSITION_HELD",
+  "files": [
+    {
+      "path": "assemble.py",
+      "bytes": 5937,
+      "sha256": "4e6562f20d585452b2bc2b589fdb9bfe236c4136212790464276f5ec239b159d"
+    },
+    {
+      "path": "checks/offline.py",
+      "bytes": 12604,
+      "sha256": "21b6f52fe920b94a08a18afdd48c805cb02be960d3ffc8cd8343de6e41d7c62d"
+    },
+    {
+      "path": "checks/verify-freeze.py",
+      "bytes": 993,
+      "sha256": "bf1459ef7156c5a681118a7ecea899f6fb226ea5aa25a4c79b59fcc1a9d34a6d"
+    },
+    {
+      "path": "FINDING_SOURCE_PIN.json",
+      "bytes": 3261,
+      "sha256": "9cf4ffe6d767133006ab2bda4f41084b59880a1837c9785a7c9d7c5fa897dcae"
+    },
+    {
+      "path": "fragments/21_locked_preview_enrollment.plpgsql",
+      "bytes": 12208,
+      "sha256": "ead037e0a9edf91d849a20389fa65c96ccbdbaa5af88eb1f82f27537c26dcc23"
+    },
+    {
+      "path": "fragments/21_scope_locked_from_native_owner.plpgsql",
+      "bytes": 9500,
+      "sha256": "c1eb191fba3e1f7357c2d90a7681ba40fc0df1af7e3132398c57d0010fe89f8c"
+    },
+    {
+      "path": "OFFLINE_RESULTS.json",
+      "bytes": 3277,
+      "sha256": "3d423d1da2f6d3f4684e946c95742c9ebfeeb4298d46183e8d3e3b513053b40e"
+    },
+    {
+      "path": "OWNER_BLOCKS.json",
+      "bytes": 6078,
+      "sha256": "7af39ebf7b952a0249a8e0a252f8f3c74a538fd856d2931f0cc5fe69eab2af5e"
+    },
+    {
+      "path": "README.md",
+      "bytes": 5564,
+      "sha256": "fe1c96aa86757941e18454e48bda6ea51d3c2ebdd018251f4453574700507ecb"
+    },
+    {
+      "path": "reference/20_preview.before.sql.tmpl",
+      "bytes": 10427,
+      "sha256": "d5a1e843e2894a6ad1b5674f7dc735bb8d5b7c33f850cfe8d0b4df87399fea3c"
+    },
+    {
+      "path": "reference/private__timesheet_contract_move_family_lock_v1.sqlinc",
+      "bytes": 2224,
+      "sha256": "8fc91c710e6ca1ddb26d814c3e02662ade9c769b40f084496a58459d3ea54888"
+    },
+    {
+      "path": "reference/private__timesheet_contract_move_scope_v1.sqlinc",
+      "bytes": 9857,
+      "sha256": "2d3eb8da4dcdf329225bb0f8eaa96dd4df8a9466304d0d52fc48ab88960c0cad"
+    },
+    {
+      "path": "SCOPE_BLOCK_DERIVATION.json",
+      "bytes": 1968,
+      "sha256": "1e8dc3a49d9fb390420844ec795eb9e27cb575309421dd879d5957f41fa0606e"
+    },
+    {
+      "path": "SOURCE_SELECTION.json",
+      "bytes": 14271,
+      "sha256": "849d531aa123629383aa75aee7483e7be5d70ef5fef06460b1dc903c6091bb44"
+    },
+    {
+      "path": "TEMPLATE_PARENT_EDITS.json",
+      "bytes": 3352,
+      "sha256": "98d4371844d7ea0a8186ab298388f6ec9a5fe3eeca8980171508e5083cfd743f"
+    },
+    {
+      "path": "templates/20_preview.sql.tmpl",
+      "bytes": 10148,
+      "sha256": "8039d0e8d3c162e9dea38395ea9d6d633f7c42ce5ba329cb5cc2fa900669ee77"
+    }
+  ],
+  "original43FilesUnchanged": true,
+  "originalNativeOwnersChanged": 0,
+  "unprovidedBankBindings": 4,
+  "runtimeEmission": "REFUSED",
+  "native": "NOT_RUN"
+}

@@ -1,0 +1,16 @@
+{
+  "parentCommit": "2d1c81cf5a6939b8ab05d4b3d8db398037c13ed4",
+  "inputSha256": "d5a1e843e2894a6ad1b5674f7dc735bb8d5b7c33f850cfe8d0b4df87399fea3c",
+  "outputSha256": "8039d0e8d3c162e9dea38395ea9d6d633f7c42ce5ba329cb5cc2fa900669ee77",
+  "fullRawReverse": true,
+  "hunks": [
+    {
+      "before": " insert into private.timesheet_contract_move_operations(id,purpose,state,state_revision,family_root_id,from_timesheet_id,\n  from_contract_id,to_contract_id,candidate_id,actual_client_id,invoice_authority,invoice_move_policy,financial_state,\n  reason,created_by_user_id,created_at_utc)\n values(operation,'CONTRACT_CORRECTION','REVIEWED',1,(private.timesheet_contract_current_placement_v1(source.timesheet_id)->>'family_root_id')::uuid,\n  source.timesheet_id,source.contract_id,destination.id,original_contract.candidate_id,original_contract.client_id,\n  'UNRESOLVED','REVIEW_REQUIRED','REVIEW_REQUIRED',reason,actor,clock_timestamp())\n on conflict(id) do nothing returning id into inserted;\n if inserted is null then\n  -- Any uniqueness wait occurred before native cut/family locks or new local\n  -- metadata. Recheck current auth and exact request after that wait. No orphan\n  -- operation can survive a duplicate-preview return.\n  replay:=private.timesheet_contract_move_preview_replay_v1(p_args);\n  if replay is null then raise exception 'CORRECTION_REQUEST_CONFLICT' using errcode='22023';end if;\n  return replay;\n end if;\n select x.* into strict o from private.timesheet_contract_move_operations x where x.id=operation;\n before_scope:=private.timesheet_contract_move_scope_v1(o.id,false);\n perform private.timesheet_contract_move_review_members_v1(o.id,before_scope);\n",
+      "after": " -- Build only an in-memory native operation row; no business FK is checked.\n o:=jsonb_populate_record(null::private.timesheet_contract_move_operations,jsonb_build_object(\n  'id',operation,'purpose','CONTRACT_CORRECTION','state','REVIEWED','state_revision',1,\n  'family_root_id',(private.timesheet_contract_current_placement_v1(source.timesheet_id)->>'family_root_id')::uuid,\n  'from_timesheet_id',source.timesheet_id,'from_contract_id',source.contract_id,'to_contract_id',destination.id,\n  'candidate_id',original_contract.candidate_id,'actual_client_id',original_contract.client_id,\n  'invoice_authority','UNRESOLVED','invoice_move_policy','REVIEW_REQUIRED','financial_state','REVIEW_REQUIRED',\n  'reason',reason,'created_by_user_id',actor,'created_at_utc',clock_timestamp()));\n -- This single existing owner source block must acquire its actual native\n -- pre-enrollment locks, splice the exact Health enrollment fragment once,\n -- then obtain the genuine reviewed cut. No fifth callable ABI is proposed.\n"
+    },
+    {
+      "before": " -- The actual Bank fragment must use its native lock order BEFORE Health's\n -- final family/Contract/member locks, as in retained Accept. It must not stage,\n -- publish, reserve payment, create physical B or create invoice obligations.",
+      "after": " -- BANK_PREVIEW must have enclosed fragments/21_locked_preview_enrollment.plpgsql\n -- after its genuine native prefix and before its cut suffix. All business FK\n -- checks therefore follow the complete native Bank -> Health lock domain.\n -- This repeated true-scope proof retains the existing post-cut currentness check."
+    }
+  ]
+}
