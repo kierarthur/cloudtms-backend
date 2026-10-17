@@ -1,0 +1,60 @@
+{
+  "version": "DAILY_GENUINE_S0_R2_R3_ACTUAL_HOLDS_V1",
+  "sourceCommit": "e252c095738d2a39fabdf54c05ac2ba3e6dffc14",
+  "executionCommit": "62a0630df15a93816ce8be583089541dc9a1830d",
+  "r2": {
+    "status": "HOLD_ROOT_INPUT_TRANSPORT_TRUNCATED",
+    "ownedDirectory": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/.codex-tmp/daily-genuine-stages-20261017-995662c67bc052e9cbb8af150d2f02bc",
+    "coordinatorReady": "BEFORE_READY",
+    "genuineBindBrowserClosed": true,
+    "rootFailure": "Unexpected token 'W', \"Warning: t\"... is not valid JSON",
+    "nativeCalls": 0,
+    "businessAttempt": false,
+    "processExitCode": 1,
+    "originalTurn": {
+      "takenAt": "2026-10-17T11:16:25.287Z",
+      "releasedAt": "2026-10-17T11:16:47.579Z",
+      "explicitUnlockConfirmed": true,
+      "connectionClosed": true,
+      "proved": false
+    },
+    "inputBytes": 47095,
+    "interpretation": "Root requested too small a tool output budget for the generated public SQL/receipt JSON. Tool truncation warning refused JSON parsing before dispatch; root aborted, preserving original files. This was a root orchestration error, not an operator/native failure."
+  },
+  "r3": {
+    "status": "HOLD_GENUINE_ACTOR_ADMISSION",
+    "ownedDirectory": "D:/Development/GitHub/.codex-worktrees/healthroster-install2-14102026/.codex-tmp/daily-genuine-stages-20261017-8f1fcfc7f6bd13a1d9f4f0a1819a172c",
+    "closedChild": {
+      "status": "HOLD",
+      "code": "FIXTURE_CURRENT_ACTOR_ADMISSION_HELD",
+      "phase": "bind",
+      "stage": "S0",
+      "browserClosed": true
+    },
+    "beforeReady": false,
+    "nativeCalls": 0,
+    "businessAttempt": false,
+    "processExitCode": 1,
+    "originalTurn": {
+      "takenAt": "2026-10-17T11:19:09.659Z",
+      "releasedAt": "2026-10-17T11:19:26.301Z",
+      "explicitUnlockConfirmed": true,
+      "connectionClosed": true,
+      "proved": false
+    },
+    "interpretation": "Which genuine admission condition failed is not recorded. Current source has accessTtl default900 seconds, but effective token expiry and actual failed condition are not established here. Do not infer credential or business defects. Safe condition-specific closed-code source successor is being prepared; refresh occurs after source preparation."
+  },
+  "readerCorrection": {
+    "fileByteLimit": 98304,
+    "toolOutputTokenBudget": 30000,
+    "actualPriorGeneratedInputReplay": "PASS_COMPLETE_JSON_PARSED_SOURCE_PHASE_TARGET_CHECKED_NO_NATIVE_REPLAY",
+    "inputOrPrivateBindingRewritten": false,
+    "privateStateOrBindingParentContentAccess": false,
+    "nativeCapsRaised": false,
+    "originalSqlNativeSourceGuardsUnchanged": true
+  },
+  "rootState": "NO_ACTIVE_ROOT_SESSION_CONNECTION_OR_SHARED_LOCK",
+  "fixturesCreated": false,
+  "install2": "NOT_INSTALLED",
+  "finalPartBCritics": "NOT_RUN"
+}
