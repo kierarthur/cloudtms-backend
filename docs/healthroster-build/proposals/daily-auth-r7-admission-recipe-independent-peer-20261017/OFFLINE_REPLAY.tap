@@ -1,0 +1,172 @@
+TAP version 13
+# Subtest: exact whole network inverse preserves actual evaluate and all network decision code
+ok 1 - exact whole network inverse preserves actual evaluate and all network decision code
+  ---
+  duration_ms: 1.8194
+  type: 'test'
+  ...
+# Subtest: success retains exact original private value/expectedActor forwarding without changing worker five-field ABI
+ok 2 - success retains exact original private value/expectedActor forwarding without changing worker five-field ABI
+  ---
+  duration_ms: 0.6616
+  type: 'test'
+  ...
+# Subtest: closed condition: ME401
+ok 3 - closed condition: ME401
+  ---
+  duration_ms: 0.475
+  type: 'test'
+  ...
+# Subtest: closed condition: ME unavailable
+ok 4 - closed condition: ME unavailable
+  ---
+  duration_ms: 0.1213
+  type: 'test'
+  ...
+# Subtest: closed condition: Admin
+ok 5 - closed condition: Admin
+  ---
+  duration_ms: 0.1016
+  type: 'test'
+  ...
+# Subtest: closed condition: UUID type
+ok 6 - closed condition: UUID type
+  ---
+  duration_ms: 0.0985
+  type: 'test'
+  ...
+# Subtest: closed condition: UUID uppercase
+ok 7 - closed condition: UUID uppercase
+  ---
+  duration_ms: 0.1458
+  type: 'test'
+  ...
+# Subtest: closed condition: actor mismatch
+ok 8 - closed condition: actor mismatch
+  ---
+  duration_ms: 0.0932
+  type: 'test'
+  ...
+# Subtest: closed condition: workspace status
+ok 9 - closed condition: workspace status
+  ---
+  duration_ms: 0.2479
+  type: 'test'
+  ...
+# Subtest: closed condition: workspace contract
+ok 10 - closed condition: workspace contract
+  ---
+  duration_ms: 0.3529
+  type: 'test'
+  ...
+# Subtest: closed condition: workspace queries
+ok 11 - closed condition: workspace queries
+  ---
+  duration_ms: 0.2463
+  type: 'test'
+  ...
+# Subtest: missing authFetch/null record is unavailable, not an inferred token-expiry diagnosis
+ok 12 - missing authFetch/null record is unavailable, not an inferred token-expiry diagnosis
+  ---
+  duration_ms: 0.6393
+  type: 'test'
+  ...
+# Subtest: evaluation failure remains failure; no response or state diagnostic is created
+ok 13 - evaluation failure remains failure; no response or state diagnostic is created
+  ---
+  duration_ms: 0.1814
+  type: 'test'
+  ...
+# Subtest: all original success predicates are equivalent across 432 actual-function boundary combinations
+ok 14 - all original success predicates are equivalent across 432 actual-function boundary combinations
+  ---
+  duration_ms: 5.3516
+  type: 'test'
+  ...
+# Subtest: operator4 changes only path, exact condition block, observation and three manifest rows
+ok 15 - operator4 changes only path, exact condition block, observation and three manifest rows
+  ---
+  duration_ms: 5.7664
+  type: 'test'
+  ...
+# Subtest: holder2 and coordinator2 preserve real commit parameters, all6/145 retained pin rows and P1 images
+ok 16 - holder2 and coordinator2 preserve real commit parameters, all6/145 retained pin rows and P1 images
+  ---
+  duration_ms: 13.1374
+  type: 'test'
+  ...
+# Subtest: future binding rejects R6 reuse, wrong path, wrong hash, non-admitted success and private-data flags
+ok 17 - future binding rejects R6 reuse, wrong path, wrong hash, non-admitted success and private-data flags
+  ---
+  duration_ms: 3.0541
+  type: 'test'
+  ...
+# Subtest: genuine original auth protocol allows integer0or1 refresh and suppressed startup counts
+ok 18 - genuine original auth protocol allows integer0or1 refresh and suppressed startup counts
+  ---
+  duration_ms: 1.4367
+  type: 'test'
+  ...
+# Subtest: actual committed source guard retains saved/index/HEAD/history/ancestry and end-HEAD checks
+ok 19 - actual committed source guard retains saved/index/HEAD/history/ancestry and end-HEAD checks
+  ---
+  duration_ms: 2.6799
+  type: 'test'
+  ...
+# Subtest: actual source refuses missing
+ok 20 - actual source refuses missing
+  ---
+  duration_ms: 2.3238
+  type: 'test'
+  ...
+# Subtest: actual source refuses dirty
+ok 21 - actual source refuses dirty
+  ---
+  duration_ms: 2.5332
+  type: 'test'
+  ...
+# Subtest: actual source refuses index
+ok 22 - actual source refuses index
+  ---
+  duration_ms: 2.7207
+  type: 'test'
+  ...
+# Subtest: actual source refuses historical
+ok 23 - actual source refuses historical
+  ---
+  duration_ms: 2.3039
+  type: 'test'
+  ...
+# Subtest: actual source refuses headMoved
+ok 24 - actual source refuses headMoved
+  ---
+  duration_ms: 2.6959
+  type: 'test'
+  ...
+# Subtest: actual source refuses ancestry
+ok 25 - actual source refuses ancestry
+  ---
+  duration_ms: 2.4987
+  type: 'test'
+  ...
+# Subtest: fixed parser refuses guessed refs, added paths and extra flags
+ok 26 - fixed parser refuses guessed refs, added paths and extra flags
+  ---
+  duration_ms: 0.3339
+  type: 'test'
+  ...
+# Subtest: public receipt reader requires genuine fixed saved/index/HEAD/historical equality and end head
+ok 27 - public receipt reader requires genuine fixed saved/index/HEAD/historical equality and end head
+  ---
+  duration_ms: 0.9892
+  type: 'test'
+  ...
+1..27
+# tests 27
+# suites 0
+# pass 27
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 209.0098

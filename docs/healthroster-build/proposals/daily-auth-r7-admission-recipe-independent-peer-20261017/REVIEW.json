@@ -1,0 +1,18 @@
+{
+  "version":"DAILY_AUTH_R7_ADMISSION_RECIPE_INDEPENDENT_PEER_V1",
+  "reviewer":"GPT-6.1-sol / xhigh",
+  "disposition":"ACCEPT_BOUNDED_SOURCE_RECIPE",
+  "actionableFindings":[],
+  "authorCommit":"2ac2cfd2e3e5392e3c8efbe5528e07392268d2e5",
+  "authorManifestSha256":"1d8d5b7cf82eac1ef7e528da9c38bd1f7360438545555cdd7f34b9a562781298",
+  "parent":"e252c095738d2a39fabdf54c05ac2ba3e6dffc14",
+  "diagnostic":{"wholeNetworkRawInverseHunks":1,"conditions":8,"actualFunctionPredicateCombinations":432,"originalSuccessPredicatePreserved":true,"evaluateFetchAndNetworkBytesUnchanged":true,"workerResultKeys":["status","code","phase","stage","browserClosed"],"dataOrPermissionChange":false,"genericHoldCause":"NOT_INFERRED"},
+  "recipe":{"operatorTargets":4,"holderTargets":2,"coordinatorTargets":2,"total":8,"operatorManifestRowsRetained":129,"holderPinsRetained":6,"holderManifestRowsRetained":16,"coordinatorPinsRetained":145,"coordinatorManifestRowsRetained":14,"wholeRawInverseProofs":true,"acceptedP1Preserved":true,"realFutureReceiptAndMountCommitsRequired":true,"selfOrVirtualAuthority":false},
+  "receiptBoundary":"fixed public R7 receipt only; actual ancestry/saved/index/currentHEAD/history/rawSHA/closedflags/pathliteral; zero-or-one integer refresh/startup counts preserved; no target access",
+  "capture":{"authorFiles":22,"completeActualPublicParents":10,"savedIndexHeadHistoricalEqual":true},
+  "replay":{"testsPassed":27,"testsFailed":0,"sourceVerifier":"PASS","reviewerSourceOrTestAmendments":0,"positiveRealFutureReceiptOrMountClaimed":false},
+  "preserved":["five-field worker ABI","network/role/permission/actor admission success rules","all source/historical/currentness/setup guards","original A/control/closure/120-60-180 bounds","oldR4R6HOLDS"],
+  "execution":{"materializeInvoked":false,"sourceOrPreflightInvoked":false,"privateStateOrBindingReadHashCopyStat":false,"browser":"NOT_RUN","ipcUsed":false,"authApiOrConnectorCalls":0,"native":"NOT_RUN","rootOrOfficeWrites":0,"bankSemanticBodiesRead":0},
+  "futureActualR7":"NOT_PROVIDED",
+  "remaining":"root real R7 public receipt then actual K1/K2/K3 source mounts, final original admission/setup and separately authorised genuine S0 trial"
+}

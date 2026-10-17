@@ -1,0 +1,20 @@
+{
+  "version": "DAILY_AUTH_R7_SOURCE_ROOT_REVIEW_V1",
+  "status": "ACCEPT_BOUNDED_SOURCE_RECIPE_BEFORE_ACTUAL_AUTH",
+  "authorCommit": "2ac2cfd2e3e5392e3c8efbe5528e07392268d2e5",
+  "authorFiles": 22,
+  "authorManifestSha256": "1d8d5b7cf82eac1ef7e528da9c38bd1f7360438545555cdd7f34b9a562781298",
+  "peerCommit": "e146b010b76d9dc17f5ae3deba22dbc312e1d42b",
+  "peerFiles": 31,
+  "peerManifestSha256": "6bb134d58d94a3a61589d242f367c4d85227d1357a6332152a4e97b71e964fc8",
+  "peerReviewSha256": "9fa185f97b96667b8aa410aed4ddc26a6dbad03f7ee34d84890f5fae5c405793",
+  "rootReview": "Complete README/recipe/materializer and eight condition inverses reviewed; prior root unamended27tests including432 actual predicate combinations and pure verifier PASS. Independent peer repeats27/432 with no scoped blocker. Whole network one-block inverse retains exact evaluate/authFetch/network and original five-field worker boundary. Real public R7 receipt then operator4/realK1holder2/realK1K2coordinator2 required. All historical/saved/index/currentHEAD/ancestry/endHEAD guards and P1/caps remain.",
+  "copiedExactSourceFiles": 53,
+  "privateStateOrBindingContentsReadHashedCopied": false,
+  "actualR7": "NOT_RUN",
+  "actualMounts": "NOT_RUN",
+  "nativeS0": "NOT_RUN",
+  "originalGenericHolds": "Retained; no expiry or failure-condition inference",
+  "install2": "NOT_INSTALLED",
+  "finalPartBCritics": "NOT_RUN"
+}

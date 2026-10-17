@@ -1,0 +1,18 @@
+{
+  "version": "DAILY_GENUINE_CURRENT_ADMISSION_R7_RECIPE_SOURCE_REVIEW_V1",
+  "baseReportCommit": "e252c095738d2a39fabdf54c05ac2ba3e6dffc14",
+  "tests": 27,
+  "passed": 27,
+  "admissionBoundaryTests": 14,
+  "actualFunctionPredicateCombinations": 432,
+  "networkFullParentHunks": 1,
+  "completePublicParents": 10,
+  "operatorTargets": 4,
+  "holderTargets": 2,
+  "coordinatorTargets": 2,
+  "futureActualR7": "NOT_PROVIDED",
+  "privateStateAccess": "NONE",
+  "runtimeMounted": false,
+  "authBrowserIpcNative": "NOT_RUN",
+  "originalGenericHoldCause": "NOT_INFERRED"
+}

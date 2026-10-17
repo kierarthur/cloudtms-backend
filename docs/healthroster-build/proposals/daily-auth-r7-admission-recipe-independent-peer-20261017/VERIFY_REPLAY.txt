@@ -1,0 +1,1 @@
+{"status":"PASS","files":22,"parents":10,"diagnosticHunks":1,"futureR7":"NOT_PROVIDED","native":"NOT_RUN","privateStateAccess":"NONE"}
