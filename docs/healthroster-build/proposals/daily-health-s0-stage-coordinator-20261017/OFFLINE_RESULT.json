@@ -1,0 +1,18 @@
+{
+  "version": "DAILY_GENUINE_S0_STAGE_COORDINATOR_SOURCE_CHECKS_V1",
+  "node": "24.15.0",
+  "passed": 40,
+  "failed": 0,
+  "wholeRawLauncherParentBytes": 5540,
+  "wholeRawLauncherInverseEdits": 9,
+  "retainedOriginalOperatorImages": 133,
+  "correctedHolderParentImages": 18,
+  "sourceImages": 151,
+  "onlyReachableStage": "S0",
+  "businessWrites": 0,
+  "actualNative": "NOT_RUN",
+  "actualBrowser": "NOT_RUN",
+  "actualWindowsTreeTermination": "NOT_RUN",
+  "privateState": "NOT_ACCESSED",
+  "rootSetupAndIndependentPeerRequired": true
+}

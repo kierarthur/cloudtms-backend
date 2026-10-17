@@ -1,0 +1,48 @@
+{
+  "version": "DAILY_S0_STAGE_LAUNCHER_WHOLE_PARENT_FORWARD_V1",
+  "parent": "reference/run-staged-parent.mjs",
+  "parentSha256": "533aa6bfc109bd0aa4d07b892ce027ce5ea0d99643df7cce2741128fd70558ec",
+  "parentBytes": 5540,
+  "derived": "phase-parent.mjs",
+  "derivedSha256": "5d487a9ba1b6f5c742e17d3d2b06bbfc6bb0e2937ea23600694122a3f2ca2c8b",
+  "derivedBytes": 5111,
+  "edits": [
+    {
+      "before": "from './contract.mjs'",
+      "after": "from '../daily-health-genuine-staged-operator-20261017/contract.mjs'"
+    },
+    {
+      "before": "from './source.mjs'",
+      "after": "from '../daily-health-genuine-staged-operator-20261017/source.mjs'"
+    },
+    {
+      "before": "import('./contract.mjs')",
+      "after": "import('../daily-health-genuine-staged-operator-20261017/contract.mjs')"
+    },
+    {
+      "before": "import {childEnvironment,aclChildEnvironment} from '../test-auth-refresh-suppressed-startup-forward-20261017/run-auth-refresh.mjs';",
+      "after": "import {childEnvironment,aclChildEnvironment} from '../test-auth-refresh-suppressed-startup-forward-20261017/run-auth-refresh.mjs';\nimport {ownedWorker} from './owned-worker.mjs';"
+    },
+    {
+      "before": "export async function runStaged(flags){",
+      "after": "export async function runStaged(flags,{controlEnvironment,signal,assertHeld,runOwnedTurnChild,treeFactory=ownedWorker}){"
+    },
+    {
+      "before": "for(const key of ['CLOUDTMS_SHARED_TURN_PIPE','CLOUDTMS_SHARED_TURN_CAPABILITY'])check(typeof process.env[key]==='string'&&process.env[key].length>0,'FIXTURE_LIVE_ORIGINAL_TURN_CONTROL_REQUIRED');",
+      "after": "for(const key of ['CLOUDTMS_SHARED_TURN_PIPE','CLOUDTMS_SHARED_TURN_CAPABILITY'])check(typeof controlEnvironment[key]==='string'&&controlEnvironment[key].length>0,'FIXTURE_LIVE_ORIGINAL_TURN_CONTROL_REQUIRED');"
+    },
+    {
+      "before": "for(const key of ['CLOUDTMS_SHARED_TURN_PIPE','CLOUDTMS_SHARED_TURN_CAPABILITY'])env[key]=process.env[key];",
+      "after": "for(const key of ['CLOUDTMS_SHARED_TURN_PIPE','CLOUDTMS_SHARED_TURN_CAPABILITY'])env[key]=controlEnvironment[key];"
+    },
+    {
+      "before": " const child=spawn(process.execPath,[here+'/worker.mjs',JSON.stringify({...options,resultName})],{cwd:out,windowsHide:true,env,stdio:['ignore','ignore','ignore','ipc']});\n let closed=false,timedOut=false;\n const exit=await new Promise(resolve=>{\n  let killTimer,closeTimer;\n  const timer=setTimeout(()=>{timedOut=true;try{child.send('ABORT');}catch{}\n   killTimer=setTimeout(()=>{try{execFileSync(path.join(system,'taskkill.exe'),['/PID',String(child.pid),'/T','/F'],{windowsHide:true,stdio:'ignore',timeout:5000});}catch{}\n    closeTimer=setTimeout(()=>resolve(null),5000);},10000);},120000);\n  child.once('error',()=>{clearTimeout(timer);resolve(null);});\n  child.once('close',n=>{closed=true;clearTimeout(timer);clearTimeout(killTimer);clearTimeout(closeTimer);resolve(n);});\n });\n if(!closed||timedOut)return {status:'HOLD',code:'FIXTURE_CHILD_BUDGET_OR_CLOSE_HELD',ownedDirectory:out,childClosed:closed};\n",
+      "after": " const tree=treeFactory();let execution;\n try{execution=await tree.wait(runOwnedTurnChild({file:process.execPath,args:[here+'/worker.mjs',JSON.stringify({...options,resultName})],options:{cwd:out,env,stdio:['ignore','ignore','ignore','ipc']},signal,assertHeld,spawnChild:tree.spawn,resourceGuard:tree}),signal);}\n finally{await tree.confirm();}\n check(execution.signal===null,'S0_STAGE_CHILD_SIGNAL_HELD');const exit=execution.code;\n"
+    },
+    {
+      "before": "\nif(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.url)){\n try{const r=await runStaged(process.argv.slice(2));console.log(JSON.stringify(r));if(r.status!=='PASS')process.exitCode=1;}\n catch{console.log(JSON.stringify({status:'HOLD',code:'FIXTURE_ROOT_INVOCATION_HELD'}));process.exitCode=1;}\n}\n",
+      "after": "\n// No standalone CLI: root S0 coordinator supplies the authenticated context.\n"
+    }
+  ],
+  "wholeRawInverse": true
+}

@@ -1,0 +1,1 @@
+{"status":"PASS","frozenFiles":15,"manifestSha256":"f3fb37a16b7e4aa256c89a9ab80b40fe070046f73333f98e2202844aefb66928","native":"NOT_RUN","browser":"NOT_RUN","privateState":"NOT_ACCESSED"}

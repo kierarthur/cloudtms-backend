@@ -1240,3 +1240,10 @@ SEND_7 turn: {"chat":"HealthRoster","task":"DAILY_S0_CATALOGUE_ONLY_CAPTURE","st
 SEND_7 turn: {"chat":"HealthRoster","task":"CONTACT_QT_CBEFORE_FIXED_DIAGNOSTIC_V1","status":"TAKEN","takenAt":"2026-10-17T10:41:34.613Z","key":[20261013,1]}
 
 SEND_7 turn: {"chat":"HealthRoster","task":"CONTACT_QT_CBEFORE_FIXED_DIAGNOSTIC_V1","status":"RELEASED","takenAt":"2026-10-17T10:41:34.613Z","releasedAt":"2026-10-17T10:42:05.244Z","explicitUnlockConfirmed":true,"connectionClosed":true,"proved":true,"key":[20261013,1]}
+
+SEND_7 turn: {"chat":"HealthRoster","task":"CONTACT_QT_POSITIVE_CONTACT_CONSTRUCTORS_V1","status":"TAKEN","takenAt":"2026-10-17T10:45:11.750Z","key":[20261013,1]}
+
+SEND_7 turn: {"chat":"HealthRoster","task":"CONTACT_QT_POSITIVE_CONTACT_CONSTRUCTORS_V1","status":"RELEASED","takenAt":"2026-10-17T10:45:11.750Z","releasedAt":"2026-10-17T10:46:05.364Z","explicitUnlockConfirmed":true,"connectionClosed":true,"proved":false,"key":[20261013,1]}
+
+
+17 October: Actual Contact constructors R4-fence on pushed da95 again stops in full C-before with observed57014 after49413ms. No READY/input/MCP B/constructor/fixture; own lock explicitly unlocked and connection closed10:46:05.364Z/provedfalse. Fresh10:47:58 agency health and14Oct postmaster unchanged. Actual narrower plan is retained but did not clear cancellation; exact cost/cancelled branch remains unproved. Fixed component-cost source diagnosis is assigned before any further full snapshot retry, preserving all checks/caps. Separately, initial S0 coordinator8c4 plus independent3cdd peer are backed unchanged16+28 files with one P1 HOLD: queued own-tree termination must recheck captured-child liveness at actual dispatch. Root independently reproduced three injected vectors, zero OS commands/private state access. Narrow forward in progress; no S0/browser/API execution accepted yet. No owner answer pending; Install2 NOT_INSTALLED and final critics NOT_RUN.

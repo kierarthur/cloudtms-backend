@@ -1,0 +1,72 @@
+{
+  "version": "CONTACT_CONSTRUCTORS_R4_HASH_FENCE_ACTUAL_PREQUERY_HOLD_V1",
+  "executionCommit": "da95a6a8d105442090910faad4d263229654b3df",
+  "status": "HOLD_BEFORE_READY_AND_NATIVE_B",
+  "sourceDiagnosticFile": "D:\\Development\\GitHub\\.codex-worktrees\\healthroster-install2-14102026\\.codex-tmp\\contact-qt-positive-native-20261017-constructors-r4-fence\\HOLD.json",
+  "sourceDiagnosticSha256": "7c7926ca8b28ff7f6349b66bcce3acc76ca5d4579f15063fd1bb4004c17930f8",
+  "actualHold": {
+    "status": "HOLD",
+    "caseId": "CONTACT_CONSTRUCTORS_V1",
+    "code": "LOCAL_METADATA_DIAGNOSTIC_REFUSED",
+    "observedErrorCode": "LOCAL_METADATA_DIAGNOSTIC_REFUSED",
+    "deadlineObserved": false,
+    "localTiming": {
+      "sequenceStartedAt": "2026-10-17T10:45:15.657Z",
+      "workDeadlineAt": "2026-10-17T10:47:15.657Z"
+    },
+    "metadataDiagnostic": {
+      "version": "CONTACT_QT_FIXED_METADATA_DIAGNOSTIC_V1",
+      "phase": "BEFORE",
+      "startedAt": "2026-10-17T10:45:15.918Z",
+      "spawnReturnedAt": "2026-10-17T10:45:19.852Z",
+      "firstStderrAt": "2026-10-17T10:46:05.327Z",
+      "finishedAt": "2026-10-17T10:46:05.331Z",
+      "elapsedMilliseconds": 49413,
+      "sqlstate": "57014"
+    },
+    "nativeClockFrames": [],
+    "sharedTurnCompletion": "SEE_ORIGINAL_SEND7_JOURNAL_NO_SYNTHETIC_CLOSE_PROOF",
+    "dispatchedMcpMustBeReconciledBeforeNextTrial": true,
+    "elapsedMilliseconds": 49711,
+    "completeMapsPersisted": false
+  },
+  "actualSharedTurnRecords": [
+    {
+      "chat": "HealthRoster",
+      "task": "CONTACT_QT_POSITIVE_CONTACT_CONSTRUCTORS_V1",
+      "status": "TAKEN",
+      "takenAt": "2026-10-17T10:45:11.750Z",
+      "key": [
+        20261013,
+        1
+      ]
+    },
+    {
+      "chat": "HealthRoster",
+      "task": "CONTACT_QT_POSITIVE_CONTACT_CONSTRUCTORS_V1",
+      "status": "RELEASED",
+      "takenAt": "2026-10-17T10:45:11.750Z",
+      "releasedAt": "2026-10-17T10:46:05.364Z",
+      "explicitUnlockConfirmed": true,
+      "connectionClosed": true,
+      "proved": false,
+      "key": [
+        20261013,
+        1
+      ]
+    }
+  ],
+  "rootObservation": {
+    "readyObserved": false,
+    "inputFilePresent": false,
+    "mcpDispatched": false,
+    "nativeConstructorOrFixtureAttempted": false,
+    "nativeAfterAndCanonicalRestoration": "NOT_RUN",
+    "processExitCode": 1,
+    "ownTurnUnlockedAndClosed": true
+  },
+  "interpretation": "The reviewed OFFSET0 projection changed the actual non-ANALYZE plan width1022 to32 but did not clear the complete before-snapshot45s cancellation. Actual SQLSTATE57014 is observed; the exact cancelled statement and resource/cost cause are not established by this receipt. Preserve R1-R4 and both plan diagnostics. No further blind full-snapshot retry; finite fixed component-cost diagnosis assigned. Existing caps/scopes/WeakMap remain. The generic source flag asking to reconcile a dispatched MCP is retained unchanged, but root observed no READY/input/call in this attempt.",
+  "afterCapacity": {"observedAt": "2026-10-17T10:47:58.037Z", "physicalDatabase": "cloudtms_test_clone", "serviceState": "healthy", "postmasterStartedAt": "2026-10-14T09:07:33.240Z", "restartPoolJobOrOtherSessionChange": false},
+  "install2": "NOT_INSTALLED",
+  "finalPartBCritics": "NOT_RUN"
+}

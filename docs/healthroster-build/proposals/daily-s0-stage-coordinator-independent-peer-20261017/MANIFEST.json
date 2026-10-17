@@ -1,0 +1,143 @@
+{
+  "version": "DAILY_S0_STAGE_COORDINATOR_PEER_SEAL_V1",
+  "authorCommit": "8c4eb1f88db25ff6b7b88889be9f36dddc1387ed",
+  "authorManifestSha256": "f3fb37a16b7e4aa256c89a9ab80b40fe070046f73333f98e2202844aefb66928",
+  "files": [
+    {
+      "file": "CAPTURE.json",
+      "bytes": 56619,
+      "sha256": "7197750fb37411634da7fe87b2c85ef6969d62368bfcfd2a9278e363679334de"
+    },
+    {
+      "file": "DERIVE_REPLAY.txt",
+      "bytes": 70,
+      "sha256": "e0a1c914054a5d1f1fe0b0314a06de0d50a127844062e05e63e6a387456c9b77"
+    },
+    {
+      "file": "OFFLINE_REPLAY.tap",
+      "bytes": 7630,
+      "sha256": "c774b07d462331f64b606bb83ca02d4010aa69b0017c6799bc1fad5316efebb7"
+    },
+    {
+      "file": "PID_WINDOW_RESULTS.json",
+      "bytes": 1642,
+      "sha256": "67013faea4f99c09c82bd366d9057df0e71cf6eaa91b6f044cd8232b9941ecf5"
+    },
+    {
+      "file": "README.md",
+      "bytes": 3765,
+      "sha256": "a4136212893b3407e168d890b0da91c19dace5d131991adb320b09cdd6cc38cd"
+    },
+    {
+      "file": "REVIEW.json",
+      "bytes": 1940,
+      "sha256": "52c330376706dd761817fa074666ce0e91fa7953f20d2ba3da6ede8adc502018"
+    },
+    {
+      "file": "VERIFY_REPLAY.txt",
+      "bytes": 188,
+      "sha256": "ba1edd67192b7ccc2bbde0015a6c0af8194e5ff24669b56bcf5f410d8779f5b3"
+    },
+    {
+      "file": "capture.mjs",
+      "bytes": 2849,
+      "sha256": "5ce3b38c47f1137274f275743aa3c2acbac4fc0eca45811d650b0ab0832726f6"
+    },
+    {
+      "file": "freeze.mjs",
+      "bytes": 2174,
+      "sha256": "cf813cfcd013dd44c09f263ad051263abec8d7fedb6f2b9da260979655eda334"
+    },
+    {
+      "file": "pid-window.mjs",
+      "bytes": 2223,
+      "sha256": "b43579b0549ea609cdb88244e948ce429b3a5fcb786ff2d8febe830096cc8517"
+    },
+    {
+      "file": "reference/forward/LAUNCHER_FULL_PARENT_FORWARD.json",
+      "bytes": 4002,
+      "sha256": "b6547e58c0a8c222fd5131998fe62c3f797670be7a7c12a44f5a54771ccbf7bc"
+    },
+    {
+      "file": "reference/forward/MANIFEST.json",
+      "bytes": 2417,
+      "sha256": "f3fb37a16b7e4aa256c89a9ab80b40fe070046f73333f98e2202844aefb66928"
+    },
+    {
+      "file": "reference/forward/OFFLINE_RESULT.json",
+      "bytes": 538,
+      "sha256": "5360929a2890b5857f86352e2a4f468e5d654a6016740b2f2b40131586f6daa2"
+    },
+    {
+      "file": "reference/forward/OFFLINE_TEST_OUTPUT.tap",
+      "bytes": 7628,
+      "sha256": "fff3926bda0e0f9db346b2b8da9de0ab43b077ef5f813dac59d627b2cd8f5d74"
+    },
+    {
+      "file": "reference/forward/README.md",
+      "bytes": 8923,
+      "sha256": "13c39e6acb334e1c4736321d42aef22c9c9e0a2b24f00106a31d03c6064a56a2"
+    },
+    {
+      "file": "reference/forward/SOURCE_PINS.json",
+      "bytes": 45299,
+      "sha256": "eec26533b8c6660069582eca42d60296e5441da8511764b2a2e0e76489d848c5"
+    },
+    {
+      "file": "reference/forward/coordinate.mjs",
+      "bytes": 4630,
+      "sha256": "570ccb26ad180f10909eb13e05dc652efab03f8a67a1b9239a56ec858fcc7f92"
+    },
+    {
+      "file": "reference/forward/coordinator.test.mjs",
+      "bytes": 10683,
+      "sha256": "2f594c66da1a87b71de9dbc94d2e28be7697619e988c8af92a42c138f2c7254b"
+    },
+    {
+      "file": "reference/forward/derive-phase.mjs",
+      "bytes": 3832,
+      "sha256": "cbb8aaf477fd66abec58dd3d512010a03437294513fc47dac2cbde886377673e"
+    },
+    {
+      "file": "reference/forward/owned-worker.mjs",
+      "bytes": 2635,
+      "sha256": "5e2e0298a27a11bf06652aeee6e3a00cca55ba540d03c5402270e3775e68d95e"
+    },
+    {
+      "file": "reference/forward/phase-parent.mjs",
+      "bytes": 5111,
+      "sha256": "5d487a9ba1b6f5c742e17d3d2b06bbfc6bb0e2937ea23600694122a3f2ca2c8b"
+    },
+    {
+      "file": "reference/forward/phase.mjs",
+      "bytes": 859,
+      "sha256": "908efe47f24e00be5b2ca0b606079f61dac488a6c70d58ead3fe2eb592ce4cf0"
+    },
+    {
+      "file": "reference/forward/reference/run-staged-parent.mjs",
+      "bytes": 5540,
+      "sha256": "533aa6bfc109bd0aa4d07b892ce027ce5ea0d99643df7cce2741128fd70558ec"
+    },
+    {
+      "file": "reference/forward/sequence.mjs",
+      "bytes": 1574,
+      "sha256": "f0d1c7e95bb9f81ab064bfc5bcb1145b81b0d991bbe3c584dadc0f74b25981a7"
+    },
+    {
+      "file": "reference/forward/source.mjs",
+      "bytes": 2056,
+      "sha256": "fc7de33f9e40ab9429692127b466444195f6894fc03aef700a0fc255a773363d"
+    },
+    {
+      "file": "reference/forward/verify.mjs",
+      "bytes": 699,
+      "sha256": "a0ee567f4df33bcc5882849e952007316a640b19ab05233ff3499686a2ad4a3d"
+    },
+    {
+      "file": "replay.mjs",
+      "bytes": 1298,
+      "sha256": "fe7be20c730bd51466a88f5a152bc520fac6bda1d2d11073d1a7ddec0af13cbb"
+    }
+  ],
+  "native": "NOT_RUN"
+}

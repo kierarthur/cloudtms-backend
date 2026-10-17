@@ -1,0 +1,250 @@
+TAP version 13
+# Subtest: fixed S0 bind/native/entry/real commit/submit/native/qualify/release sequence
+ok 1 - fixed S0 bind/native/entry/real commit/submit/native/qualify/release sequence
+  ---
+  duration_ms: 3.7368
+  type: 'test'
+  ...
+# Subtest: fail at bind cannot advance next phase
+ok 2 - fail at bind cannot advance next phase
+  ---
+  duration_ms: 0.5422
+  type: 'test'
+  ...
+# Subtest: unclosed at bind cannot advance next phase
+ok 3 - unclosed at bind cannot advance next phase
+  ---
+  duration_ms: 0.2194
+  type: 'test'
+  ...
+# Subtest: abort at bind cannot advance next phase
+ok 4 - abort at bind cannot advance next phase
+  ---
+  duration_ms: 0.2867
+  type: 'test'
+  ...
+# Subtest: deadline at bind cannot advance next phase
+ok 5 - deadline at bind cannot advance next phase
+  ---
+  duration_ms: 0.2813
+  type: 'test'
+  ...
+# Subtest: fail at entry cannot advance next phase
+ok 6 - fail at entry cannot advance next phase
+  ---
+  duration_ms: 0.3147
+  type: 'test'
+  ...
+# Subtest: unclosed at entry cannot advance next phase
+ok 7 - unclosed at entry cannot advance next phase
+  ---
+  duration_ms: 0.1991
+  type: 'test'
+  ...
+# Subtest: abort at entry cannot advance next phase
+ok 8 - abort at entry cannot advance next phase
+  ---
+  duration_ms: 0.2211
+  type: 'test'
+  ...
+# Subtest: deadline at entry cannot advance next phase
+ok 9 - deadline at entry cannot advance next phase
+  ---
+  duration_ms: 0.1711
+  type: 'test'
+  ...
+# Subtest: fail at submit cannot advance next phase
+ok 10 - fail at submit cannot advance next phase
+  ---
+  duration_ms: 0.2715
+  type: 'test'
+  ...
+# Subtest: unclosed at submit cannot advance next phase
+ok 11 - unclosed at submit cannot advance next phase
+  ---
+  duration_ms: 0.1937
+  type: 'test'
+  ...
+# Subtest: abort at submit cannot advance next phase
+ok 12 - abort at submit cannot advance next phase
+  ---
+  duration_ms: 0.1374
+  type: 'test'
+  ...
+# Subtest: deadline at submit cannot advance next phase
+ok 13 - deadline at submit cannot advance next phase
+  ---
+  duration_ms: 0.1372
+  type: 'test'
+  ...
+# Subtest: fail at qualify cannot advance next phase
+ok 14 - fail at qualify cannot advance next phase
+  ---
+  duration_ms: 0.1988
+  type: 'test'
+  ...
+# Subtest: unclosed at qualify cannot advance next phase
+ok 15 - unclosed at qualify cannot advance next phase
+  ---
+  duration_ms: 0.1875
+  type: 'test'
+  ...
+# Subtest: abort at qualify cannot advance next phase
+ok 16 - abort at qualify cannot advance next phase
+  ---
+  duration_ms: 0.1942
+  type: 'test'
+  ...
+# Subtest: deadline at qualify cannot advance next phase
+ok 17 - deadline at qualify cannot advance next phase
+  ---
+  duration_ms: 0.1393
+  type: 'test'
+  ...
+# Subtest: unknown root control at BEFORE_READY holds
+ok 18 - unknown root control at BEFORE_READY holds
+  ---
+  duration_ms: 0.1553
+  type: 'test'
+  ...
+# Subtest: abort root control at BEFORE_READY holds
+ok 19 - abort root control at BEFORE_READY holds
+  ---
+  duration_ms: 0.0784
+  type: 'test'
+  ...
+# Subtest: unknown root control at SETUP_ENTRY_READY holds
+ok 20 - unknown root control at SETUP_ENTRY_READY holds
+  ---
+  duration_ms: 0.0934
+  type: 'test'
+  ...
+# Subtest: abort root control at SETUP_ENTRY_READY holds
+ok 21 - abort root control at SETUP_ENTRY_READY holds
+  ---
+  duration_ms: 0.106
+  type: 'test'
+  ...
+# Subtest: unknown root control at AFTER_READY holds
+ok 22 - unknown root control at AFTER_READY holds
+  ---
+  duration_ms: 0.1303
+  type: 'test'
+  ...
+# Subtest: abort root control at AFTER_READY holds
+ok 23 - abort root control at AFTER_READY holds
+  ---
+  duration_ms: 0.0975
+  type: 'test'
+  ...
+# Subtest: unknown root control at S0_QUALIFIED_PENDING_RELEASE holds
+ok 24 - unknown root control at S0_QUALIFIED_PENDING_RELEASE holds
+  ---
+  duration_ms: 0.1013
+  type: 'test'
+  ...
+# Subtest: abort root control at S0_QUALIFIED_PENDING_RELEASE holds
+ok 25 - abort root control at S0_QUALIFIED_PENDING_RELEASE holds
+  ---
+  duration_ms: 0.1284
+  type: 'test'
+  ...
+# Subtest: original owned-child normal close is awaited; guard never invokes tree kill
+ok 26 - original owned-child normal close is awaited; guard never invokes tree kill
+  ---
+  duration_ms: 11.5841
+  type: 'test'
+  ...
+# Subtest: original abort sends only ABORT to actual captured child then awaits cooperative close
+ok 27 - original abort sends only ABORT to actual captured child then awaits cooperative close
+  ---
+  duration_ms: 0.7156
+  type: 'test'
+  ...
+# Subtest: forced original escalation targets captured live PID once and awaits tree command plus real close
+ok 28 - forced original escalation targets captured live PID once and awaits tree command plus real close
+  ---
+  duration_ms: 0.2579
+  type: 'test'
+  ...
+# Subtest: tree command refusal never becomes confirmed closure
+ok 29 - tree command refusal never becomes confirmed closure
+  ---
+  duration_ms: 0.4783
+  type: 'test'
+  ...
+# Subtest: exited PID is never passed to taskkill and missing close remains HOLD
+ok 30 - exited PID is never passed to taskkill and missing close remains HOLD
+  ---
+  duration_ms: 0.211
+  type: 'test'
+  ...
+# Subtest: complete derived launcher runs all four fixed S0 phases under controlled source/ACL/filesystem doubles
+ok 31 - complete derived launcher runs all four fixed S0 phases under controlled source/ACL/filesystem doubles
+  ---
+  duration_ms: 5.4666
+  type: 'test'
+  ...
+# Subtest: complete derived launcher refuses tree-unknown without replacing real closure by parent exit
+ok 32 - complete derived launcher refuses tree-unknown without replacing real closure by parent exit
+  ---
+  duration_ms: 1.8323
+  type: 'test'
+  ...
+# Subtest: complete derived launcher refuses browser-unknown without replacing real closure by parent exit
+ok 33 - complete derived launcher refuses browser-unknown without replacing real closure by parent exit
+  ---
+  duration_ms: 1.1857
+  type: 'test'
+  ...
+# Subtest: complete derived launcher refuses exit-failed without replacing real closure by parent exit
+ok 34 - complete derived launcher refuses exit-failed without replacing real closure by parent exit
+  ---
+  duration_ms: 0.9981
+  type: 'test'
+  ...
+# Subtest: complete derived launcher refuses signal without replacing real closure by parent exit
+ok 35 - complete derived launcher refuses signal without replacing real closure by parent exit
+  ---
+  duration_ms: 1.0321
+  type: 'test'
+  ...
+# Subtest: complete derived launcher refuses wrong-phase without replacing real closure by parent exit
+ok 36 - complete derived launcher refuses wrong-phase without replacing real closure by parent exit
+  ---
+  duration_ms: 1.1796
+  type: 'test'
+  ...
+# Subtest: coordinator does not add provider, arbitrary stage or arbitrary effect argument
+ok 37 - coordinator does not add provider, arbitrary stage or arbitrary effect argument
+  ---
+  duration_ms: 0.3858
+  type: 'test'
+  ...
+# Subtest: lost turn bounds a nonclosing original owned operation without inventing a close event
+ok 38 - lost turn bounds a nonclosing original owned operation without inventing a close event
+  ---
+  duration_ms: 0.3072
+  type: 'test'
+  ...
+# Subtest: unconfirmed owned close has an additional bounded wait and never returns a closed flag
+ok 39 - unconfirmed owned close has an additional bounded wait and never returns a closed flag
+  ---
+  duration_ms: 0.1706
+  type: 'test'
+  ...
+# Subtest: non-S0 choreography phases cannot enter the genuine launcher
+ok 40 - non-S0 choreography phases cannot enter the genuine launcher
+  ---
+  duration_ms: 0.1787
+  type: 'test'
+  ...
+1..40
+# tests 40
+# suites 0
+# pass 40
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 186.7843

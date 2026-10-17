@@ -1,0 +1,31 @@
+{
+  "version": "DAILY_S0_STAGE_COORDINATOR_ROOT_REVIEW_V1",
+  "status": "HOLD_SOURCE_CORRECTION_REQUIRED",
+  "authorCommit": "8c4eb1f88db25ff6b7b88889be9f36dddc1387ed",
+  "authorFiles": 16,
+  "authorManifestSha256": "f3fb37a16b7e4aa256c89a9ab80b40fe070046f73333f98e2202844aefb66928",
+  "peerCommit": "3cdd40d0afcc71b9e69a0e44f1ae976431e1d7a6",
+  "peerFiles": 28,
+  "peerManifestSha256": "25b9ddb6320e64fce8cc335b07c234e37c246d1002379dacecc34ab25a707158",
+  "peerReviewSha256": "52c330376706dd761817fa074666ce0e91fa7953f20d2ba3da6ede8adc502018",
+  "rootCopyVerification": "All44 saved files raw-equal their exact author Git objects; both manifest hashes match.",
+  "rootReview": "Complete coordinator, owned-worker, phase, phase-parent, sequence and source read. Fixed S0-only sequence retains original shared owner, environment-only capability, genuine browser closure/normal exit proof, concrete root effect and setup checkpoints, and120/60/180 bounds. No initial-source execution accepted while P1 remains.",
+  "findings": [
+    {
+      "id": "F1",
+      "priority": "P1",
+      "file": "owned-worker.mjs",
+      "line": 7,
+      "sourceSha256": "5e2e0298a27a11bf06652aeee6e3a00cca55ba540d03c5402270e3775e68d95e",
+      "problem": "Liveness is checked before queuing a Promise callback; callback can still dispatch killTree after the captured child reports exit or close.",
+      "rootControlledReplay": "Three actual-factory vectors reproduce dispatch after exitCode0, signalCodeSIGTERM and close; injected termination only, zero OS commands. Immutable results compared, not overwritten.",
+      "requiredForward": "Capture stable own PID at spawn. Recheck same child, closed, exitCode and signalCode inside queued dispatch immediately before killTree. forcedTree must mean actual dispatch, not merely a scheduled/skipped callback. Preserve conservative uncertainty, actual close and genuine browser/normal-exit guards; correct overbroad README PID guarantee.",
+      "osPidReuseObserved": false
+    }
+  ],
+  "initialSourceDisposition": "Preserved unchanged as held evidence; narrow separate forward and independent peer required before execution.",
+  "fixes": {"applied": 0, "rejected": 0, "pending": 1},
+  "execution": {"coordinator": "NOT_RUN", "browser": "NOT_RUN", "nativeS0": "NOT_RUN", "businessApi": "NOT_RUN", "privateStateParentReads": 0, "osTerminationCommands": 0},
+  "install2": "NOT_INSTALLED",
+  "finalPartBCritics": "NOT_RUN"
+}
